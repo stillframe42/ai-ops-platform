@@ -15,7 +15,7 @@
 | [`target-app/`](target-app/) | 모니터링 대상 데모 앱 — fault-injection(지연/에러율/메모리 누수) 제공 |
 | [`infra/`](infra/) | 로컬 실행 인프라 — docker-compose 단일 진입점, Prometheus, Grafana |
 
-C4 다이어그램(System Context / Container)은 [`docs/architecture.md`](docs/architecture.md)에서 관리한다 (작성 예정). 아키텍처 결정 이력은 [`docs/adr/`](docs/adr/) 참고.
+C4 다이어그램(System Context / Container)은 [`docs/architecture.md`](docs/architecture.md)에서 관리한다. 아키텍처 결정 이력은 [`docs/adr/`](docs/adr/) 참고.
 
 ## 기술 스택
 
