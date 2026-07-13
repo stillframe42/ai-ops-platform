@@ -28,3 +28,6 @@ __pycache__/
 
 # === 로컬 전용 작업 문서 ===
 plans/
+
+# === Claude Code 로컬 설정 ===
+.claude/
