@@ -1,0 +1,30 @@
+# === Kotlin / Gradle (control-plane, target-app) ===
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+out/
+
+# === Python / uv (agent-service) ===
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# === IDE ===
+.idea/
+*.iml
+.vscode/
+
+# === OS ===
+.DS_Store
+
+# === 로컬 환경 / 시크릿 ===
+.env
+.env.*
+!.env.example
+
+# === 로컬 전용 작업 문서 ===
+plans/
