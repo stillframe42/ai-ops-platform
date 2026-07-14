@@ -1,0 +1,54 @@
+# target-app Alert Rules — 임계값 스펙은 docs/scenarios.md (Phase 0 임계값 정합 결정)
+# 수정 후 반영: curl -X POST http://localhost:9091/-/reload
+
+groups:
+  - name: target-app
+    rules:
+      # 시나리오 1: p95 latency ≥ 3초가 5분 지속 + 최소 표본(판정 창 요청 ≥ 30건)
+      - alert: TargetAppHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_server_requests_seconds_bucket{job="target-app", uri=~"/products.*"}[1m]))
+          ) >= 3
+          and
+          sum(increase(http_server_requests_seconds_count{job="target-app", uri=~"/products.*"}[5m])) >= 30
+        for: 5m
+        labels:
+          severity: warning
+          scenario: latency-surge
+        annotations:
+          summary: "target-app p95 latency 임계값 초과"
+          description: "비즈니스 API p95 latency 가 3초 이상으로 5분간 지속 (현재 {{ $value | printf \"%.2f\" }}s)"
+
+      # 시나리오 2: 5xx 비율 ≥ 10% 가 3분 지속 + 최소 표본
+      - alert: TargetAppHighErrorRate
+        expr: |
+          (
+            sum(rate(http_server_requests_seconds_count{job="target-app", uri=~"/products.*", status=~"5.."}[1m]))
+            /
+            sum(rate(http_server_requests_seconds_count{job="target-app", uri=~"/products.*"}[1m]))
+          ) >= 0.10
+          and
+          sum(increase(http_server_requests_seconds_count{job="target-app", uri=~"/products.*"}[3m])) >= 30
+        for: 3m
+        labels:
+          severity: critical
+          scenario: error-rate-surge
+        annotations:
+          summary: "target-app 5xx 비율 임계값 초과"
+          description: "비즈니스 API 5xx 비율이 10% 이상으로 3분간 지속 (현재 {{ $value | humanizePercentage }})"
+
+      # 순간 위험 안전망 — 시나리오 3의 추세 감지는 에이전트 담당 (ADR-0003 역할 분담)
+      - alert: TargetAppHeapUsageHigh
+        expr: |
+          sum(jvm_memory_used_bytes{job="target-app", area="heap"})
+          /
+          sum(jvm_memory_max_bytes{job="target-app", area="heap"} > 0)
+          > 0.85
+        for: 1m
+        labels:
+          severity: critical
+          scenario: memory-pressure
+        annotations:
+          summary: "target-app JVM heap 사용률 85% 초과"
+          description: "heap 사용률 {{ $value | humanizePercentage }} — OOM 위험. 추세 분석은 에이전트 보고서 참조"
