@@ -1,0 +1,11 @@
+route:
+  receiver: agent-service-placeholder
+  group_by: [alertname]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 30m
+
+receivers:
+  # 통합(webhook) 없는 placeholder — 발화 확인은 Alertmanager UI 로 한다.
+  # agent-service 모니터링 에이전트 구현 후 webhook_configs 로 교체 (ADR-0003)
+  - name: agent-service-placeholder

@@ -1,0 +1,76 @@
+name: ai-ops-platform
+
+services:
+  target-app:
+    build: ../target-app
+    container_name: target-app
+    ports:
+      - "8080:8080"
+
+  prometheus:
+    image: prom/prometheus:v3.13.1
+    container_name: prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      # Alert Rule 수정 시 재기동 없이 POST /-/reload 로 반영하기 위함
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+    ports:
+      # 9090 은 ai-code-reviewer 스택의 Prometheus 가 점유 — 충돌 회피
+      - "9091:9090"
+
+  alertmanager:
+    image: prom/alertmanager:v0.33.1
+    container_name: alertmanager
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+
+  grafana:
+    image: grafana/grafana:13.1.0
+    container_name: grafana
+    environment:
+      # 데모 편의 — 로그인 없이 접근 (실 운영 금지 설정, 비목표: 실 사용자 없음)
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      # 3000/3001 은 ai-code-reviewer 스택(Langfuse/Grafana)이 점유 — 충돌 회피
+      - "3002:3000"
+
+  loki:
+    # 기본 내장 config 가 곧 ADR-0004 범위 (monolithic + 파일시스템 + 보존 기본값)
+    image: grafana/loki:3.7.3
+    container_name: loki
+    ports:
+      - "3100:3100"
+
+  alloy:
+    # 로그 수송: 컨테이너 stdout → Alloy(docker discovery) → Loki (ADR-0004 추기 참조)
+    image: grafana/alloy:v1.17.1
+    container_name: alloy
+    command:
+      - run
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - loki
+
+  # === 자리만 예약 (활성화 금지) ===
+  # PostgreSQL/Kafka 는 설계 문서(architecture.md/scenarios.md)에 아직 등장하지 않는다.
+  # 용도 정의(ADR 또는 scenarios 반영) 없이 주석을 해제하지 말 것 — plans/202607-1w/tasks_20260714.md
+  #
+  # postgres:
+  #   image: postgres:18
+  #   environment:
+  #     POSTGRES_DB: aiops
+  #
+  # kafka:
+  #   image: apache/kafka:4.1.0
