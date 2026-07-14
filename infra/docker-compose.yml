@@ -4,6 +4,9 @@ services:
   target-app:
     build: ../target-app
     container_name: target-app
+    environment:
+      # heap 시나리오 데모 결정성: max heap 을 고정해야 85% 룰 발화에 필요한 누수량이 예측 가능
+      JAVA_TOOL_OPTIONS: "-Xms128m -Xmx512m"
     ports:
       - "8080:8080"
 
@@ -62,6 +65,20 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - loki
+
+  k6-load:
+    # 상시 기본 트래픽 — 비율 기반 트리거의 최소 표본 조건 충족용 (scenarios.md)
+    image: grafana/k6:2.1.0
+    container_name: k6-load
+    command:
+      - run
+      - /scripts/products-load.js
+    volumes:
+      - ./load/products-load.js:/scripts/products-load.js:ro
+    depends_on:
+      - target-app
+    # 스크립트 종료/실패 시 재기동해 상시 트래픽 보장
+    restart: unless-stopped
 
   # === 자리만 예약 (활성화 금지) ===
   # PostgreSQL/Kafka 는 설계 문서(architecture.md/scenarios.md)에 아직 등장하지 않는다.
