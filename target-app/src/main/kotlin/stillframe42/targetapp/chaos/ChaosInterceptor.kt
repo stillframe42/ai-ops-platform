@@ -3,6 +3,7 @@ package stillframe42.targetapp.chaos
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import java.util.concurrent.ThreadLocalRandom
+import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.servlet.HandlerInterceptor
 
@@ -25,6 +26,8 @@ class ChaosInterceptor(private val chaosState: ChaosState) : HandlerInterceptor 
 
         val errorRate = chaosState.errorRate
         if (errorRate != null && hit(errorRate.percent)) {
+            // 분석 에이전트가 로그에서 원인을 발견하는 시나리오의 근거 — 메트릭(500)과 짝이 되는 로그를 남긴다
+            log.error("chaos error-rate fault 로 500 반환: {} {}", request.method, request.requestURI)
             response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "chaos: error-rate fault active")
             return false
         }
@@ -32,4 +35,8 @@ class ChaosInterceptor(private val chaosState: ChaosState) : HandlerInterceptor 
     }
 
     private fun hit(percent: Int): Boolean = ThreadLocalRandom.current().nextInt(100) < percent
+
+    companion object {
+        private val log = LoggerFactory.getLogger(ChaosInterceptor::class.java)
+    }
 }
