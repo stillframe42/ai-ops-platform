@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: target-app
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  metrics:
+    distribution:
+      percentiles-histogram:
+        # p95 임계값 판정(histogram_quantile)에 버킷이 필요 — 요약(percentile) 게이지로는 PromQL 집계 불가
+        http.server.requests: true
