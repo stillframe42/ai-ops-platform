@@ -1,5 +1,13 @@
 name: ai-ops-platform
 
+# json-file 기본값은 용량 무제한 — 상시 가동 스택이라 디스크 증식 방지 필수.
+# Docker 쪽 파일은 최근 버퍼(컨테이너당 최대 30MB), 보존 저장소 역할은 Loki 가 담당.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   target-app:
     build: ../target-app
@@ -9,6 +17,7 @@ services:
       JAVA_TOOL_OPTIONS: "-Xms128m -Xmx512m"
     ports:
       - "8080:8080"
+    logging: *default-logging
 
   prometheus:
     image: prom/prometheus:v3.13.1
@@ -23,6 +32,7 @@ services:
     ports:
       # 9090 은 ai-code-reviewer 스택의 Prometheus 가 점유 — 충돌 회피
       - "9091:9090"
+    logging: *default-logging
 
   alertmanager:
     image: prom/alertmanager:v0.33.1
@@ -31,6 +41,7 @@ services:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
     ports:
       - "9093:9093"
+    logging: *default-logging
 
   grafana:
     image: grafana/grafana:13.1.0
@@ -45,6 +56,7 @@ services:
     ports:
       # 3000/3001 은 ai-code-reviewer 스택(Langfuse/Grafana)이 점유 — 충돌 회피
       - "3002:3000"
+    logging: *default-logging
 
   loki:
     # 기본 내장 config 가 곧 ADR-0004 범위 (monolithic + 파일시스템 + 보존 기본값)
@@ -52,6 +64,7 @@ services:
     container_name: loki
     ports:
       - "3100:3100"
+    logging: *default-logging
 
   alloy:
     # 로그 수송: 컨테이너 stdout → Alloy(docker discovery) → Loki (ADR-0004 추기 참조)
@@ -65,6 +78,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       - loki
+    logging: *default-logging
 
   k6-load:
     # 상시 기본 트래픽 — 비율 기반 트리거의 최소 표본 조건 충족용 (scenarios.md)
@@ -79,6 +93,7 @@ services:
       - target-app
     # 스크립트 종료/실패 시 재기동해 상시 트래픽 보장
     restart: unless-stopped
+    logging: *default-logging
 
   # === 자리만 예약 (활성화 금지) ===
   # PostgreSQL/Kafka 는 설계 문서(architecture.md/scenarios.md)에 아직 등장하지 않는다.
