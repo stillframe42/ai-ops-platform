@@ -1,0 +1,45 @@
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    # LLM — "프로바이더:모델" 형식 (ADR-0007 추가 사항: 설정으로 프로바이더 전환)
+    llm_model: str = "anthropic:claude-sonnet-5"
+    anthropic_api_key: str | None = None
+    openai_api_key: str | None = None
+
+    # 관측 스택 — 직접 조회 (ADR-0002)
+    prometheus_url: str = "http://localhost:9091"
+    loki_url: str = "http://localhost:3100"
+
+    # LangGraph 체크포인트 저장소 (DAY 12, ADR-0009 예정)
+    checkpoint_db_url: str | None = None
+
+    # Langfuse (DAY 14)
+    langfuse_host: str | None = None
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+
+    @property
+    def llm_provider(self) -> str:
+        return self.llm_model.split(":", 1)[0]
+
+    def active_llm_api_key(self) -> str:
+        """활성 프로바이더의 API 키만 검증한다 — 비활성 프로바이더 키는 없어도 된다."""
+        key = {
+            "anthropic": self.anthropic_api_key,
+            "openai": self.openai_api_key,
+        }.get(self.llm_provider)
+        if not key:
+            raise ValueError(
+                f"LLM_MODEL={self.llm_model} 에 필요한 {self.llm_provider.upper()}_API_KEY 가 없습니다 (.env 확인)"
+            )
+        return key
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
