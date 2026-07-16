@@ -21,7 +21,7 @@
   - 메트릭: Prometheus (범위 쿼리 포함 — 시나리오 3의 추세 분석에 필요)
   - 로그: **Loki (LogQL)** — 도입 확정 ([ADR-0004](adr/0004-loki-adoption.md)). 단 에이전트의 직접 조회 도구는 2단계(에이전트 day 결정) — 도구 도입 전까지 보고서의 로그 근거는 Grafana Explore 링크로 대체
   - 히스토리(과거 장애·조치 이력): 데모 범위는 **Prometheus 기본 보존으로 충분** — 별도 저장소는 보류 ([ADR-0004](adr/0004-loki-adoption.md)), "과거 유사 장애 검색" 확장 시 재검토
-- 데이터 접근 경로(Prometheus 직접 조회 vs control-plane 게이트웨이 경유)는 **미결** ([ADR-0002 예약](#미결-사항--adr-후보)).
+- 데이터 접근 경로: **직접 조회** — agent-service 가 Prometheus/Loki HTTP API 를 직접 호출 ([ADR-0002](adr/0002-observability-access-path.md)). 읽기는 직접, 조치 실행 경로는 별도(ADR-0005).
 
 ### 실행 에이전트 — 조치 제안·실행
 
@@ -167,9 +167,9 @@
 
 | 예약 번호 | 주제 | 관련 시나리오 | 상태 / 결정 시급성 |
 |-----------|------|---------------|--------------------|
-| ADR-0002 | 에이전트의 관측 데이터 접근 경로 — Prometheus 직접 조회 vs control-plane 게이트웨이 경유 | 전체 | 미결 — 에이전트 구현 전 |
+| [ADR-0002](adr/0002-observability-access-path.md) | 에이전트의 관측 데이터 접근 경로 — Prometheus 직접 조회 vs control-plane 게이트웨이 경유 | 전체 | **결정됨 (2026-07-16)** — 직접 조회 (읽기는 직접, 조치는 ADR-0005 에서) |
 | [ADR-0003](adr/0003-alertmanager-webhook.md) | 감지 트리거 방식 — 폴링 vs Alertmanager 룰 기반 웹훅 | 전체 | **결정됨 (2026-07-14)** — 룰 기반 웹훅, 추세형(시나리오 3)만 에이전트 판정 |
 | [ADR-0004](adr/0004-loki-adoption.md) | 로그 수집 스택(Loki) 도입 여부 + 히스토리 저장소 | 1, 3 | **결정됨 (2026-07-14)** — Loki 도입(범위 제한), 히스토리는 Prometheus 보존으로 |
 | ADR-0005 | 조치 실행 권한 경계 — docker API 접근 주체 (agent-service 직접 vs control-plane 대행) | 2 | 미결 — 실행 에이전트 구현 전 |
 | ADR-0006 | Slack 연동 방식 — incoming webhook(알림만) vs Slack App(승인 버튼) | 2 | 미결 — 승인 UX 구현 전 |
-| ADR-0007 | LLM 프로바이더/모델 선정 | 전체 | 미결 — 에이전트 구현 전 |
+| [ADR-0007](adr/0007-llm-provider.md) | LLM 프로바이더/모델 선정 | 전체 | **결정됨 (2026-07-16)** — Anthropic Claude Sonnet 5 기본, 설정(`프로바이더:모델`)으로 OpenAI GPT-5.6 Terra 전환 가능 (추가 사항) |

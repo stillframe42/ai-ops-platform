@@ -12,7 +12,7 @@ flowchart TB
     platform["ai-ops-platform<br/>장애 감지·분석·보고·조치 플랫폼"]
     target["target-app<br/>모니터링 대상 데모 앱"]
     slack["Slack<br/>알림·승인 채널"]
-    llm["LLM API<br/>프로바이더 미정 (ADR-0007)"]
+    llm["LLM API<br/>Anthropic Claude (ADR-0007)"]
 
     platform -->|"메트릭 수집 / 승인된 조치 실행"| target
     platform -->|"원인 보고서 / 승인 요청 발송"| slack
@@ -61,7 +61,7 @@ flowchart TB
     slack -->|"알림 / 승인 요청"| operator
     operator -.->|"승인 인터랙션<br/>방식 미결 (ADR-0006)"| cp
 
-    agents -.->|"PromQL 조회<br/>직접 vs control-plane 경유 미결 (ADR-0002)"| prom
+    agents -->|"PromQL 조회 (HTTP)<br/>직접 조회 (ADR-0002)"| prom
     prom -->|"알림 룰 평가"| am
     am -->|"alert webhook<br/>(수신자 구현 전까지 placeholder)"| agents
     target -->|"stdout (docker logs)"| alloy
@@ -84,13 +84,13 @@ flowchart TB
 |------|----------|------|
 | Prometheus → target-app | HTTP scrape (`/actuator/prometheus`) | 확정 |
 | control-plane ↔ agent-service | HTTP/REST | 확정 (계약 상세는 API 설계 시) |
-| agent-service → LLM API | HTTPS | 확정 (프로바이더는 ADR-0007) |
+| agent-service → LLM API | HTTPS | 확정 — Anthropic Claude Sonnet 5 ([ADR-0007](adr/0007-llm-provider.md)) |
 | control-plane → Slack | incoming webhook (알림) | 확정 — 승인 버튼 인터랙션은 ADR-0006 |
 | Grafana → Prometheus | PromQL over HTTP | 확정 |
 | Grafana → Loki | LogQL over HTTP | 확정 ([ADR-0004](adr/0004-loki-adoption.md)) |
-| 에이전트의 관측 데이터 조회 | PromQL — 직접 vs 게이트웨이 경유 | 미결 (ADR-0002) |
+| 에이전트의 관측 데이터 조회 | PromQL over HTTP — 직접 조회 | 확정 ([ADR-0002](adr/0002-observability-access-path.md)) |
 | Prometheus → Alertmanager → agent-service | 알림 룰 + alert webhook | 확정 ([ADR-0003](adr/0003-alertmanager-webhook.md)) — 수신자 구현 전까지 placeholder |
-| target-app → Alloy → Loki | 컨테이너 stdout 수집(docker discovery) + Loki push API | 확정 ([ADR-0004](adr/0004-loki-adoption.md) 추기 — Promtail 은 EOL 로 제외) |
+| target-app → Alloy → Loki | 컨테이너 stdout 수집(docker discovery) + Loki push API | 확정 ([ADR-0004](adr/0004-loki-adoption.md) 추가 사항 — Promtail 은 EOL 로 제외) |
 | agent-service → Loki | LogQL 조회 | 2단계 — 에이전트 day 결정 (ADR-0004) |
 | 조치 실행 | docker API | 미결 (ADR-0005, 실행 주체 포함) |
 | 분산 추적 (OTLP → Tempo) | OTLP | 로드맵 9월 — 도입 시 Level 2 갱신 |
