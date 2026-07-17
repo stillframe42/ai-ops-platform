@@ -1,7 +1,24 @@
-"""DAY 8 확인 기준: 빈 노드 3개 + Supervisor 그래프가 컴파일되고 더미 상태로 end-to-end 실행된다."""
+"""Supervisor 그래프 라우팅 테스트 — 실 LLM 없이 라우팅 규칙만 검증한다.
 
+DAY 9 부터 monitor 노드가 실 LLM 에이전트이므로 스텁을 주입한다 (라우팅 회귀망 유지).
+"""
+
+import pytest
+from langchain_core.messages import AIMessage
+
+from app.agents import monitor_agent
 from app.supervisor.graph import build_graph
 from app.supervisor.state import AnalysisResult, IncidentInfo, MonitoringResult
+
+
+class _StubMonitorAgent:
+    def invoke(self, payload: dict) -> dict:
+        return {"messages": [AIMessage(content="[스텁] 상황 요약")]}
+
+
+@pytest.fixture(autouse=True)
+def stub_monitor_agent(monkeypatch):
+    monkeypatch.setattr(monitor_agent, "get_monitor_agent", lambda: _StubMonitorAgent())
 
 
 def _dummy_incident() -> IncidentInfo:
