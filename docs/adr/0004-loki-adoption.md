@@ -17,6 +17,7 @@
 
 - 1단계 (infra day): 로그 수집·적재 + Grafana Explore 를 통한 **사람 조회**까지. target-app 은 LogQL 필터링이 가능하도록 로그를 JSON 구조화(level/logger/traceId)한다.
 - 2단계 (에이전트 day): 분석 에이전트의 LogQL 조회 도구 — 별도 결정으로 미룬다. 부담 시 1단계에서 멈추는 퇴로를 허용하며, 그 경우 보고서의 로그 근거는 Grafana 링크로 대체한다.
+  - (2026-07-18 추가 사항) **2단계 진행 확정** — 분석 에이전트의 LogQL 도구 `get_app_logs` 를 구현했다 (`agent-service/app/tools/loki_tools.py`). 필터는 1단계에서 검증한 `{service="target-app"} | json | log_level=...` 를 그대로 사용. 퇴로(1단계 멈춤)는 사용하지 않았다.
 
 로그 수송 방식: **Grafana Alloy** (2026-07-14 추가 사항, infra 구현 시 확정). 당초 후보였던 Promtail 은 2026-03 EOL(Alloy 로 대체)이라 신규 채택에서 제외했고, loki-docker-driver 는 호스트 Docker 에 플러그인 설치라는 compose 밖 수동 단계가 필요해 "단일 명령 기동" 기준에 어긋나 기각. Alloy 는 docker discovery 로 컨테이너 stdout 을 수집하며, 9월 Observability 단계에서 OTel collector 역할을 겸할 수 있어 확장성도 유리하다.
 
