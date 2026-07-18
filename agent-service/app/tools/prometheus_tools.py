@@ -58,6 +58,21 @@ def query_prometheus_range(promql: str, minutes: int) -> str:
 
 
 @tool
+def compare_with_baseline(promql: str) -> str:
+    """PromQL 표현식을 현재와 1시간 전 두 시점에 평가해 평상시 기준선과 비교한다.
+
+    배경 부하(k6 상시 2 RPS)가 일정해 1시간 전 값이 평상시 기준선 역할을 한다.
+    예: 요청률 비교는 compare_with_baseline('sum(rate(http_server_requests_seconds_count[5m]))')
+    """
+    current = _api_get("/api/v1/query", {"query": promql})
+    baseline = _api_get("/api/v1/query", {"query": promql, "time": time.time() - 3600})
+    return json.dumps(
+        {"current": current["result"], "baseline_1h_ago": baseline["result"]},
+        ensure_ascii=False,
+    )
+
+
+@tool
 def get_active_alerts() -> str:
     """현재 발화 중(pending/firing)인 Prometheus Alert 목록을 반환한다 — scenario 라벨 포함."""
     data = _api_get("/api/v1/alerts", {})

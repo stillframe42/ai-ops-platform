@@ -89,6 +89,48 @@ def test_get_active_alerts_returns_alerts_with_labels(monkeypatch):
     assert alerts[0]["state"] == "firing"
 
 
+def test_compare_with_baseline_evaluates_now_and_one_hour_ago(monkeypatch):
+    captured: list[dict[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v1/query"
+        captured.append(dict(request.url.params))
+        return _success(
+            {
+                "resultType": "vector",
+                "result": [{"metric": {}, "value": [1784266011.5, "2.0"]}],
+            }
+        )
+
+    _install(monkeypatch, handler)
+    out = prometheus_tools.compare_with_baseline.invoke(
+        {"promql": "sum(rate(http_server_requests_seconds_count[5m]))"}
+    )
+
+    # 같은 표현식을 두 시점에 평가: 현재(time 미지정) + 1시간 전(time 지정)
+    assert len(captured) == 2
+    assert "time" not in captured[0]
+    assert "time" in captured[1]
+    result = json.loads(out)
+    assert set(result) == {"current", "baseline_1h_ago"}
+
+
+def test_compare_with_baseline_time_param_is_one_hour_back(monkeypatch):
+    captured: list[dict[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured.append(dict(request.url.params))
+        return _success({"resultType": "vector", "result": []})
+
+    _install(monkeypatch, handler)
+    import time as time_module
+
+    before = time_module.time()
+    prometheus_tools.compare_with_baseline.invoke({"promql": "up"})
+
+    assert float(captured[1]["time"]) == pytest.approx(before - 3600, abs=5)
+
+
 def test_error_status_raises(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
