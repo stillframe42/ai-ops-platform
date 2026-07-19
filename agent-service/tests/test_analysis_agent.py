@@ -59,6 +59,15 @@ def _state() -> dict:
     }
 
 
+def test_analysis_result_schema_requires_confidence():
+    """confidence 는 구조화 출력 스키마에서 필수 필드여야 한다.
+
+    실측 재현 (2026-07-19): 기본값이 있으면 선택 필드가 돼 모델이 생략할 수 있고,
+    생략이 0.0 으로 위장되면 라우팅(confidence 임계 판정) 입력이 왜곡된다.
+    """
+    assert "confidence" in AnalysisResult.model_json_schema()["required"]
+
+
 def test_analysis_node_maps_structured_response(monkeypatch):
     stub = _StubAgent()
     monkeypatch.setattr(analysis_agent, "get_analysis_agent", lambda: stub)

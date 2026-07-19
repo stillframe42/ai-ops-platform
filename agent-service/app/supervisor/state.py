@@ -41,16 +41,23 @@ class AnalysisResult(BaseModel):
 
     root_cause_hypothesis: str
     evidence: list[str] = Field(default_factory=list)
-    confidence: float = 0.0  # 0~1
+    # 필수 필드 유지 — 기본값을 주면 구조화 출력에서 모델이 생략할 수 있고,
+    # 생략이 0.0 으로 위장되면 라우팅(confidence 임계 판정) 입력이 왜곡된다 (2026-07-19 실측)
+    confidence: float  # 0~1
     suggested_actions: list[str] = Field(default_factory=list)
     severity: Severity = "P3"
 
 
 class ActionPlan(BaseModel):
-    """실행 에이전트 소유 — 조치 계획. 실제 실행은 4주차 human-in-the-loop 승인 이후 (ADR-0005)."""
+    """실행 에이전트 소유 — 조치 계획. 실제 실행은 4주차 human-in-the-loop 승인 이후 (ADR-0005).
+
+    scenarios.md 조치 제안서 스펙: 제안 조치 / 근거 / 예상 효과 / 리스크 (승인 기한은 승인 흐름 몫).
+    """
 
     actions: list[ActionType] = Field(default_factory=list)
     rationale: str = ""
+    expected_effect: str = ""
+    risk: str = ""
 
 
 class AIOpsState(TypedDict):
@@ -59,4 +66,5 @@ class AIOpsState(TypedDict):
     analysis: NotRequired[AnalysisResult | None]
     action: NotRequired[ActionPlan | None]
     supervisor_decision: NotRequired[str]  # 라우팅 결정 (관측·디버깅용으로 상태에 남긴다)
+    supervisor_visits: NotRequired[int]  # 무한 루프 방지 카운터 — 한도 초과 시 강제 종료
     messages: Annotated[list[AnyMessage], add_messages]
