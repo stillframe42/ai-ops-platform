@@ -80,7 +80,8 @@ def monitor_node(state: AIOpsState) -> dict:
     )
     result = get_monitor_agent().invoke({"messages": [task]})
 
-    summary = result["messages"][-1].content
+    # content 는 콘텐츠 블록 리스트일 수 있다 (thinking 블록 포함 시) — .text 로 텍스트만 추출
+    summary = result["messages"][-1].text
     monitoring = MonitoringResult(
         situation_summary=summary,
         evidences=_extract_evidences(result["messages"]),
