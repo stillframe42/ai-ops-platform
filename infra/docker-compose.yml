@@ -67,7 +67,7 @@ services:
     logging: *default-logging
 
   alloy:
-    # 로그 수송: 컨테이너 stdout → Alloy(docker discovery) → Loki (ADR-0004 추기 참조)
+    # 로그 수송: 컨테이너 stdout → Alloy(docker discovery) → Loki (ADR-0004 추가 사항 참조)
     image: grafana/alloy:v1.17.1
     container_name: alloy
     command:
@@ -95,14 +95,55 @@ services:
     restart: unless-stopped
     logging: *default-logging
 
+  agent-service:
+    build: ../agent-service
+    container_name: agent-service
+    environment:
+      # 컨테이너 내부 네트워크 기준 URL — 로컬 개발 기본값(localhost:9091 등)을 덮어쓴다 (ADR-0002)
+      PROMETHEUS_URL: http://prometheus:9090
+      LOKI_URL: http://loki:3100
+      CHECKPOINT_DB_URL: postgresql://${POSTGRES_USER:-aiops}:${POSTGRES_PASSWORD:-aiops}@postgres:5432/aiops
+    env_file:
+      # LLM API 키 등 시크릿 — agent-service 의 git 미추적 .env 재사용 (environment 가 우선)
+      - ../agent-service/.env
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *default-logging
+
+  postgres:
+    # 용도: LangGraph checkpoint 저장소 — Durable Execution (ADR-0009).
+    # 인시던트 처리 중단-재개의 전제라 앱보다 먼저 떠야 한다 (healthcheck + depends_on)
+    image: postgres:18
+    container_name: postgres
+    environment:
+      # 기본값은 로컬 데모 전용 크리덴셜 (실 운영 금지) — DB 는 compose 네트워크 + localhost 에서만 도달 가능.
+      # 덮어쓰려면 infra/.env (git 미추적) 또는 셸 환경 변수로 POSTGRES_USER/PASSWORD 지정
+      POSTGRES_DB: aiops
+      POSTGRES_USER: ${POSTGRES_USER:-aiops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aiops}
+    volumes:
+      # postgres:18 이미지는 PGDATA 가 /var/lib/postgresql/<major>/docker — 상위 경로를 마운트해야 지속
+      - postgres-data:/var/lib/postgresql
+    ports:
+      # 5432 는 호스트 로컬 PostgreSQL 이 점유 — 로컬 개발(uv run) 접근은 5433 으로
+      - "5433:5432"
+    healthcheck:
+      # $$ 는 compose 보간 회피 — 컨테이너 안에서 POSTGRES_USER 환경 변수를 그대로 읽는다
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d aiops"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging: *default-logging
+
   # === 자리만 예약 (활성화 금지) ===
-  # PostgreSQL/Kafka 는 설계 문서(architecture.md/scenarios.md)에 아직 등장하지 않는다.
+  # Kafka 는 설계 문서(architecture.md/scenarios.md)에 아직 등장하지 않는다.
   # 용도 정의(ADR 또는 scenarios 반영) 없이 주석을 해제하지 말 것 — plans/202607-1w/tasks_20260714.md
-  #
-  # postgres:
-  #   image: postgres:18
-  #   environment:
-  #     POSTGRES_DB: aiops
   #
   # kafka:
   #   image: apache/kafka:4.1.0
+
+volumes:
+  postgres-data:
