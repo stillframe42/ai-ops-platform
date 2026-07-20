@@ -12,29 +12,15 @@ monitor → analysis → (P1/P2) action → 종료 순서가 맞는지 눈으로
 """
 
 import sys
-from datetime import UTC, datetime
 
 from app.supervisor.graph import GRAPH_RECURSION_LIMIT, build_graph
-from app.supervisor.state import IncidentInfo
-
-# 시나리오별 인시던트 프리셋 (Alert Rule 이름은 infra/prometheus/rules 기준)
-_PRESETS = {
-    "memory-pressure": ("TargetAppHeapUsageHigh", "heap 사용률 85% 초과 (수동 트리거)"),
-    "error-rate-surge": ("TargetAppHighErrorRate", "5xx 에러율 10% 초과 (수동 트리거)"),
-    "latency-surge": ("TargetAppHighLatency", "p95 latency 3s 초과 (수동 트리거)"),
-}
+from app.supervisor.runtime import build_incident
 
 
 def main() -> None:
     scenario = sys.argv[1] if len(sys.argv) > 1 else "memory-pressure"
-    alert_name, summary = _PRESETS[scenario]
-    incident = IncidentInfo(
-        id=f"inc-manual-{datetime.now(UTC):%Y%m%d%H%M%S}",
-        scenario=scenario,
-        alert_name=alert_name,
-        summary=summary,
-        occurred_at=datetime.now(UTC).isoformat(),
-    )
+    # 프리셋은 runtime 모듈로 일원화 (DAY 12) — POST /incidents/trigger 와 동일 인시던트 생성
+    incident = build_incident(scenario)
 
     graph = build_graph()
     visited: list[str] = []
