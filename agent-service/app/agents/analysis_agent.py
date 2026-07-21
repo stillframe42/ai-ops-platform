@@ -57,18 +57,25 @@ def get_analysis_agent():
     )
 
 
-def analysis_node(state: AIOpsState) -> dict:
+async def analysis_node(state: AIOpsState) -> dict:
+    # async 인 이유: 노드 타임아웃은 협조적 취소(asyncio) 기반 — sync 노드는 지원되지 않는다 (DAY 13)
     incident = state["incident"]
-    monitoring = state["monitoring"]
+    monitoring = state.get("monitoring")
+    # monitor 실패 시에도 부분 진행한다 — 데이터 공백을 숨기지 않고 프롬프트에 명시 (DAY 13)
+    summary = (
+        monitoring.situation_summary
+        if monitoring is not None
+        else "(모니터링 단계 실패 — 상황 요약 없음. 도구로 직접 조회해 공백을 보완하라)"
+    )
     task = HumanMessage(
         content=(
             f"인시던트 — 시나리오: {incident.scenario}, Alert: {incident.alert_name}, "
             f"발생 시각: {incident.occurred_at}\n"
-            f"모니터링 상황 요약: {monitoring.situation_summary}\n"
+            f"모니터링 상황 요약: {summary}\n"
             "근본 원인 가설을 세우고 도구로 검증해 원인 보고서를 작성하라."
         )
     )
-    result = get_analysis_agent().invoke(
+    result = await get_analysis_agent().ainvoke(
         {"messages": [task]},
         config={"recursion_limit": ANALYSIS_RECURSION_LIMIT},
     )

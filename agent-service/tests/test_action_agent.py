@@ -3,6 +3,8 @@
 monitor/analysis 와 동일한 스텁 주입 패턴 (3번째 적용).
 """
 
+
+import asyncio
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.agents import action_agent
@@ -15,7 +17,7 @@ class _StubAgent:
     def __init__(self) -> None:
         self.captured_payload: dict | None = None
 
-    def invoke(self, payload: dict, config: dict | None = None) -> dict:
+    async def ainvoke(self, payload: dict, config: dict | None = None) -> dict:
         self.captured_payload = payload
         return {
             "messages": [
@@ -55,7 +57,7 @@ def test_action_node_maps_structured_response(monkeypatch):
     stub = _StubAgent()
     monkeypatch.setattr(action_agent, "get_action_agent", lambda: stub)
 
-    update = action_agent.action_node(_state())
+    update = asyncio.run(action_agent.action_node(_state()))
 
     plan = update["action"]
     assert isinstance(plan, ActionPlan)
@@ -69,7 +71,7 @@ def test_action_node_task_includes_analysis_report(monkeypatch):
     stub = _StubAgent()
     monkeypatch.setattr(action_agent, "get_action_agent", lambda: stub)
 
-    action_agent.action_node(_state())
+    asyncio.run(action_agent.action_node(_state()))
 
     # 조치 계획의 입력은 분석 보고서 — 상황 파악을 처음부터 다시 하지 않는다
     task_content = stub.captured_payload["messages"][0].content
@@ -82,7 +84,7 @@ def test_action_node_keeps_messages_convention(monkeypatch):
     stub = _StubAgent()
     monkeypatch.setattr(action_agent, "get_action_agent", lambda: stub)
 
-    update = action_agent.action_node(_state())
+    update = asyncio.run(action_agent.action_node(_state()))
 
     # 기존 관례 유지: [action] 접두어 요약 1건만 그래프 messages 에 남긴다
     assert len(update["messages"]) == 1

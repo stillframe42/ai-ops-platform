@@ -1,8 +1,12 @@
 """Supervisor 그래프 라우팅 테스트 — 실 LLM 없이 라우팅 규칙만 검증한다.
 
+에이전트 노드는 async (타임아웃 협조적 취소 전제, DAY 13) — 그래프 실행도 ainvoke 로 한다.
+
 DAY 9 부터 monitor, DAY 10 부터 analysis 노드가 실 LLM 에이전트이므로 스텁을 주입한다
 (라우팅 회귀망 유지).
 """
+
+import asyncio
 
 import pytest
 from langchain_core.messages import AIMessage
@@ -14,12 +18,12 @@ from app.supervisor.state import ActionPlan, AnalysisResult, IncidentInfo, Monit
 
 
 class _StubMonitorAgent:
-    def invoke(self, payload: dict) -> dict:
+    async def ainvoke(self, payload: dict) -> dict:
         return {"messages": [AIMessage(content="[스텁] 상황 요약")]}
 
 
 class _StubAnalysisAgent:
-    def invoke(self, payload: dict, config: dict | None = None) -> dict:
+    async def ainvoke(self, payload: dict, config: dict | None = None) -> dict:
         return {
             "messages": [AIMessage(content="[스텁] 분석 완료")],
             # P2 + 높은 confidence — 규칙만으로 action 경로까지 end-to-end 로 흐르게 한다
@@ -30,7 +34,7 @@ class _StubAnalysisAgent:
 
 
 class _StubActionAgent:
-    def invoke(self, payload: dict, config: dict | None = None) -> dict:
+    async def ainvoke(self, payload: dict, config: dict | None = None) -> dict:
         return {
             "messages": [AIMessage(content="[스텁] 계획 수립 완료")],
             "structured_response": ActionPlan(
@@ -70,7 +74,7 @@ def test_graph_compiles() -> None:
 def test_dummy_end_to_end() -> None:
     """monitor → analysis → action(더미 P2) → 종료까지 전 노드를 거친다."""
     graph = build_graph()
-    result = graph.invoke({"incident": _dummy_incident(), "messages": []})
+    result = asyncio.run(graph.ainvoke({"incident": _dummy_incident(), "messages": []}))
 
     assert result["monitoring"] is not None
     assert result["analysis"] is not None
@@ -83,15 +87,17 @@ def test_dummy_end_to_end() -> None:
 def test_p3_skips_action() -> None:
     """analysis 가 P3 면 action 없이 보고만 하고 종료한다 — 조기 종료 경로."""
     graph = build_graph()
-    result = graph.invoke(
-        {
-            "incident": _dummy_incident(),
-            "monitoring": MonitoringResult(situation_summary="사전 주입"),
-            "analysis": AnalysisResult(
-                root_cause_hypothesis="사전 주입", confidence=0.8, severity="P3"
-            ),
-            "messages": [],
-        }
+    result = asyncio.run(
+        graph.ainvoke(
+            {
+                "incident": _dummy_incident(),
+                "monitoring": MonitoringResult(situation_summary="사전 주입"),
+                "analysis": AnalysisResult(
+                    root_cause_hypothesis="사전 주입", confidence=0.8, severity="P3"
+                ),
+                "messages": [],
+            }
+        )
     )
 
     assert result.get("action") is None
@@ -102,7 +108,7 @@ def test_reanalysis_loop_is_forced_to_terminate(monkeypatch) -> None:
     """분석 confidence 가 계속 낮고 LLM 라우터가 재분석만 고집해도 방문 한도에서 끊는다."""
 
     class _LowConfidenceAnalysisAgent:
-        def invoke(self, payload: dict, config: dict | None = None) -> dict:
+        async def ainvoke(self, payload: dict, config: dict | None = None) -> dict:
             return {
                 "messages": [AIMessage(content="[스텁] 분석 완료")],
                 "structured_response": AnalysisResult(
@@ -120,7 +126,7 @@ def test_reanalysis_loop_is_forced_to_terminate(monkeypatch) -> None:
     monkeypatch.setattr(router, "get_route_llm", lambda: _AlwaysReanalyzeRouter())
 
     graph = build_graph()
-    result = graph.invoke({"incident": _dummy_incident(), "messages": []})
+    result = asyncio.run(graph.ainvoke({"incident": _dummy_incident(), "messages": []}))
 
     assert result["supervisor_decision"] == "done"
     assert result["supervisor_visits"] == 6  # 한도 5 초과 진입에서 강제 종료

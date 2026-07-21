@@ -1,9 +1,9 @@
 """Supervisor 그래프의 공유 상태 스키마.
 
 설계 원칙: 플랫 dict 가 아닌 에이전트별 네임스페이스 — 각 에이전트는 자기 소유 필드만 쓴다.
-errors 필드는 DAY 13 복원력 단계에서 추가한다 (NotRequired 구조라 하위 호환 확장 가능).
 """
 
+import operator
 from typing import Annotated, Literal, NotRequired, TypedDict
 
 from langchain_core.messages import AnyMessage
@@ -60,6 +60,18 @@ class ActionPlan(BaseModel):
     risk: str = ""
 
 
+class NodeFailure(BaseModel):
+    """노드 실패 기록 — 실패가 전체 실행을 죽이지 않고 상태에 남는다 (DAY 13 복원력).
+
+    supervisor 는 이 기록을 '해당 단계 시도됨'으로 판정해 실패 노드에 재진입하지 않는다.
+    """
+
+    node: str
+    error_type: str  # 예외 클래스명 (NodeTimeoutError, ConnectionError, ...)
+    message: str
+    occurred_at: str  # ISO 8601 문자열 — 체크포인트 직렬화 안정성 우선
+
+
 class AIOpsState(TypedDict):
     incident: IncidentInfo
     monitoring: NotRequired[MonitoringResult | None]
@@ -67,4 +79,6 @@ class AIOpsState(TypedDict):
     action: NotRequired[ActionPlan | None]
     supervisor_decision: NotRequired[str]  # 라우팅 결정 (관측·디버깅용으로 상태에 남긴다)
     supervisor_visits: NotRequired[int]  # 무한 루프 방지 카운터 — 한도 초과 시 강제 종료
+    # 노드 실패 축적 — add 리듀서라 각 error_handler 의 기록이 덮어쓰지 않고 누적된다
+    errors: NotRequired[Annotated[list[NodeFailure], operator.add]]
     messages: Annotated[list[AnyMessage], add_messages]

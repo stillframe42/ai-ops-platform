@@ -46,7 +46,8 @@ def get_action_agent():
     )
 
 
-def action_node(state: AIOpsState) -> dict:
+async def action_node(state: AIOpsState) -> dict:
+    # async 인 이유: 노드 타임아웃은 협조적 취소(asyncio) 기반 — sync 노드는 지원되지 않는다 (DAY 13)
     incident = state["incident"]
     analysis = state["analysis"]
     task = HumanMessage(
@@ -59,7 +60,7 @@ def action_node(state: AIOpsState) -> dict:
             "조치 계획을 작성하라."
         )
     )
-    result = get_action_agent().invoke({"messages": [task]})
+    result = await get_action_agent().ainvoke({"messages": [task]})
 
     plan: ActionPlan = result["structured_response"]
     return {

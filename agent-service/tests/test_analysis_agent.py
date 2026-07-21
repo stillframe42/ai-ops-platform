@@ -4,6 +4,8 @@ monitor_agent 와 동일 패턴 + 구조화 출력(structured_response) 규약 �
 실 LLM 단독 테스트는 scripts/run_analysis_agent.py (ANTHROPIC_API_KEY + 스택 필요).
 """
 
+
+import asyncio
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.agents import analysis_agent
@@ -17,7 +19,7 @@ class _StubAgent:
         self.captured_payload: dict | None = None
         self.captured_config: dict | None = None
 
-    def invoke(self, payload: dict, config: dict | None = None) -> dict:
+    async def ainvoke(self, payload: dict, config: dict | None = None) -> dict:
         self.captured_payload = payload
         self.captured_config = config
         return {
@@ -72,7 +74,7 @@ def test_analysis_node_maps_structured_response(monkeypatch):
     stub = _StubAgent()
     monkeypatch.setattr(analysis_agent, "get_analysis_agent", lambda: stub)
 
-    update = analysis_agent.analysis_node(_state())
+    update = asyncio.run(analysis_agent.analysis_node(_state()))
 
     analysis = update["analysis"]
     assert isinstance(analysis, AnalysisResult)
@@ -84,7 +86,7 @@ def test_analysis_node_task_includes_monitoring_summary(monkeypatch):
     stub = _StubAgent()
     monkeypatch.setattr(analysis_agent, "get_analysis_agent", lambda: stub)
 
-    analysis_agent.analysis_node(_state())
+    asyncio.run(analysis_agent.analysis_node(_state()))
 
     # 분석 입력은 모니터링 요약 — 상황 파악을 처음부터 다시 하지 않는다
     task_content = stub.captured_payload["messages"][0].content
@@ -96,7 +98,7 @@ def test_analysis_node_sets_recursion_limit(monkeypatch):
     stub = _StubAgent()
     monkeypatch.setattr(analysis_agent, "get_analysis_agent", lambda: stub)
 
-    analysis_agent.analysis_node(_state())
+    asyncio.run(analysis_agent.analysis_node(_state()))
 
     # ReAct 무한 루프 방지 — 최대 스텝 제한 (5월 패턴)
     assert stub.captured_config["recursion_limit"] == analysis_agent.ANALYSIS_RECURSION_LIMIT
@@ -106,7 +108,7 @@ def test_analysis_node_keeps_messages_convention(monkeypatch):
     stub = _StubAgent()
     monkeypatch.setattr(analysis_agent, "get_analysis_agent", lambda: stub)
 
-    update = analysis_agent.analysis_node(_state())
+    update = asyncio.run(analysis_agent.analysis_node(_state()))
 
     # 기존 관례 유지: [analysis] 접두어 요약 1건만 그래프 messages 에 남긴다
     assert len(update["messages"]) == 1

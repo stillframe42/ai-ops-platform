@@ -69,7 +69,8 @@ def _extract_evidences(messages: list[AnyMessage]) -> list[str]:
     return evidences
 
 
-def monitor_node(state: AIOpsState) -> dict:
+async def monitor_node(state: AIOpsState) -> dict:
+    # async 인 이유: 노드 타임아웃은 협조적 취소(asyncio) 기반 — sync 노드는 지원되지 않는다 (DAY 13)
     incident = state["incident"]
     task = HumanMessage(
         content=(
@@ -78,7 +79,7 @@ def monitor_node(state: AIOpsState) -> dict:
             "관련 메트릭을 조회해 현재 상황을 요약하라."
         )
     )
-    result = get_monitor_agent().invoke({"messages": [task]})
+    result = await get_monitor_agent().ainvoke({"messages": [task]})
 
     # content 는 콘텐츠 블록 리스트일 수 있다 (thinking 블록 포함 시) — .text 로 텍스트만 추출
     summary = result["messages"][-1].text

@@ -11,13 +11,15 @@ monitor → analysis → (P1/P2) action → 종료 순서가 맞는지 눈으로
 4. 원복: `curl -X POST http://localhost:8080/chaos/reset`
 """
 
+import asyncio
 import sys
 
 from app.supervisor.graph import GRAPH_RECURSION_LIMIT, build_graph
 from app.supervisor.runtime import build_incident
 
 
-def main() -> None:
+async def main() -> None:
+    # async 인 이유: 에이전트 노드가 async (타임아웃 협조적 취소 전제, DAY 13) — sync stream 불가
     scenario = sys.argv[1] if len(sys.argv) > 1 else "memory-pressure"
     # 프리셋은 runtime 모듈로 일원화 (DAY 12) — POST /incidents/trigger 와 동일 인시던트 생성
     incident = build_incident(scenario)
@@ -26,7 +28,7 @@ def main() -> None:
     visited: list[str] = []
     final_state: dict = {}
     print(f"=== 그래프 실행: {scenario} ({incident.id}) ===")
-    for update in graph.stream(
+    async for update in graph.astream(
         {"incident": incident, "messages": []},
         config={"recursion_limit": GRAPH_RECURSION_LIMIT},
         stream_mode="updates",
@@ -54,4 +56,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

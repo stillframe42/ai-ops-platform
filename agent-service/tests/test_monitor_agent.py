@@ -3,6 +3,8 @@
 실 LLM 단독 테스트는 scripts/run_monitor_agent.py (ANTHROPIC_API_KEY + 스택 필요).
 """
 
+import asyncio
+
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.agents import monitor_agent
@@ -10,9 +12,9 @@ from app.supervisor.state import IncidentInfo
 
 
 class _StubAgent:
-    """create_agent 결과와 동일한 규약: invoke({"messages": [...]}) -> {"messages": [...]}."""
+    """create_agent 결과와 동일한 규약: ainvoke({"messages": [...]}) -> {"messages": [...]}."""
 
-    def invoke(self, payload: dict) -> dict:
+    async def ainvoke(self, payload: dict) -> dict:
         return {
             "messages": [
                 HumanMessage(content=payload["messages"][0].content),
@@ -41,7 +43,7 @@ def _incident() -> IncidentInfo:
 def test_monitor_node_maps_final_message_to_summary(monkeypatch):
     monkeypatch.setattr(monitor_agent, "get_monitor_agent", lambda: _StubAgent())
 
-    update = monitor_agent.monitor_node({"incident": _incident(), "messages": []})
+    update = asyncio.run(monitor_agent.monitor_node({"incident": _incident(), "messages": []}))
 
     assert (
         update["monitoring"].situation_summary
@@ -57,8 +59,8 @@ def test_monitor_node_extracts_text_from_content_blocks(monkeypatch):
     """
 
     class _BlockContentAgent(_StubAgent):
-        def invoke(self, payload: dict) -> dict:
-            result = super().invoke(payload)
+        async def ainvoke(self, payload: dict) -> dict:
+            result = await super().ainvoke(payload)
             result["messages"][-1] = AIMessage(
                 content=[
                     {"type": "thinking", "thinking": "...", "signature": "sig"},
@@ -69,7 +71,7 @@ def test_monitor_node_extracts_text_from_content_blocks(monkeypatch):
 
     monkeypatch.setattr(monitor_agent, "get_monitor_agent", lambda: _BlockContentAgent())
 
-    update = monitor_agent.monitor_node({"incident": _incident(), "messages": []})
+    update = asyncio.run(monitor_agent.monitor_node({"incident": _incident(), "messages": []}))
 
     assert update["monitoring"].situation_summary == "p95 latency 정상 범위."
 
@@ -77,7 +79,7 @@ def test_monitor_node_extracts_text_from_content_blocks(monkeypatch):
 def test_monitor_node_records_tool_calls_as_evidences(monkeypatch):
     monkeypatch.setattr(monitor_agent, "get_monitor_agent", lambda: _StubAgent())
 
-    update = monitor_agent.monitor_node({"incident": _incident(), "messages": []})
+    update = asyncio.run(monitor_agent.monitor_node({"incident": _incident(), "messages": []}))
 
     # 에이전트가 실제 실행한 쿼리가 근거로 남는다
     assert update["monitoring"].evidences == ['query_prometheus({"promql": "up"})']
@@ -86,7 +88,7 @@ def test_monitor_node_records_tool_calls_as_evidences(monkeypatch):
 def test_monitor_node_keeps_messages_convention(monkeypatch):
     monkeypatch.setattr(monitor_agent, "get_monitor_agent", lambda: _StubAgent())
 
-    update = monitor_agent.monitor_node({"incident": _incident(), "messages": []})
+    update = asyncio.run(monitor_agent.monitor_node({"incident": _incident(), "messages": []}))
 
     # 기존 관례 유지: [monitor] 접두어 요약 1건만 그래프 messages 에 남긴다
     assert len(update["messages"]) == 1

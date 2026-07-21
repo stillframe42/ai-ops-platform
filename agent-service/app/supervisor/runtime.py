@@ -10,10 +10,20 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
 
 from app.config.settings import Settings
 from app.supervisor.graph import GRAPH_RECURSION_LIMIT, build_graph
-from app.supervisor.state import IncidentInfo, Scenario
+from app.supervisor.state import (
+    ActionPlan,
+    AnalysisResult,
+    IncidentInfo,
+    MonitoringResult,
+    NodeFailure,
+    Scenario,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +33,25 @@ INCIDENT_PRESETS: dict[str, tuple[str, str]] = {
     "error-rate-surge": ("TargetAppHighErrorRate", "5xx 에러율 10% 초과 (수동 트리거)"),
     "latency-surge": ("TargetAppHighLatency", "p95 latency 3s 초과 (수동 트리거)"),
 }
+
+
+def build_checkpoint_serializer() -> JsonPlusSerializer:
+    """체크포인트 직렬화기 — 상태 스키마의 pydantic 모델을 허용 목록에 명시 등록한다.
+
+    기본(permissive)은 미등록 타입마다 "향후 차단 예정" 경고를 낸다 — 명시 등록으로
+    경고를 없애고, 목록 밖 타입은 즉시 차단되므로 새 상태 모델의 등록 누락을 바로 잡을 수
+    있다 (langgraph 업그레이드 대비, DAY 12 발견 후속). 안전 기본 타입(langchain 메시지 등)은
+    별도 등록 없이 항상 허용된다.
+    """
+    return JsonPlusSerializer(
+        allowed_msgpack_modules=[
+            IncidentInfo,
+            MonitoringResult,
+            AnalysisResult,
+            ActionPlan,
+            NodeFailure,
+        ]
+    )
 
 
 def build_incident(scenario: Scenario, incident_id: str | None = None) -> IncidentInfo:
@@ -98,6 +127,14 @@ class GraphRuntime:
                 field: values.get(field) is not None
                 for field in ("monitoring", "analysis", "action")
             },
+            # 노드 실패 기록 (DAY 13) — error_handler 가 남긴 NodeFailure 를 dict 로 직렬화
+            "errors": [failure.model_dump() for failure in values.get("errors") or []],
+            # error_handler 밖에서 죽은 미완 태스크의 중단 원인 (예: 핸들러 없는 노드)
+            "pending_errors": [
+                {"node": task.name, "error": repr(task.error)}
+                for task in snapshot.tasks
+                if task.error is not None
+            ],
         }
 
     async def get_history(self, incident_id: str) -> list[dict]:
@@ -116,11 +153,25 @@ class GraphRuntime:
 
 @asynccontextmanager
 async def open_runtime(settings: Settings):
-    """앱 수명 동안 체크포인터 연결을 열고 그래프를 조립한다. setup() 은 멱등 — 매 기동 호출."""
+    """앱 수명 동안 체크포인터 연결을 열고 그래프를 조립한다. setup() 은 멱등 — 매 기동 호출.
+
+    단일 커넥션(from_conn_string)이 아닌 커넥션 풀을 쓴다 — DAY 12 실측에서 postgres
+    재기동 시 단일 커넥션이 영구히 죽어 전 API 가 500 이 됐다. check 로 대여 시점에
+    죽은 커넥션을 걸러내 재연결하므로 DB 재기동에서 자동 복구된다 (DAY 13).
+    """
     if not settings.checkpoint_db_url:
         raise ValueError(
             "CHECKPOINT_DB_URL 이 없습니다 — Durable Execution 은 PostgreSQL 전제 (ADR-0009)"
         )
-    async with AsyncPostgresSaver.from_conn_string(settings.checkpoint_db_url) as checkpointer:
+    async with AsyncConnectionPool(
+        settings.checkpoint_db_url,
+        min_size=1,
+        max_size=4,
+        # from_conn_string 이 쓰는 커넥션 설정과 동일 (autocommit 은 setup() 마이그레이션 전제)
+        kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+        check=AsyncConnectionPool.check_connection,
+        open=False,  # 열기는 async with 진입 시점 — 생성자 open 은 deprecated
+    ) as pool:
+        checkpointer = AsyncPostgresSaver(pool, serde=build_checkpoint_serializer())
         await checkpointer.setup()
         yield GraphRuntime(build_graph(checkpointer=checkpointer))
