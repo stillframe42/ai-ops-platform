@@ -45,6 +45,8 @@ flowchart TB
         am["Alertmanager<br/>알림 라우팅·webhook 발송"]
         loki["Loki<br/>로그 저장·조회"]
         alloy["Alloy<br/>로그 수송 (컨테이너 stdout 수집)"]
+        pg["PostgreSQL<br/>LangGraph 체크포인트 저장소 (ADR-0009)"]
+        lf["Langfuse v3<br/>LLM 관측·비용 추적<br/>(웹+worker · ClickHouse · MinIO · Redis)"]
     end
 
     target["target-app<br/>Spring Boot · fault-injection 제공"]
@@ -67,16 +69,46 @@ flowchart TB
     target -->|"stdout (docker logs)"| alloy
     alloy -->|"Loki push API (HTTP)"| loki
     graf -->|"LogQL (HTTP)"| loki
-    agents -.->|"LogQL 조회<br/>2단계 — 에이전트 day 결정 (ADR-0004)"| loki
+    agents -->|"LogQL 조회 (HTTP)<br/>분석 에이전트 도구 (ADR-0004 2단계 확정)"| loki
+    agents -->|"체크포인트 저장/조회 (SQL)<br/>Durable Execution (ADR-0009)"| pg
+    agents -->|"트레이스 전송 (OTel)<br/>키 미설정 시 비활성"| lf
     agents -.->|"조치 실행 (docker API)<br/>실행 주체 미결 (ADR-0005)"| target
 
     classDef person fill:#08427b,color:#fff,stroke:#052e56
     classDef container fill:#1168bd,color:#fff,stroke:#0b4884
     classDef external fill:#999,color:#fff,stroke:#6b6b6b
     class operator person
-    class cp,agents,prom,graf,am,loki,alloy container
+    class cp,agents,prom,graf,am,loki,alloy,pg,lf container
     class target,slack,llm external
 ```
+
+### agent-service 내부 (Level 3 개요)
+
+Supervisor 오케스트레이션(StateGraph)과 개별 에이전트(create_agent)의 2계층 구조 ([ADR-0008](adr/0008-hybrid-routing.md)). 실행 단위는 인시던트 (thread_id = incident id, [ADR-0009](adr/0009-postgres-checkpointer.md)).
+
+```mermaid
+flowchart LR
+    api["FastAPI<br/>trigger / resume / state / history"]
+    rt["GraphRuntime<br/>백그라운드 실행 · 상태 조회"]
+
+    subgraph graph["Supervisor StateGraph"]
+        sup["supervisor<br/>하이브리드 라우팅 (규칙 + LLM)"]
+        mon["monitor<br/>메트릭 수집·상황 요약"]
+        ana["analysis<br/>원인 가설·검증"]
+        act["action<br/>조치 계획 (실행은 승인 후)"]
+    end
+
+    ckpt["PostgreSQL 체크포인터<br/>super-step 마다 상태 저장"]
+
+    api --> rt --> graph
+    sup --> mon --> sup
+    sup --> ana --> sup
+    sup --> act --> sup
+    graph --> ckpt
+```
+
+- 에이전트 노드는 async — 노드별 타임아웃(협조적 취소)·재시도·error_handler 로 실패가 상태(`errors`)에 기록되고 부분 보고서로 종료한다 (DAY 13 복원력)
+- 개별 에이전트는 create_agent ReAct 루프 — monitor 는 Prometheus 도구, analysis 는 Loki·배포이력·기준선 도구를 사용
 
 ### 컨테이너 간 통신 프로토콜
 
@@ -91,7 +123,9 @@ flowchart TB
 | 에이전트의 관측 데이터 조회 | PromQL over HTTP — 직접 조회 | 확정 ([ADR-0002](adr/0002-observability-access-path.md)) |
 | Prometheus → Alertmanager → agent-service | 알림 룰 + alert webhook | 확정 ([ADR-0003](adr/0003-alertmanager-webhook.md)) — 수신자 구현 전까지 placeholder |
 | target-app → Alloy → Loki | 컨테이너 stdout 수집(docker discovery) + Loki push API | 확정 ([ADR-0004](adr/0004-loki-adoption.md) 추가 사항 — Promtail 은 EOL 로 제외) |
-| agent-service → Loki | LogQL 조회 | 2단계 — 에이전트 day 결정 (ADR-0004) |
+| agent-service → Loki | LogQL 조회 | 확정 — 분석 에이전트 도구 ([ADR-0004](adr/0004-loki-adoption.md) 2단계, 2026-07-18) |
+| agent-service → PostgreSQL | SQL (커넥션 풀) | 확정 — LangGraph 체크포인트 ([ADR-0009](adr/0009-postgres-checkpointer.md)) |
+| agent-service → Langfuse | OTel (HTTP) | 확정 — 자체 compose 스택 (v3, thread_id = 세션), 키 미설정 시 비활성 |
 | 조치 실행 | docker API | 미결 (ADR-0005, 실행 주체 포함) |
 | 분산 추적 (OTLP → Tempo) | OTLP | 로드맵 9월 — 도입 시 Level 2 갱신 |
 

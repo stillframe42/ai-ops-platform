@@ -26,13 +26,17 @@
 ### 실행 에이전트 — 조치 제안·실행
 
 - 책임: 분석 결과를 근거로 대응 조치를 제안하고, 승인된 조치만 실행한다.
-- 허용 조치 화이트리스트 (이 목록 밖의 조치는 제안 자체가 불가):
+- 허용 조치 화이트리스트 (이 목록 밖의 조치는 제안 자체가 불가 — 구현은 `ActionType` 카탈로그와 1:1, 2026-07-21 정합):
 
-  | 조치 | 대상 | 승인 필요 |
-  |------|------|-----------|
-  | 진단 정보 수집 (스레드 덤프, heap 요약) | target-app | 불필요 (읽기 전용) |
-  | 컨테이너 재시작 | target-app | **필수** |
-  | 스케일아웃 (replica 증가) | target-app | **필수** |
+  | 조치 (카탈로그) | 의미 | 대상 | 승인 필요 |
+  |------|------|------|-----------|
+  | NOTIFY_ONLY | 알림·보고만 (상태 변경 없음) | - | 불필요 |
+  | RESTART_APP | 컨테이너 재시작 | target-app | **필수** |
+  | SCALE_OUT | 스케일아웃 (replica 증가) | target-app | **필수** |
+  | ROLLBACK | 직전 버전으로 롤백 | target-app | **필수** |
+  | CIRCUIT_BREAK | 트래픽 차단·격리 (서킷 브레이커) | target-app | **필수** |
+
+  진단 정보 수집(스레드 덤프 등 읽기 전용)은 조치가 아니라 분석 단계의 도구로 흡수됐다.
 
 - 승인 경계 원칙: **대상 시스템의 상태를 바꾸는 모든 조치는 human-in-the-loop 승인 필수.** 읽기 전용 조치와 알림·보고서 발송은 승인 없이 수행한다.
 - 조치 실행의 권한 주체(docker API 접근을 agent-service 가 직접 갖나, control-plane 이 대행하나)는 **미결** ([ADR-0005 예약](#미결-사항--adr-후보)).
@@ -173,3 +177,5 @@
 | ADR-0005 | 조치 실행 권한 경계 — docker API 접근 주체 (agent-service 직접 vs control-plane 대행) | 2 | 미결 — 실행 에이전트 구현 전 |
 | ADR-0006 | Slack 연동 방식 — incoming webhook(알림만) vs Slack App(승인 버튼) | 2 | 미결 — 승인 UX 구현 전 |
 | [ADR-0007](adr/0007-llm-provider.md) | LLM 프로바이더/모델 선정 | 전체 | **결정됨 (2026-07-16)** — Anthropic Claude Sonnet 5 기본, 설정(`프로바이더:모델`)으로 OpenAI GPT-5.6 Terra 전환 가능 (추가 사항) |
+| [ADR-0008](adr/0008-hybrid-routing.md) | Supervisor 라우팅 방식 — LLM vs 규칙 | 전체 | **결정됨 (2026-07-19)** — 하이브리드: 명확한 전이는 규칙, 모호 구간(P1·P2 + 낮은 confidence)만 LLM |
+| [ADR-0009](adr/0009-postgres-checkpointer.md) | LangGraph 체크포인터 저장소 | 전체 | **결정됨 (2026-07-20)** — 처음부터 PostgreSQL (인메모리는 단위 테스트 전용), thread_id = incident id |
