@@ -8,6 +8,33 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+# Langfuse v3 웹/worker 공유 환경 변수 (선언 앵커 — 사용은 각 서비스의 <<).
+# 크리덴셜 기본값은 로컬 데모 전용 (실 운영 금지) — 덮어쓰기는 infra/.env
+x-langfuse-env: &langfuse-env
+  DATABASE_URL: postgresql://${POSTGRES_USER:-aiops}:${POSTGRES_PASSWORD:-aiops}@postgres:5432/langfuse
+  SALT: ${LANGFUSE_SALT:-aiops-demo-salt}
+  NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-aiops-demo-nextauth}
+  TELEMETRY_ENABLED: "false"
+  CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+  CLICKHOUSE_URL: http://clickhouse:8123
+  CLICKHOUSE_USER: clickhouse
+  CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  REDIS_HOST: langfuse-redis
+  REDIS_PORT: "6379"
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_PASSWORD:-miniosecret}
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: minio
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_PASSWORD:-miniosecret}
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+
 services:
   target-app:
     build: ../target-app
@@ -103,6 +130,7 @@ services:
       PROMETHEUS_URL: http://prometheus:9090
       LOKI_URL: http://loki:3100
       CHECKPOINT_DB_URL: postgresql://${POSTGRES_USER:-aiops}:${POSTGRES_PASSWORD:-aiops}@postgres:5432/aiops
+      LANGFUSE_HOST: http://langfuse-server:3000
     env_file:
       # LLM API 키 등 시크릿 — agent-service 의 git 미추적 .env 재사용 (environment 가 우선)
       - ../agent-service/.env
@@ -138,6 +166,110 @@ services:
       retries: 10
     logging: *default-logging
 
+  # ---------------------------------------------------------------------------
+  # Langfuse v3 — 용도: LLM 관측·인시던트당 비용 추적 (thread_id = 세션).
+  # Phase 0 의 "compose 추가 기각" 결정을 2026-07-21 번복 — 직전 프로젝트 스택
+  # 재활용이 상호 결합(서버 버전 종속)을 만들어, 프로젝트별 자체 소유로 전환.
+  # v3 필수 구성: 웹 + worker + ClickHouse(트레이스 저장) + MinIO(S3) + Redis.
+  # DB 는 기존 postgres:18 에 langfuse DB 분리 (최초 1회 생성 필요 — 아래 주석)
+  # ---------------------------------------------------------------------------
+  langfuse-server:
+    image: langfuse/langfuse:3
+    container_name: langfuse-server
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+    ports:
+      # 3000~3002 는 점유 (aireviewer Langfuse/Grafana, 본 스택 Grafana) — 3003 사용
+      - "3003:3000"
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_URL: http://localhost:3003
+      # headless 초기화 — 프로젝트/키를 기동 시 시드 (키 값은 infra/.env, git 미추적)
+      LANGFUSE_INIT_ORG_ID: aiops
+      LANGFUSE_INIT_ORG_NAME: aiops
+      LANGFUSE_INIT_PROJECT_ID: ai-ops-platform
+      LANGFUSE_INIT_PROJECT_NAME: ai-ops-platform
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+      # UI 로그인 계정 (데모 전용 기본값)
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-admin@aiops.local}
+      LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-admin}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-aiops-demo}
+    logging: *default-logging
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    container_name: langfuse-worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+    environment:
+      <<: *langfuse-env
+    logging: *default-logging
+
+  clickhouse:
+    # 용도: Langfuse v3 트레이스/관측 데이터 저장소 (OLAP)
+    image: clickhouse/clickhouse-server:24.8
+    container_name: clickhouse
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - clickhouse-logs:/var/log/clickhouse-server
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    logging: *default-logging
+
+  minio:
+    # 용도: Langfuse v3 이벤트/미디어 대형 객체 저장소 (S3 호환).
+    # 기동 시 langfuse 버킷 디렉토리를 미리 만들어 별도 버킷 생성 절차 생략
+    image: minio/minio:latest
+    container_name: minio
+    entrypoint: sh
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-miniosecret}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    logging: *default-logging
+
+  langfuse-redis:
+    # 용도: Langfuse v3 큐/캐시 (worker 이벤트 처리)
+    image: redis:7-alpine
+    container_name: langfuse-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *default-logging
+
   # === 자리만 예약 (활성화 금지) ===
   # Kafka 는 설계 문서(architecture.md/scenarios.md)에 아직 등장하지 않는다.
   # 용도 정의(ADR 또는 scenarios 반영) 없이 주석을 해제하지 말 것 — plans/202607-1w/tasks_20260714.md
@@ -147,3 +279,6 @@ services:
 
 volumes:
   postgres-data:
+  clickhouse-data:
+  clickhouse-logs:
+  minio-data:
