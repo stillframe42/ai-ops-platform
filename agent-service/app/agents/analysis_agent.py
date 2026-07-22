@@ -40,6 +40,12 @@ severity 기준:
 
 confidence 는 근거의 강도에 따라 0~1 로 정직하게 매겨라 — 근거가 정황뿐이면 낮게.
 suggested_actions 는 구체적 조치 후보를 짧게 나열한다 (실행 여부는 다음 단계 몫).
+
+환경 특성 — 조치 판단 기준 (중요): 이 플랫폼의 장애는 데모용 fault-injection 으로
+재현될 수 있다. 주입 흔적을 발견하면 원인 규명에는 그 사실을 기록하되, severity 와
+suggested_actions 는 "같은 증상이 실제 운영에서 발생했다면"을 기준으로 판단하라.
+"인위적 주입이므로 관찰만으로 충분"이라는 결론은 금지 — 주입은 실제 장애의 대역이며,
+증상을 해소할 조치 후보(재시작·스케일아웃·롤백 등)를 실제 장애와 동일하게 제안해야 한다.
 """
 
 ANALYSIS_TOOLS = [get_app_logs, get_recent_deployments, compare_with_baseline]

@@ -15,7 +15,8 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 from app.config.settings import Settings
-from app.supervisor.graph import GRAPH_RECURSION_LIMIT, build_graph
+from app.config.tracing import build_langfuse_handler
+from app.supervisor.graph import DONE, GRAPH_RECURSION_LIMIT, build_graph
 from app.supervisor.state import (
     ActionPlan,
     AnalysisResult,
@@ -54,6 +55,16 @@ def build_checkpoint_serializer() -> JsonPlusSerializer:
     )
 
 
+def is_run_complete(next_: tuple, values: dict) -> bool:
+    """완주 판정 — next 없음 + supervisor 결정 done 둘 다 필요.
+
+    next 만 보면 안 되는 이유 (DAY 14 E2E 실측): super-step 사이 과도기에 다음 태스크가
+    아직 스케줄되지 않아 next 가 순간적으로 빈 튜플이 된다 — 실행 중인데 완주로 오판된다.
+    방문 한도 강제 종료·에스컬레이션 종료도 supervisor 가 DONE 을 기록하므로 이 판정에 잡힌다.
+    """
+    return not next_ and values.get("supervisor_decision") == DONE
+
+
 def build_incident(scenario: Scenario, incident_id: str | None = None) -> IncidentInfo:
     alert_name, summary = INCIDENT_PRESETS[scenario]
     now = datetime.now(UTC)
@@ -69,17 +80,23 @@ def build_incident(scenario: Scenario, incident_id: str | None = None) -> Incide
 class GraphRuntime:
     """컴파일된 그래프 + 인시던트 단위 실행 관리. 백그라운드 태스크는 여기서 소유한다."""
 
-    def __init__(self, graph) -> None:
+    def __init__(self, graph, tracer=None) -> None:
         self.graph = graph
+        self.tracer = tracer  # Langfuse 콜백 핸들러 — None 이면 트레이싱 비활성
         self._tasks: dict[str, asyncio.Task] = {}
 
-    @staticmethod
-    def _config(incident_id: str) -> dict:
+    def _config(self, incident_id: str) -> dict:
         # scripts/run_graph.py 와 동일 관례 — recursion_limit 은 방문 카운터의 이중 방어
-        return {
+        config: dict = {
             "configurable": {"thread_id": incident_id},
             "recursion_limit": GRAPH_RECURSION_LIMIT,
         }
+        if self.tracer is not None:
+            # 세션 연결 규약: langfuse_session_id = thread_id — 인시던트 1건의
+            # 전체 LLM 호출이 Langfuse 세션 하나로 묶인다 (비용 집계 단위)
+            config["callbacks"] = [self.tracer]
+            config["metadata"] = {"langfuse_session_id": incident_id}
+        return config
 
     async def start(self, incident: IncidentInfo) -> None:
         await self.graph.ainvoke(
@@ -120,7 +137,7 @@ class GraphRuntime:
         return {
             "incident_id": incident_id,
             "next": list(snapshot.next),
-            "done": not snapshot.next,
+            "done": is_run_complete(snapshot.next, values),
             "supervisor_decision": values.get("supervisor_decision"),
             "supervisor_visits": values.get("supervisor_visits", 0),
             "completed": {
@@ -174,4 +191,5 @@ async def open_runtime(settings: Settings):
     ) as pool:
         checkpointer = AsyncPostgresSaver(pool, serde=build_checkpoint_serializer())
         await checkpointer.setup()
-        yield GraphRuntime(build_graph(checkpointer=checkpointer))
+        tracer = build_langfuse_handler(settings)  # 키 없으면 None — 트레이싱 비활성
+        yield GraphRuntime(build_graph(checkpointer=checkpointer), tracer=tracer)

@@ -184,6 +184,21 @@ def test_get_state_surfaces_pending_task_error() -> None:
     assert "핸들러 없는 노드 실패" in pending["error"]
 
 
+def test_is_run_complete_requires_done_decision() -> None:
+    """완주 판정은 "next 없음 + supervisor 결정 done" 둘 다 필요 (DAY 14 E2E 실측 버그).
+
+    실측: super-step 사이 과도기에 next 가 순간적으로 빈 튜플이 된다 — 이때 decision 은
+    아직 monitor/analysis 라서, next 만 보면 실행 중인데 done=true 로 잘못 판정된다.
+    """
+    from app.supervisor.runtime import is_run_complete
+
+    assert is_run_complete((), {"supervisor_decision": "done"}) is True
+    # 과도기 창: next 는 비었지만 결정은 아직 중간 단계 — 완주 아님
+    assert is_run_complete((), {"supervisor_decision": "monitor"}) is False
+    assert is_run_complete((), {}) is False  # 시작 직후 (결정 전)
+    assert is_run_complete(("analysis",), {"supervisor_decision": "analysis"}) is False
+
+
 def test_checkpoint_serializer_roundtrips_registered_state_models() -> None:
     """상태 모델 5종이 허용 목록에 등록돼 경고 없이 직렬화 왕복된다 (업그레이드 대비).
 

@@ -37,6 +37,12 @@ def health() -> dict:
         "status": "ok",
         "llm_model": settings.llm_model,
         "prometheus_url": settings.prometheus_url,
+        # 트레이싱 활성 여부 — 키 존재만 노출 (키 값은 절대 노출하지 않는다)
+        "langfuse_enabled": bool(
+            settings.langfuse_host
+            and settings.langfuse_public_key
+            and settings.langfuse_secret_key
+        ),
     }
 
 
