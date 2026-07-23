@@ -141,10 +141,32 @@ services:
         condition: service_healthy
     logging: *default-logging
 
+  control-plane:
+    # 용도: 관제/API/게이트웨이 — 운영 도구 MCP 서버 (Streamable HTTP, ADR-0010).
+    # 유사 인시던트 벡터 검색을 위해 postgres(pgvector) 의 controlplane DB 사용 (최초 1회 생성 — postgres 주석)
+    build: ../control-plane
+    container_name: control-plane
+    environment:
+      # 시드 인시던트 임베딩 전용 키 (OpenAI) — infra/.env (git 미추적) 에서 보간, 값 미출력
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      POSTGRES_USER: ${POSTGRES_USER:-aiops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aiops}
+    ports:
+      # 8080 은 target-app 이 점유 — control-plane 은 호스트 8081 로
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging: *default-logging
+
   postgres:
-    # 용도: LangGraph checkpoint 저장소 — Durable Execution (ADR-0009).
+    # 용도: LangGraph checkpoint 저장소 — Durable Execution (ADR-0009) + control-plane 벡터 검색.
     # 인시던트 처리 중단-재개의 전제라 앱보다 먼저 떠야 한다 (healthcheck + depends_on)
-    image: postgres:18
+    # pgvector 계열 이미지 — searchSimilarIncidents 벡터 검색용 (2026-07-23 결정, postgres:18 과 같은 major 라 볼륨 호환)
+    # DB 분리 목록 (최초 1회 생성 — 볼륨이 이미 있으면 아래 명령):
+    #   docker exec postgres createdb -U aiops langfuse
+    #   docker exec postgres createdb -U aiops controlplane
+    image: pgvector/pgvector:pg18
     container_name: postgres
     environment:
       # 기본값은 로컬 데모 전용 크리덴셜 (실 운영 금지) — DB 는 compose 네트워크 + localhost 에서만 도달 가능.
@@ -171,7 +193,7 @@ services:
   # Phase 0 의 "compose 추가 기각" 결정을 2026-07-21 번복 — 직전 프로젝트 스택
   # 재활용이 상호 결합(서버 버전 종속)을 만들어, 프로젝트별 자체 소유로 전환.
   # v3 필수 구성: 웹 + worker + ClickHouse(트레이스 저장) + MinIO(S3) + Redis.
-  # DB 는 기존 postgres:18 에 langfuse DB 분리 (최초 1회 생성 필요 — 아래 주석)
+  # DB 는 기존 postgres 에 langfuse DB 분리 (최초 1회 생성 — postgres 서비스 주석의 createdb 명령)
   # ---------------------------------------------------------------------------
   langfuse-server:
     image: langfuse/langfuse:3
