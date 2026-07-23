@@ -179,3 +179,4 @@
 | [ADR-0007](adr/0007-llm-provider.md) | LLM 프로바이더/모델 선정 | 전체 | **결정됨 (2026-07-16)** — Anthropic Claude Sonnet 5 기본, 설정(`프로바이더:모델`)으로 OpenAI GPT-5.6 Terra 전환 가능 (추가 사항) |
 | [ADR-0008](adr/0008-hybrid-routing.md) | Supervisor 라우팅 방식 — LLM vs 규칙 | 전체 | **결정됨 (2026-07-19)** — 하이브리드: 명확한 전이는 규칙, 모호 구간(P1·P2 + 낮은 confidence)만 LLM |
 | [ADR-0009](adr/0009-postgres-checkpointer.md) | LangGraph 체크포인터 저장소 | 전체 | **결정됨 (2026-07-20)** — 처음부터 PostgreSQL (인메모리는 단위 테스트 전용), thread_id = incident id |
+| [ADR-0010](adr/0010-mcp-tool-exposure.md) | 운영 도구 노출 방식 — REST 직접 호출 vs MCP 표준 | 전체 | **결정됨 (2026-07-23)** — MCP 표준 (Streamable HTTP), 비교 실측은 클라이언트 연동 후 보강 |
