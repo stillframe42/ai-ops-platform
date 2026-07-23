@@ -1,0 +1,3 @@
+# 빌드 컨텍스트 제외 — COPY 대상은 아니지만 컨텍스트 tar 전송량을 줄인다 (build/ 만 100MB+)
+build
+.gradle

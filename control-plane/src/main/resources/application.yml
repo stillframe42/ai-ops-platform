@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: control-plane
+
+  datasource:
+    # 로컬 개발 기본값 — compose postgres 는 호스트 5433 으로 노출 (5432 는 호스트 로컬 PG 점유)
+    # 컨테이너 실행 시에는 docker 프로파일이 URL 을 덮어쓴다
+    url: jdbc:postgresql://localhost:5433/controlplane
+    username: ${POSTGRES_USER:aiops}
+    password: ${POSTGRES_PASSWORD:aiops}
+
+  ai:
+    mcp:
+      server:
+        name: ops-control-plane
+        version: 0.0.1
+        # Streamable HTTP 고정 — SSE 는 Spring AI 2.0.0 부터 deprecated (3주차 plan 결정)
+        protocol: STREAMABLE
+
+    openai:
+      # 임베딩 전용 키 — .env / 환경 변수 (git 미추적, 값 미출력).
+      # 기본값 빈 문자열: 키가 없어도 기동은 되고, 검색 도구만 조용히 비활성 (Langfuse 키-게이트 관례)
+      api-key: ${OPENAI_API_KEY:}
+      embedding:
+        options:
+          # 한국어 시드 본문 임베딩 품질 사유로 선택 (Phase 0 결정, 2026-07-23)
+          model: text-embedding-3-small
+    # OpenAI 는 임베딩 전용 — 채팅 모델 자동구성 비활성 (LLM 은 agent-service 의 Anthropic)
+    model:
+      chat: none
+
+    vectorstore:
+      pgvector:
+        # vector/hstore 확장 + vector_store 테이블 + HNSW 인덱스 자동 생성 (opt-in)
+        initialize-schema: true
+        # text-embedding-3-small 의 출력 차원
+        dimensions: 1536
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
