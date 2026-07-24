@@ -131,6 +131,10 @@ services:
       LOKI_URL: http://loki:3100
       CHECKPOINT_DB_URL: postgresql://${POSTGRES_USER:-aiops}:${POSTGRES_PASSWORD:-aiops}@postgres:5432/aiops
       LANGFUSE_HOST: http://langfuse-server:3000
+      # MCP 도구 서버 (DAY 16, ADR-0010) — 컨테이너 내부 네트워크 기준, 로컬 기본값(localhost:8081)을 덮어쓴다.
+      # control-plane 에 depends_on 을 걸지 않는다 — 발견 실패 시 로컬 도구 강등(부분 진행)이 설계 경로
+      MCP_SERVER_URL: http://control-plane:8080/mcp
+      MCP_API_KEY: ${MCP_API_KEY:-}
     env_file:
       # LLM API 키 등 시크릿 — agent-service 의 git 미추적 .env 재사용 (environment 가 우선)
       - ../agent-service/.env
@@ -149,6 +153,8 @@ services:
     environment:
       # 시드 인시던트 임베딩 전용 키 (OpenAI) — infra/.env (git 미추적) 에서 보간, 값 미출력
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      # /mcp API Key 인증 (DAY 16) — agent-service 와 같은 값 공유, 빈 값이면 인증 생략
+      MCP_API_KEY: ${MCP_API_KEY:-}
       POSTGRES_USER: ${POSTGRES_USER:-aiops}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aiops}
     ports:
