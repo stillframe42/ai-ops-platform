@@ -6,6 +6,7 @@ monitor_agent 와 동일 패턴 + 구조화 출력(structured_response) 규약 �
 
 
 import asyncio
+from types import SimpleNamespace
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.agents import analysis_agent
@@ -61,6 +62,15 @@ def _state() -> dict:
     }
 
 
+def _patch_agent(monkeypatch, stub):
+    """get_analysis_agent 는 async (MCP 도구 발견 포함) — 스텁을 코루틴으로 감싼다."""
+
+    async def _get():
+        return stub
+
+    monkeypatch.setattr(analysis_agent, "get_analysis_agent", _get)
+
+
 def test_analysis_result_schema_requires_confidence():
     """confidence 는 구조화 출력 스키마에서 필수 필드여야 한다.
 
@@ -72,7 +82,7 @@ def test_analysis_result_schema_requires_confidence():
 
 def test_analysis_node_maps_structured_response(monkeypatch):
     stub = _StubAgent()
-    monkeypatch.setattr(analysis_agent, "get_analysis_agent", lambda: stub)
+    _patch_agent(monkeypatch, stub)
 
     update = asyncio.run(analysis_agent.analysis_node(_state()))
 
@@ -84,7 +94,7 @@ def test_analysis_node_maps_structured_response(monkeypatch):
 
 def test_analysis_node_task_includes_monitoring_summary(monkeypatch):
     stub = _StubAgent()
-    monkeypatch.setattr(analysis_agent, "get_analysis_agent", lambda: stub)
+    _patch_agent(monkeypatch, stub)
 
     asyncio.run(analysis_agent.analysis_node(_state()))
 
@@ -96,7 +106,7 @@ def test_analysis_node_task_includes_monitoring_summary(monkeypatch):
 
 def test_analysis_node_sets_recursion_limit(monkeypatch):
     stub = _StubAgent()
-    monkeypatch.setattr(analysis_agent, "get_analysis_agent", lambda: stub)
+    _patch_agent(monkeypatch, stub)
 
     asyncio.run(analysis_agent.analysis_node(_state()))
 
@@ -106,7 +116,7 @@ def test_analysis_node_sets_recursion_limit(monkeypatch):
 
 def test_analysis_node_keeps_messages_convention(monkeypatch):
     stub = _StubAgent()
-    monkeypatch.setattr(analysis_agent, "get_analysis_agent", lambda: stub)
+    _patch_agent(monkeypatch, stub)
 
     update = asyncio.run(analysis_agent.analysis_node(_state()))
 
@@ -114,3 +124,55 @@ def test_analysis_node_keeps_messages_convention(monkeypatch):
     assert len(update["messages"]) == 1
     assert update["messages"][0].content.startswith("[analysis]")
     assert "chaos error-rate fault" in update["messages"][0].content
+
+
+# --- MCP 도구 발견·캐시 정책 (DAY 16) ---
+
+
+def _patch_agent_factory(monkeypatch, load_behavior):
+    """get_analysis_agent 조립 의존성을 전부 스텁으로 — 실 LLM·MCP 서버 무의존."""
+    calls = {"load": 0, "tools": []}
+
+    async def fake_load(settings):
+        calls["load"] += 1
+        return load_behavior()
+
+    monkeypatch.setattr(analysis_agent, "_cached_agent", None)
+    monkeypatch.setattr(analysis_agent, "load_mcp_tools", fake_load)
+    stub_settings = SimpleNamespace(mcp_server_url="http://stub:8081/mcp")
+    monkeypatch.setattr(analysis_agent, "get_settings", lambda: stub_settings)
+    monkeypatch.setattr(analysis_agent, "create_llm", lambda settings: "stub-llm")
+
+    def fake_create_agent(**kwargs):
+        calls["tools"].append(kwargs["tools"])
+        return object()  # 호출마다 다른 인스턴스 — 캐시 여부를 is 비교로 판별
+
+    monkeypatch.setattr(analysis_agent, "create_agent", fake_create_agent)
+    return calls
+
+
+def test_agent_includes_mcp_tools_and_caches_on_success(monkeypatch):
+    calls = _patch_agent_factory(monkeypatch, lambda: ["mcp-tool"])
+
+    first = asyncio.run(analysis_agent.get_analysis_agent())
+    second = asyncio.run(analysis_agent.get_analysis_agent())
+
+    # 성공 시 캐시 — 도구 발견(tools/list)은 프로세스당 1회
+    assert first is second
+    assert calls["load"] == 1
+    assert calls["tools"][0] == analysis_agent.LOCAL_ANALYSIS_TOOLS + ["mcp-tool"]
+
+
+def test_agent_degrades_to_local_tools_and_retries_discovery(monkeypatch):
+    def _fail():
+        raise ConnectionError("MCP 서버 다운")
+
+    calls = _patch_agent_factory(monkeypatch, _fail)
+
+    first = asyncio.run(analysis_agent.get_analysis_agent())
+    second = asyncio.run(analysis_agent.get_analysis_agent())
+
+    # 실패 시 로컬 도구만으로 강등 (부분 진행 — DAY 13 관례) + 캐시하지 않아 다음 실행에서 재발견
+    assert first is not second
+    assert calls["load"] == 2
+    assert calls["tools"][0] == analysis_agent.LOCAL_ANALYSIS_TOOLS

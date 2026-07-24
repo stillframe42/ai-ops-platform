@@ -14,6 +14,7 @@ monitor → analysis 를 순서대로 실행한다 — 분석 입력(모니터�
 5. 원복: `curl -X POST http://localhost:8080/chaos/reset`
 """
 
+import asyncio
 import sys
 from datetime import UTC, datetime
 
@@ -29,7 +30,8 @@ _PRESETS = {
 }
 
 
-def main() -> None:
+async def main() -> None:
+    # async 인 이유: 노드가 async 로 전환됨 (DAY 13 협조적 취소) — 이 스크립트도 await 로 호출
     scenario = sys.argv[1] if len(sys.argv) > 1 else "memory-pressure"
     alert_name, summary = _PRESETS[scenario]
     incident = IncidentInfo(
@@ -40,12 +42,12 @@ def main() -> None:
         occurred_at=datetime.now(UTC).isoformat(),
     )
 
-    monitor_update = monitor_node({"incident": incident, "messages": []})
+    monitor_update = await monitor_node({"incident": incident, "messages": []})
     monitoring = monitor_update["monitoring"]
     print("=== 모니터링 상황 요약 ===")
     print(monitoring.situation_summary)
 
-    analysis_update = analysis_node(
+    analysis_update = await analysis_node(
         {"incident": incident, "monitoring": monitoring, "messages": []}
     )
     analysis = analysis_update["analysis"]
@@ -61,4 +63,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

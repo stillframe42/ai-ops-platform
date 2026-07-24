@@ -16,6 +16,15 @@ from app.supervisor import router
 from app.supervisor.graph import build_graph
 from app.supervisor.state import ActionPlan, AnalysisResult, IncidentInfo, MonitoringResult
 
+def _as_async_factory(agent):
+    """get_analysis_agent 는 async (MCP 도구 발견 포함, DAY 16) — 스텁을 코루틴으로 감싼다."""
+
+    async def _get():
+        return agent
+
+    return _get
+
+
 
 class _StubMonitorAgent:
     async def ainvoke(self, payload: dict) -> dict:
@@ -46,7 +55,7 @@ class _StubActionAgent:
 @pytest.fixture(autouse=True)
 def stub_agents(monkeypatch):
     monkeypatch.setattr(monitor_agent, "get_monitor_agent", lambda: _StubMonitorAgent())
-    monkeypatch.setattr(analysis_agent, "get_analysis_agent", lambda: _StubAnalysisAgent())
+    monkeypatch.setattr(analysis_agent, "get_analysis_agent", _as_async_factory(_StubAnalysisAgent()))
     monkeypatch.setattr(action_agent, "get_action_agent", lambda: _StubActionAgent())
 
     # LLM 라우터는 규칙 경로 테스트에서 호출될 일이 없다 — 호출되면 실 LLM 유출이므로 실패
@@ -121,7 +130,7 @@ def test_reanalysis_loop_is_forced_to_terminate(monkeypatch) -> None:
             return router.RouteDecision(next="analysis", reason="[스텁] 근거 보강 필요")
 
     monkeypatch.setattr(
-        analysis_agent, "get_analysis_agent", lambda: _LowConfidenceAnalysisAgent()
+        analysis_agent, "get_analysis_agent", _as_async_factory(_LowConfidenceAnalysisAgent())
     )
     monkeypatch.setattr(router, "get_route_llm", lambda: _AlwaysReanalyzeRouter())
 

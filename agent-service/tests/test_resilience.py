@@ -21,6 +21,15 @@ from app.supervisor.state import (
     NodeFailure,
 )
 
+def _as_async_factory(agent):
+    """get_analysis_agent 는 async (MCP 도구 발견 포함, DAY 16) — 스텁을 코루틴으로 감싼다."""
+
+    async def _get():
+        return agent
+
+    return _get
+
+
 
 class _StubMonitorAgent:
     async def ainvoke(self, payload: dict) -> dict:
@@ -55,7 +64,7 @@ class _StubAnalysisAgent:
 @pytest.fixture(autouse=True)
 def stub_agents(monkeypatch):
     monkeypatch.setattr(monitor_agent, "get_monitor_agent", lambda: _StubMonitorAgent())
-    monkeypatch.setattr(analysis_agent, "get_analysis_agent", lambda: _StubAnalysisAgent())
+    monkeypatch.setattr(analysis_agent, "get_analysis_agent", _as_async_factory(_StubAnalysisAgent()))
 
     def _fail():
         raise AssertionError("복원력 테스트에서 LLM 라우터가 호출됨")
@@ -133,7 +142,7 @@ def test_supervisor_ends_after_action_failure():
 def test_analysis_node_handles_missing_monitoring(monkeypatch):
     """monitor 실패로 monitoring 이 없어도 analysis 는 그 사실을 명시하고 진행한다."""
     stub = _StubAnalysisAgent()
-    monkeypatch.setattr(analysis_agent, "get_analysis_agent", lambda: stub)
+    monkeypatch.setattr(analysis_agent, "get_analysis_agent", _as_async_factory(stub))
 
     update = asyncio.run(
         analysis_agent.analysis_node(
@@ -172,7 +181,7 @@ def test_analysis_failure_ends_with_partial_report(monkeypatch):
     monkeypatch.setattr(
         analysis_agent,
         "get_analysis_agent",
-        lambda: _FailingAgent("[스텁] LLM 구조화 출력 파싱 실패"),
+        _as_async_factory(_FailingAgent("[스텁] LLM 구조화 출력 파싱 실패")),
     )
 
     graph = build_graph()

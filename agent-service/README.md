@@ -34,5 +34,17 @@ app/
 ├── config/            # pydantic-settings + LLM 팩토리 (프로바이더:모델 형식, ADR-0007)
 ├── supervisor/        # 공유 상태 스키마 + Supervisor StateGraph
 ├── agents/            # 모니터링/분석/실행 에이전트 노드
-└── tools/             # Prometheus(DAY 9)·Loki(DAY 10)·조치 실행(4주차) 도구
+└── tools/             # Prometheus(DAY 9)·Loki(DAY 10)·MCP 클라이언트(DAY 16)·조치 실행(4주차) 도구
 ```
+
+## MCP 도구 (DAY 16, ADR-0010)
+
+운영 도구(배포 이력·유사 인시던트 검색·앱 설정)는 control-plane MCP 서버에서 프로토콜로
+발견한다 (`app/tools/mcp_tools.py`) — 도구 이름·스키마가 이 저장소에 없고, 서버에 도구가
+추가되면 다음 발견 시점에 자동 반영된다. 관련 환경 변수 (`.env`, git 미추적):
+
+- `MCP_SERVER_URL` — 기본 `http://localhost:8081/mcp` (호스트 실행), compose 는 내부 주소로 덮어씀
+- `MCP_API_KEY` — `/mcp` 인증 키 (control-plane 과 동일 값, 미설정 시 헤더 생략)
+
+MCP 서버 다운 시: 도구 발견 실패는 로컬 도구만으로 강등해 부분 진행하고 다음 실행에서
+재발견, 호출 실패는 DAY 13 복원력 경로(NodeFailure 기록 → 부분 보고서)로 이어진다.

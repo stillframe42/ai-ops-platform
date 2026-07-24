@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     prometheus_url: str = "http://localhost:9091"
     loki_url: str = "http://localhost:3100"
 
+    # MCP 도구 서버 — control-plane Streamable HTTP (DAY 16, ADR-0010)
+    # 기본값은 호스트 실행 기준 (control-plane 호스트 포트 8081) — compose 는 env 로 덮어쓴다
+    mcp_server_url: str = "http://localhost:8081/mcp"
+    mcp_api_key: str | None = None
+
     # LangGraph 체크포인트 저장소 (DAY 12, ADR-0009 예정)
     checkpoint_db_url: str | None = None
 

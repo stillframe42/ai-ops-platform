@@ -17,6 +17,15 @@ from app.supervisor.graph import build_graph
 from app.supervisor.runtime import GraphRuntime, build_incident
 from app.supervisor.state import ActionPlan, AnalysisResult
 
+def _as_async_factory(agent):
+    """get_analysis_agent 는 async (MCP 도구 발견 포함, DAY 16) — 스텁을 코루틴으로 감싼다."""
+
+    async def _get():
+        return agent
+
+    return _get
+
+
 
 class _CountingMonitorAgent:
     def __init__(self) -> None:
@@ -63,7 +72,7 @@ def stubs(monkeypatch) -> SimpleNamespace:
         action=_StubActionAgent(),
     )
     monkeypatch.setattr(monitor_agent, "get_monitor_agent", lambda: ns.monitor)
-    monkeypatch.setattr(analysis_agent, "get_analysis_agent", lambda: ns.analysis)
+    monkeypatch.setattr(analysis_agent, "get_analysis_agent", _as_async_factory(ns.analysis))
     monkeypatch.setattr(action_agent, "get_action_agent", lambda: ns.action)
 
     # 규칙 경로만 지나는 테스트 — LLM 라우터가 호출되면 실 LLM 유출이므로 실패
