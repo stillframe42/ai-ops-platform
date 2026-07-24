@@ -49,6 +49,13 @@ def retry_on_transient(exc: Exception) -> bool:
     """
     if isinstance(exc, NodeTimeoutError):
         return False
+    # MCP Streamable HTTP 의 연결 실패는 anyio TaskGroup 이 ExceptionGroup 으로 감싸서
+    # 전파된다 (DAY 16 실측: ExceptionGroup(ConnectError)) — 풀어서 말단까지 판정한다.
+    # 전원 일시적일 때만 재시도 — 비일시적 오류가 섞였으면 재시도해도 결과가 같다
+    if isinstance(exc, BaseExceptionGroup):
+        return all(
+            isinstance(sub, Exception) and retry_on_transient(sub) for sub in exc.exceptions
+        )
     if isinstance(exc, httpx.HTTPStatusError):
         return exc.response.status_code >= 500  # 서버 측 오류만 — 4xx 는 요청 자체의 문제
     return isinstance(exc, (ConnectionError, httpx.RequestError))

@@ -309,3 +309,22 @@ def test_non_transient_error_fails_without_retry(monkeypatch):
 
     assert failing.calls == 1  # 재시도 없음
     assert [f.node for f in result["errors"]] == ["monitor"]
+
+
+def test_retry_classifier_unwraps_exception_group():
+    """MCP Streamable HTTP 의 연결 실패는 anyio TaskGroup 이 ExceptionGroup 으로 감싸서
+    전파된다 (DAY 16 실측: ExceptionGroup(ConnectError)) — 풀어서 판정해야 재시도가 걸린다."""
+    transient_group = ExceptionGroup("연결 실패", [ConnectionError("connection refused")])
+    assert supervisor_graph.retry_on_transient(transient_group) is True
+
+
+def test_retry_classifier_rejects_group_with_non_transient():
+    """하나라도 비일시적 오류가 섞인 그룹은 재시도하지 않는다 — 프로그래밍 오류 반복 방지."""
+    mixed = ExceptionGroup("혼합", [ConnectionError("일시적"), ValueError("프로그래밍 오류")])
+    assert supervisor_graph.retry_on_transient(mixed) is False
+
+
+def test_retry_classifier_unwraps_nested_group():
+    """중첩 그룹(TaskGroup 안의 TaskGroup)도 말단까지 풀어서 판정한다."""
+    nested = ExceptionGroup("바깥", [ExceptionGroup("안쪽", [ConnectionError("connection refused")])])
+    assert supervisor_graph.retry_on_transient(nested) is True
