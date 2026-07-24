@@ -43,3 +43,9 @@ management:
     web:
       exposure:
         include: health,info,prometheus,metrics
+
+ops:
+  mcp:
+    # /mcp API Key 인증 (DAY 16) — 빈 값이면 필터 미등록(인증 생략, 로컬 개발 편의).
+    # 키는 infra/.env 의 MCP_API_KEY 를 compose 가 주입 (git 미추적, 값 미출력)
+    api-key: ${MCP_API_KEY:}
