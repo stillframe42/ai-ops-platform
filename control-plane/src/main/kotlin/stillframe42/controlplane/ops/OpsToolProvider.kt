@@ -16,7 +16,10 @@ import tools.jackson.databind.json.JsonMapper
  * 반환은 전부 JSON 문자열 — LLM 도구 결과 관례 (agent-service 의 json.dumps 와 동일).
  */
 @Component
-class OpsToolProvider(private val vectorStore: VectorStore) {
+class OpsToolProvider(
+    private val vectorStore: VectorStore,
+    private val metrics: McpToolMetrics,
+) {
 
     private val logger = LoggerFactory.getLogger(javaClass)
     private val mapper = JsonMapper.builder().build()
@@ -29,7 +32,9 @@ class OpsToolProvider(private val vectorStore: VectorStore) {
     fun getDeploymentHistory(
         // 닫힌 도메인은 "예:" 대신 지원 목록 명시 — LLM 의 인자 변형("타겟앱" 등) 방지
         @McpToolParam(description = "조회 대상 앱 이름 (현재 지원: target-app)", required = true) app: String,
-    ): String = mapper.writeValueAsString(DEPLOYMENTS[app] ?: emptyList<Any>())
+    ): String = metrics.record("getDeploymentHistory") {
+        mapper.writeValueAsString(DEPLOYMENTS[app] ?: emptyList<Any>())
+    }
 
     @McpTool(
         name = "searchSimilarIncidents",
@@ -41,7 +46,7 @@ class OpsToolProvider(private val vectorStore: VectorStore) {
             description = "현재 관찰 중인 증상을 서술한 자연어 문장 (예: \"주문 API 의 p95 지연이 4초까지 급등했다\") — 문장이 구체적일수록 유사도 검색 품질이 좋아진다",
             required = true,
         ) symptom: String,
-    ): String {
+    ): String = metrics.record("searchSimilarIncidents") {
         // 검색 실패(임베딩 키 미설정·DB 다운 등)는 예외 전파 대신 error 필드로 —
         // 에이전트가 이 도구 없이 부분 진행할 수 있게 한다 (DAY 13 복원력 관례)
         val results = try {
@@ -50,12 +55,12 @@ class OpsToolProvider(private val vectorStore: VectorStore) {
             )
         } catch (e: Exception) {
             logger.warn("유사 인시던트 검색 실패 — {}", e.message)
-            return mapper.writeValueAsString(mapOf("error" to "유사 인시던트 검색 불가: ${e.message}"))
+            return@record mapper.writeValueAsString(mapOf("error" to "유사 인시던트 검색 불가: ${e.message}"))
         }
         val payload = results.orEmpty().map { doc ->
             doc.metadata + mapOf("summary" to doc.text, "score" to doc.score)
         }
-        return mapper.writeValueAsString(payload)
+        mapper.writeValueAsString(payload)
     }
 
     @McpTool(
@@ -65,10 +70,10 @@ class OpsToolProvider(private val vectorStore: VectorStore) {
     )
     fun getAppConfig(
         @McpToolParam(description = "조회 대상 앱 이름 (현재 지원: target-app)", required = true) app: String,
-    ): String {
+    ): String = metrics.record("getAppConfig") {
         val config = APP_CONFIGS[app]
-            ?: return mapper.writeValueAsString(mapOf("error" to "알 수 없는 앱: $app (사용 가능: ${APP_CONFIGS.keys})"))
-        return mapper.writeValueAsString(config)
+            ?: return@record mapper.writeValueAsString(mapOf("error" to "알 수 없는 앱: $app (사용 가능: ${APP_CONFIGS.keys})"))
+        mapper.writeValueAsString(config)
     }
 
     companion object {

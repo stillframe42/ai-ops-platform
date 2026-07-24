@@ -26,9 +26,28 @@ class OpsToolProviderTest {
     }
 
     private val mapper = JsonMapper.builder().build()
+    private val registry = io.micrometer.core.instrument.simple.SimpleMeterRegistry()
 
     private fun provider(results: List<Document> = emptyList()) =
-        OpsToolProvider(StubVectorStore(results))
+        OpsToolProvider(StubVectorStore(results), McpToolMetrics(registry))
+
+    // --- 계측 배선 (DAY 17) — 명시적 계측이라 도구마다 record 호출 누락이 가능, 여기서 강제한다 ---
+
+    @Test
+    fun `도구 3종 모두 호출 시 mcp tool calls 타이머가 기록된다`() {
+        val p = provider()
+        p.getDeploymentHistory("target-app")
+        p.searchSimilarIncidents("p95 지연 급등")
+        p.getAppConfig("unknown-app") // error 필드 응답 — degraded 로 기록되는 경로
+
+        for (tool in listOf("getDeploymentHistory", "searchSimilarIncidents", "getAppConfig")) {
+            assertTrue(
+                registry.find("mcp.tool.calls").tag("tool", tool).timers().isNotEmpty(),
+                "$tool 계측 누락 — McpToolMetrics.record 로 감싸야 한다",
+            )
+        }
+        assertTrue(registry.find("mcp.tool.calls").tag("outcome", "degraded").timers().isNotEmpty())
+    }
 
     // --- getDeploymentHistory ---
 
@@ -61,7 +80,7 @@ class OpsToolProviderTest {
             mapOf("incident_id" to "inc-001", "severity" to "P2", "root_cause" to "오류 주입"),
         )
         val store = StubVectorStore(listOf(doc))
-        val toolProvider = OpsToolProvider(store)
+        val toolProvider = OpsToolProvider(store, McpToolMetrics(registry))
 
         val json = mapper.readTree(toolProvider.searchSimilarIncidents("5xx 오류율이 급증하고 있다"))
 
@@ -83,7 +102,7 @@ class OpsToolProviderTest {
                 throw IllegalStateException("임베딩 API 인증 실패")
         }
 
-        val json = mapper.readTree(OpsToolProvider(failing).searchSimilarIncidents("5xx 급증"))
+        val json = mapper.readTree(OpsToolProvider(failing, McpToolMetrics(registry)).searchSimilarIncidents("5xx 급증"))
 
         assertNotNull(json["error"], "실패는 예외 전파 대신 error 필드로 — 에이전트가 부분 진행할 수 있게 (DAY 13 관례)")
     }
