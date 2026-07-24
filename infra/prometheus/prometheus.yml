@@ -17,3 +17,9 @@ scrape_configs:
     scrape_interval: 5s
     static_configs:
       - targets: ["target-app:8080"]
+
+  # MCP 도구 호출 계측 (DAY 17) — mcp_tool_calls_* (tool/outcome 태그)
+  - job_name: control-plane
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["control-plane:8080"]
