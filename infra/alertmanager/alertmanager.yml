@@ -1,11 +1,14 @@
 route:
-  receiver: agent-service-placeholder
+  receiver: control-plane-webhook
   group_by: [alertname]
   group_wait: 10s
   group_interval: 1m
   repeat_interval: 30m
 
 receivers:
-  # 통합(webhook) 없는 placeholder — 발화 확인은 Alertmanager UI 로 한다.
-  # agent-service 모니터링 에이전트 구현 후 webhook_configs 로 교체 (ADR-0003)
-  - name: agent-service-placeholder
+  # Alert → control-plane webhook → 정규화·멱등 처리 → Kafka ops.incidents 발행 (DAY 17, ADR-0003 완결).
+  # send_resolved: 해소 통지로 fingerprint 활성 해제 — 재발화가 새 인시던트로 분리되는 근거
+  - name: control-plane-webhook
+    webhook_configs:
+      - url: http://control-plane:8080/webhook/alertmanager
+        send_resolved: true

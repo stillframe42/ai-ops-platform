@@ -1,0 +1,72 @@
+# Kafka 조각 — 루트 docker-compose.yml 의 include 로 병합된다 (단독 실행 금지).
+# 용도: 이상 이벤트 유입 계층 (DAY 17) — Alertmanager webhook → control-plane 정규화 →
+# ops.incidents 발행 → agent-service 컨슈머 트리거. 결정 기록은 ADR-0011 (DAY 19 기록 예정)
+
+# YAML 앵커는 파일 경계를 넘지 못한다 — 루트의 x-logging 과 동일 내용 복제 (변경 시 4파일 동기)
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  kafka:
+    # KRaft 단일 브로커 학습 구성 (복제 없음 — 고가용성은 로드맵 8월 k8s 주간).
+    # 듀얼 리스너: 컨테이너 내부는 kafka:9092, 호스트(로컬 개발·console-consumer)는 localhost:9094
+    image: apache/kafka:4.3.1
+    container_name: kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # 단일 브로커 — 내부 토픽 복제 계수를 1 로 내려야 기동 가능
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      # 토픽은 kafka-init 가 명세대로 명시 생성 — 오타 토픽 증식 방지 (tasks_20260725 토픽 설계)
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    ports:
+      # 내부 9092 는 미노출 — 호스트 접근은 EXTERNAL 리스너(9094)로만
+      - "9094:9094"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+    logging: *default-logging
+
+  kafka-init:
+    # 용도: 토픽 4종 1회성 생성 (파티션·보존 명세는 tasks_20260725 토픽 설계 표 기준).
+    # ops.analysis.results 는 DAY 19, ops.actions.pending 은 4주차 발행 — 토픽만 선생성
+    image: apache/kafka:4.3.1
+    container_name: kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        create() {
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists \
+            --topic "$$1" --partitions "$$2" --replication-factor 1 \
+            --config retention.ms=604800000
+        }
+        create ops.alerts.raw 1
+        create ops.incidents 3
+        create ops.analysis.results 3
+        create ops.actions.pending 1
+        echo "토픽 생성 완료:" && /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+    restart: "no"
+    logging: *default-logging
+
+volumes:
+  kafka-data:
