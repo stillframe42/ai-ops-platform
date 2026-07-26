@@ -29,6 +29,9 @@ dependencies {
 	implementation("org.springframework.ai:spring-ai-starter-model-openai")
 	implementation("org.springframework.ai:spring-ai-starter-vector-store-pgvector")
 	implementation("tools.jackson.module:jackson-module-kotlin")
+	// Alertmanager webhook → 이상 이벤트 발행 (DAY 17) — 버전은 Boot BOM 관리 (spring-kafka 4.1.0, kafka-clients 4.2.1).
+	// Boot 4 는 자동구성이 기술별 모듈로 분리 — 순수 spring-kafka 만으론 KafkaTemplate 빈이 없다 (기동 실측), starter 필수
+	implementation("org.springframework.boot:spring-boot-starter-kafka")
 	runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 	testImplementation("org.springframework.boot:spring-boot-starter-actuator-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")

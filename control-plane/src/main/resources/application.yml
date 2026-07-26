@@ -9,6 +9,15 @@ spring:
     username: ${POSTGRES_USER:aiops}
     password: ${POSTGRES_PASSWORD:aiops}
 
+  kafka:
+    # 로컬 개발 기본값 — compose kafka 의 호스트 리스너(EXTERNAL). 컨테이너 실행 시 env 가 kafka:9092 로 덮어쓴다
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9094}
+    producer:
+      properties:
+        # Kafka 다운 시 send() 가 메타데이터 대기로 백그라운드 스레드를 점유하는 상한 —
+        # 기본 60s 는 Alert 폭풍 때 @Async 풀 고갈 위험 (발행 실패는 로그 경로가 설계)
+        max.block.ms: 5000
+
   ai:
     mcp:
       server:
