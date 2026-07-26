@@ -59,6 +59,9 @@ services:
       # control-plane 에 depends_on 을 걸지 않는다 — 발견 실패 시 로컬 도구 강등(부분 진행)이 설계 경로
       MCP_SERVER_URL: http://control-plane:8080/mcp
       MCP_API_KEY: ${MCP_API_KEY:-}
+      # Kafka 인시던트 컨슈머 (DAY 18, ADR-0011) — 컨테이너 내부 리스너, 로컬 기본값(localhost:9094)을 덮어쓴다.
+      # kafka 에 depends_on 을 걸지 않는다 — 접속 실패는 컨슈머의 백오프 재시도가 흡수 (앱 기동 유지)
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     env_file:
       # LLM API 키 등 시크릿 — agent-service 의 git 미추적 .env 재사용 (environment 가 우선)
       - ../agent-service/.env
