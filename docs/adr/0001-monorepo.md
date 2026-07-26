@@ -31,3 +31,14 @@
 - 쉬워지는 것: 시나리오 단위 원자적 커밋, `infra/` 단일 진입점 기동, 서비스 간 API 계약 변경의 단일 PR 처리.
 - 어려워지는 것: CI 가 다국어 빌드를 커버해야 함 (디렉토리별 트리거 분리 필요), 저장소가 커질수록 clone/검색 비용 증가 — 이 규모에서는 무시 가능.
 - 되돌리기: 각 디렉토리가 독립 빌드 단위라 `git filter-repo` 등으로 서비스별 저장소 분리 가능. 통합 빌드 시스템을 도입하지 않은 것이 분리 비용을 낮게 유지한다.
+
+## 추가 사항 (2026-07-26): compose 파일의 기능별 분리 — 진입점은 단일 유지
+
+서비스가 17개(Kafka 도입 시점)로 늘며 단일 docker-compose.yml 의 탐색 부담이 커져, Compose `include` 로 파일을 기능별 분리했다. "통합 지점은 docker-compose 하나"는 **진입점 기준으로 유지**된다 — 실행은 여전히 `infra/` 에서 `docker compose up` 하나이고, 루트 파일이 조각을 병합한다.
+
+- 구성: 루트 `docker-compose.yml` (핵심 앱 + postgres + include 선언) / `compose.monitoring.yml` / `compose.langfuse.yml` / `compose.kafka.yml`
+- 조각 배치는 `infra/` 루트 — include 의 상대 경로는 각 조각 파일 위치 기준이라, 하위 디렉토리로 옮기면 볼륨 마운트 경로를 전부 재작성해야 한다
+- 제약: YAML 앵커는 파일 경계를 못 넘는다 — 공용 `x-logging` 은 4개 파일에 동일 내용 복제 (변경 시 동기 필요, 각 파일 주석으로 표기)
+- 파일 간 `depends_on`(langfuse → postgres)은 include 병합 후 판정이라 문제없음
+- 검증: 분리 전후 `docker compose config` diff — 서비스·볼륨·네트워크 동일 (유일한 차이는 실행에 관여하지 않는 최상위 x-확장 필드 표시 여부), 기동 시 전 컨테이너 재생성 없음
+- 기각 대안: `-f` 다중 지정 오버레이 — 실행 명령에 플래그가 필요해 단일 진입점 원칙과 충돌
