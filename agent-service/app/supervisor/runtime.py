@@ -154,6 +154,43 @@ class GraphRuntime:
             ],
         }
 
+    async def get_result(self, incident_id: str) -> dict | None:
+        """ops.analysis.results 발행 페이로드 (DAY 18) — 보고서 = monitoring/analysis/action 합성.
+
+        status 는 completed/partial 2분류: 완주했고 실패 기록이 없어야 completed.
+        부분 보고서(DAY 13)도 발행 대상이라 — 실패 종료를 침묵시키지 않는다.
+        """
+        snapshot = await self.graph.aget_state(self._config(incident_id))
+        if not snapshot.values:
+            return None  # 체크포인트 없음 — 모르는 인시던트
+        values = snapshot.values
+        errors = [failure.model_dump() for failure in values.get("errors") or []]
+        pending_errors = [
+            {"node": task.name, "error": repr(task.error)}
+            for task in snapshot.tasks
+            if task.error is not None
+        ]
+        done = is_run_complete(snapshot.next, values)
+
+        def dump(field: str) -> dict | None:
+            model = values.get(field)
+            return model.model_dump() if model is not None else None
+
+        incident: IncidentInfo = values["incident"]
+        return {
+            "incident_id": incident_id,
+            "scenario": incident.scenario,
+            "alert_name": incident.alert_name,
+            "status": "completed" if done and not errors and not pending_errors else "partial",
+            "monitoring": dump("monitoring"),
+            "analysis": dump("analysis"),
+            "action": dump("action"),
+            "errors": errors,
+            "pending_errors": pending_errors,
+            "supervisor_visits": values.get("supervisor_visits", 0),
+            "completed_at": datetime.now(UTC).isoformat(),
+        }
+
     async def get_history(self, incident_id: str) -> list[dict]:
         """체크포인트 히스토리 — 최신이 먼저 온다 (aget_state_history 순서 그대로)."""
         history = []

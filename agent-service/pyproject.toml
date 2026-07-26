@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 requires-python = ">=3.13"
 dependencies = [
+    "aiokafka>=0.14.0",
     "fastapi>=0.139",
     "httpx>=0.28.1",
     "langchain>=1.0",

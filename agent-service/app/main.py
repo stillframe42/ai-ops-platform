@@ -4,22 +4,40 @@
 "실행 중 강제 종료 → 재개" 데모도 실행 중 상태를 전제한다. 진행은 상태/히스토리 API 로 관찰한다.
 """
 
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 from app.config import get_settings
+from app.events.incident_consumer import run_incident_consumer
 from app.supervisor.runtime import build_incident, open_runtime
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 체크포인터 수명 = 앱 수명 — 연결을 열고 setup(멱등) 후 그래프를 조립한다
-    async with open_runtime(get_settings()) as runtime:
+    settings = get_settings()
+    async with open_runtime(settings) as runtime:
         app.state.runtime = runtime
-        yield
+        # Kafka 인시던트 컨슈머 (DAY 18, ADR-0011) — 빈 bootstrap 이면 비활성 (수동 트리거만).
+        # 접속 실패는 컨슈머 안에서 백오프 재시도 — 앱 기동을 막지 않는다
+        consumer_task = (
+            asyncio.create_task(
+                run_incident_consumer(settings, runtime), name="kafka-incident-consumer"
+            )
+            if settings.kafka_bootstrap_servers
+            else None
+        )
+        try:
+            yield
+        finally:
+            if consumer_task is not None:
+                consumer_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await consumer_task
 
 
 app = FastAPI(title="ai-ops-platform agent-service", lifespan=lifespan)
@@ -43,6 +61,8 @@ def health() -> dict:
             and settings.langfuse_public_key
             and settings.langfuse_secret_key
         ),
+        # Kafka 컨슈머 활성 여부 (DAY 18) — 설정됨 ≠ 접속 성공 (langfuse_enabled 와 같은 한계)
+        "kafka_enabled": bool(settings.kafka_bootstrap_servers),
     }
 
 

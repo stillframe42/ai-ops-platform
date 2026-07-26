@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     mcp_server_url: str = "http://localhost:8081/mcp"
     mcp_api_key: str | None = None
 
+    # Kafka 인시던트 컨슈머 (DAY 18, ADR-0011) — 기본값은 호스트 실행 기준 (compose 는 kafka:9092 로 덮어쓴다).
+    # 빈 문자열이면 컨슈머 비활성 (키-게이트 관례) — 수동 트리거만으로 동작
+    kafka_bootstrap_servers: str = "localhost:9094"
+
     # LangGraph 체크포인트 저장소 (DAY 12, ADR-0009 예정)
     checkpoint_db_url: str | None = None
 

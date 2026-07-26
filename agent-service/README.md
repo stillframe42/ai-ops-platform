@@ -34,8 +34,20 @@ app/
 ├── config/            # pydantic-settings + LLM 팩토리 (프로바이더:모델 형식, ADR-0007)
 ├── supervisor/        # 공유 상태 스키마 + Supervisor StateGraph
 ├── agents/            # 모니터링/분석/실행 에이전트 노드
+├── events/            # Kafka 인시던트 컨슈머 (DAY 18, ADR-0011)
 └── tools/             # Prometheus(DAY 9)·Loki(DAY 10)·MCP 클라이언트(DAY 16)·조치 실행(4주차) 도구
 ```
+
+## Kafka 인시던트 컨슈머 (DAY 18, ADR-0011)
+
+`ops.incidents` 를 소비해 그래프를 자동 트리거하고, 종료 시 `ops.analysis.results` 로
+결과를 발행한다 (실패 종료도 errors 포함 부분 보고서 — DAY 13 정합). 수동 커밋
+at-least-once: 재전달 중복은 done 검사(재실행 생략 + 결과 재발행)와 미완 체크포인트
+resume(Durable Execution)이 흡수한다. 수동 트리거 `POST /incidents/trigger` 는 디버그용으로 그대로 둔다.
+
+- `KAFKA_BOOTSTRAP_SERVERS` — 기본 `localhost:9094` (호스트 실행), compose 는 `kafka:9092` 로
+  덮어씀. **빈 값이면 컨슈머 비활성** (수동 트리거만으로 동작). 브로커 다운 시 앱은 뜨고
+  컨슈머만 백오프 재시도
 
 ## MCP 도구 (DAY 16, ADR-0010)
 

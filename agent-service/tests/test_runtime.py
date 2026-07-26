@@ -262,3 +262,38 @@ def test_history_lists_checkpoints_newest_first() -> None:
     assert history[0]["next"] == []  # 최신(종료) 체크포인트가 먼저
     assert all({"step", "next", "created_at"} <= item.keys() for item in history)
     assert asyncio.run(runtime.get_history("inc-unknown")) == []
+
+
+def test_get_result_builds_publishable_payload_for_completed_run() -> None:
+    """ops.analysis.results 발행 페이로드 — 보고서 = monitoring/analysis/action 합성 (DAY 18)."""
+    runtime = _runtime()
+
+    async def run() -> dict:
+        await runtime.start(build_incident("error-rate-surge", incident_id="inc-result-001"))
+        return await runtime.get_result("inc-result-001")
+
+    result = asyncio.run(run())
+    assert result["incident_id"] == "inc-result-001"
+    assert result["scenario"] == "error-rate-surge"
+    assert result["status"] == "completed"
+    assert result["analysis"]["confidence"] == 0.9
+    assert result["action"]["actions"] == ["NOTIFY_ONLY"]
+    assert result["errors"] == []
+    assert result["completed_at"]  # 발행 시각 — 소비 측 정렬 근거
+
+
+def test_get_result_marks_partial_when_errors_recorded(stubs: SimpleNamespace) -> None:
+    stubs.analysis.crash_remaining = 1  # 1회 실패 → error_handler 기록 → 에스컬레이션 종료
+    runtime = _runtime()
+
+    async def run() -> dict:
+        await runtime.start(build_incident("error-rate-surge", incident_id="inc-result-002"))
+        return await runtime.get_result("inc-result-002")
+
+    result = asyncio.run(run())
+    assert result["status"] == "partial"
+    assert result["errors"], "부분 보고서에는 실패 기록이 실려야 한다"
+
+
+def test_get_result_returns_none_for_unknown_incident() -> None:
+    assert asyncio.run(_runtime().get_result("inc-unknown")) is None
