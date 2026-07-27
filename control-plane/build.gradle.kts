@@ -1,6 +1,7 @@
 plugins {
 	kotlin("jvm") version "2.3.21"
 	kotlin("plugin.spring") version "2.3.21"
+	kotlin("plugin.jpa") version "2.3.21"
 	id("org.springframework.boot") version "4.1.0"
 	id("io.spring.dependency-management") version "1.1.7"
 }
@@ -24,15 +25,21 @@ extra["springAiVersion"] = "2.0.0"
 dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
-	implementation("org.jetbrains.kotlin:kotlin-reflect")
+
 	implementation("org.springframework.ai:spring-ai-starter-mcp-server-webmvc")
 	implementation("org.springframework.ai:spring-ai-starter-model-openai")
 	implementation("org.springframework.ai:spring-ai-starter-vector-store-pgvector")
-	implementation("tools.jackson.module:jackson-module-kotlin")
-	// Alertmanager webhook → 이상 이벤트 발행 (DAY 17) — 버전은 Boot BOM 관리 (spring-kafka 4.1.0, kafka-clients 4.2.1).
-	// Boot 4 는 자동구성이 기술별 모듈로 분리 — 순수 spring-kafka 만으론 KafkaTemplate 빈이 없다 (기동 실측), starter 필수
+
 	implementation("org.springframework.boot:spring-boot-starter-kafka")
+	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+	implementation("org.springframework.boot:spring-boot-starter-flyway")
+
+	implementation("org.jetbrains.kotlin:kotlin-reflect")
+	implementation("tools.jackson.module:jackson-module-kotlin")
+
+	runtimeOnly("org.flywaydb:flyway-database-postgresql")
 	runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+
 	testImplementation("org.springframework.boot:spring-boot-starter-actuator-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")

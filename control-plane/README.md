@@ -2,7 +2,7 @@
 
 관제/API/게이트웨이 — Spring Boot 4.x + Kotlin. 에이전트 오케스트레이션 진입점과 human-in-the-loop 승인 API 를 담당한다.
 
-## 현재 제공 기능 (DAY 15~16)
+## 현재 제공 기능 (DAY 15~19)
 
 - **MCP 도구 서버** (Spring AI 2.0, Streamable HTTP) — 운영 도구 3종을 표준 프로토콜로 노출
   - `getDeploymentHistory(app)` — 최근 배포 이력 (시드)
@@ -18,6 +18,14 @@
   원본은 `ops.alerts.raw` 보존, firing 은 정규화(alertname→scenario, incident_id 부여) 후
   `ops.incidents` 발행. fingerprint 멱등성: 반복 발화는 병합(재발행 없음), resolved 는 활성 해제.
   Kafka 접속은 env `KAFKA_BOOTSTRAP_SERVERS` (로컬 기본 `localhost:9094`), 다운 시에도 202 유지
+- **분석 결과 컨슈머 → DB 저장** (DAY 19) — `ops.analysis.results` 소비(groupId `control-plane`)
+  → `incident_reports` 테이블 저장 (요약 컬럼 추출 + 보고서 원문 jsonb 보존). incident_id upsert
+  멱등이라 at-least-once 재발행은 갱신만 된다. 스키마는 Flyway (`db/migration/`) 소유
+- **인시던트 조회 API** (DAY 19) — `GET /api/incidents` (최신순 요약, `?limit=`),
+  `GET /api/incidents/{id}` (요약 + 보고서 원문)
+- **Slack 알림** (DAY 19) — 신규 보고서 저장 시 Incoming Webhook 발송 (P-등급·원인 가설·
+  confidence·근거 3줄·제안 조치·상세 링크). env `SLACK_WEBHOOK_URL` 미설정이면 조용한 비활성
+  (기동·발송 시점 로그로 진단 가능). 재수신(갱신)은 알림을 내지 않는다
 
 ## 실행
 

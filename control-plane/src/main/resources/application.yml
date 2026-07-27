@@ -17,6 +17,26 @@ spring:
         # Kafka 다운 시 send() 가 메타데이터 대기로 백그라운드 스레드를 점유하는 상한 —
         # 기본 60s 는 Alert 폭풍 때 @Async 풀 고갈 위험 (발행 실패는 로그 경로가 설계)
         max.block.ms: 5000
+    consumer:
+      # 커밋 부재 시에만 발동하는 시작 위치 대비책 — 그룹 생성 전 발행분(control-plane 다운 중
+      # 결과 발행)을 건너뛰지 않는다 (agent-service 컨슈머와 같은 근거, 노트 20260725 파생)
+      auto-offset-reset: earliest
+
+  jpa:
+    hibernate:
+      # 스키마 소유는 Flyway (db/migration) — 엔티티는 생성하지 않고 검증만.
+      # 엔티티-DDL 불일치를 기동 시점에 잡는 안전망 (JPA 전환 시 유지하기로 한 경계)
+      ddl-auto: validate
+    # 요청 수명 동안 세션을 열어 두는 OSIV 비활성 — 조회는 리포지토리 안에서 완결된다
+    open-in-view: false
+
+  flyway:
+    # controlplane DB 는 비어 있지 않다 — pgvector initialize-schema 가 만든 vector_store 가
+    # 이미 존재. 기존 상태를 baseline 으로 두고 V1 부터 적용 (Flyway 기본은 비어 있지 않으면 실패)
+    baseline-on-migrate: true
+    # 기본 baseline 버전은 1 — 그대로면 V1 이 "이미 적용됨"으로 건너뛰어져 테이블이 안 만들어진다
+    # (2026-07-27 기동 실측). 0 으로 내려 V1 부터 실적용
+    baseline-version: 0
 
   ai:
     mcp:
@@ -58,3 +78,10 @@ ops:
     # /mcp API Key 인증 (DAY 16) — 빈 값이면 필터 미등록(인증 생략, 로컬 개발 편의).
     # 키는 infra/.env 의 MCP_API_KEY 를 compose 가 주입 (git 미추적, 값 미출력)
     api-key: ${MCP_API_KEY:}
+  slack:
+    # Incoming Webhook URL (DAY 19) — 빈 값이면 알림 비활성 (Langfuse 키-게이트 관례).
+    # URL 자체가 시크릿 — infra/.env 의 SLACK_WEBHOOK_URL 을 compose 가 주입 (git 미추적, 값 미출력)
+    webhook-url: ${SLACK_WEBHOOK_URL:}
+  report:
+    # Slack 메시지의 상세 링크 기준 주소 — 사람이 브라우저로 여는 링크라 호스트 노출 포트(8081) 기준
+    base-url: ${REPORT_BASE_URL:http://localhost:8081}
