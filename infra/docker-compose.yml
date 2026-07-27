@@ -82,9 +82,11 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # /mcp API Key 인증 (DAY 16) — agent-service 와 같은 값 공유, 빈 값이면 인증 생략
       MCP_API_KEY: ${MCP_API_KEY:-}
-      # Kafka 프로듀서 (DAY 17) — 컨테이너 내부 리스너. 로컬 개발 기본값(localhost:9094)을 덮어쓴다.
+      # Kafka 프로듀서 (DAY 17) + 결과 컨슈머 (DAY 19) — 컨테이너 내부 리스너. 로컬 개발 기본값(localhost:9094)을 덮어쓴다.
       # kafka 에 depends_on 을 걸지 않는다 — Kafka 다운 시에도 webhook 202 수신은 유지(발행 실패는 로그)가 설계 경로
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # Slack Incoming Webhook (DAY 19) — infra/.env (git 미추적) 에서 보간, 값 미출력. 빈 값이면 알림 비활성
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
       POSTGRES_USER: ${POSTGRES_USER:-aiops}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aiops}
     ports:
