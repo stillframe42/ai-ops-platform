@@ -1,12 +1,12 @@
 package stillframe42.controlplane.incident.service
 
 import org.slf4j.LoggerFactory
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import stillframe42.controlplane.incident.model.IncidentReport
 import stillframe42.controlplane.incident.model.IncidentReportDetail
 import stillframe42.controlplane.incident.model.IncidentReportSummary
-import stillframe42.controlplane.incident.notify.Notifier
 import stillframe42.controlplane.incident.repository.IncidentReportRepository
 
 /**
@@ -23,15 +23,15 @@ import stillframe42.controlplane.incident.repository.IncidentReportRepository
 @Service
 class IncidentReportService(
     private val repository: IncidentReportRepository,
-    private val notifier: Notifier,
+    private val events: ApplicationEventPublisher,
 ) {
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
     /**
-     * 알림(notifier)은 예외를 던지지 않는 계약(Notifier KDoc)이라 트랜잭션을 되돌리는 일이
-     * 없다 — 롤백은 저장 예외만 유발한다. Slack HTTP 가 트랜잭션 안에 드는 비용은
-     * 커밋 후 발송(이벤트 분리)으로 없앨 수 있으나 현 트래픽에선 과함 — 4주차 재검토.
+     * 알림은 직접 호출하지 않고 이벤트로 분리한다 — 발송은 커밋 확정 후
+     * (IncidentReportStoredListener, AFTER_COMMIT). Slack HTTP 왕복이 트랜잭션과
+     * DB 커넥션을 붙들지 않게 하는 경계다.
      */
     @Transactional
     fun ingest(payload: String) {
@@ -43,7 +43,7 @@ class IncidentReportService(
         val isNew = repository.upsert(report)
         if (isNew) {
             logger.info("인시던트 보고서 저장 — {} (status={})", report.incidentId, report.status)
-            notifier.notify(report)
+            events.publishEvent(IncidentReportStored(report))
         } else {
             logger.info("결과 재수신 — {} 갱신만 수행 (알림 생략)", report.incidentId)
         }

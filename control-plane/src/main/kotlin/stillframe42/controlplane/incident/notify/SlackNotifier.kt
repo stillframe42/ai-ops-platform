@@ -1,8 +1,11 @@
 package stillframe42.controlplane.incident.notify
 
+import java.net.http.HttpClient
+import java.time.Duration
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.MediaType
+import org.springframework.http.client.JdkClientHttpRequestFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import stillframe42.controlplane.incident.model.IncidentReport
@@ -20,7 +23,15 @@ class SlackNotifier(
 ) : Notifier {
 
     private val logger = LoggerFactory.getLogger(javaClass)
-    private val restClient = RestClient.create()
+
+    private val restClient = RestClient.builder()
+        .requestFactory(
+            JdkClientHttpRequestFactory(
+                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build(),
+            ).apply { setReadTimeout(Duration.ofSeconds(5)) },
+        )
+        .build()
+
     private val mapper = JsonMapper.builder().build()
 
     init {

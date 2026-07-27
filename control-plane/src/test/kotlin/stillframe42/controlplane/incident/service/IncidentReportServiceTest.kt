@@ -2,15 +2,15 @@ package stillframe42.controlplane.incident.service
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import org.springframework.context.ApplicationEventPublisher
 import stillframe42.controlplane.incident.model.IncidentReport
 import stillframe42.controlplane.incident.model.IncidentReportDetail
 import stillframe42.controlplane.incident.model.IncidentReportSummary
-import stillframe42.controlplane.incident.notify.Notifier
 import stillframe42.controlplane.incident.repository.IncidentReportRepository
 
 /**
- * 단위 테스트 경계 — Kafka·DB 무의존, fake 주입. "언제 저장하고 언제 알리는가"(멱등·알림 규약)만
- * 검증한다. 실제 브로커·DB 왕복은 E2E(확인 기준)에서.
+ * 단위 테스트 경계 — Kafka·DB 무의존, fake 주입. "언제 저장하고 언제 알림 이벤트를 내는가"
+ * (멱등·알림 규약)만 검증한다. AFTER_COMMIT 시점 실행은 스프링 컨텍스트 몫 — E2E 에서 확인.
  */
 class IncidentReportServiceTest {
 
@@ -24,10 +24,10 @@ class IncidentReportServiceTest {
         override fun findById(incidentId: String): IncidentReportDetail? = null
     }
 
-    private class RecordingNotifier : Notifier {
-        val notified = mutableListOf<IncidentReport>()
-        override fun notify(report: IncidentReport) {
-            notified += report
+    private class RecordingEvents : ApplicationEventPublisher {
+        val published = mutableListOf<Any>()
+        override fun publishEvent(event: Any) {
+            published += event
         }
     }
 
@@ -36,36 +36,36 @@ class IncidentReportServiceTest {
     """.trimIndent()
 
     @Test
-    fun `신규 저장이면 알림을 발송한다`() {
+    fun `신규 저장이면 알림 이벤트를 발행한다`() {
         val repository = RecordingRepository(isNew = true)
-        val notifier = RecordingNotifier()
+        val events = RecordingEvents()
 
-        IncidentReportService(repository, notifier).ingest(payload())
+        IncidentReportService(repository, events).ingest(payload())
 
         assertEquals(1, repository.upserted.size)
-        assertEquals(1, notifier.notified.size)
-        assertEquals(repository.upserted.single().incidentId, notifier.notified.single().incidentId)
+        val stored = events.published.single() as IncidentReportStored
+        assertEquals(repository.upserted.single().incidentId, stored.report.incidentId)
     }
 
     @Test
-    fun `재수신이면 갱신만 하고 알림은 내지 않는다 - at-least-once 재발행 짝`() {
+    fun `재수신이면 갱신만 하고 이벤트는 내지 않는다 - at-least-once 재발행 짝`() {
         val repository = RecordingRepository(isNew = false)
-        val notifier = RecordingNotifier()
+        val events = RecordingEvents()
 
-        IncidentReportService(repository, notifier).ingest(payload())
+        IncidentReportService(repository, events).ingest(payload())
 
         assertEquals(1, repository.upserted.size)
-        assertEquals(0, notifier.notified.size)
+        assertEquals(0, events.published.size)
     }
 
     @Test
-    fun `파싱 불가 페이로드는 저장·알림 없이 건너뛴다 - poison pill 이 커밋을 막지 않는다`() {
+    fun `파싱 불가 페이로드는 저장·이벤트 없이 건너뛴다 - poison pill 이 커밋을 막지 않는다`() {
         val repository = RecordingRepository(isNew = true)
-        val notifier = RecordingNotifier()
+        val events = RecordingEvents()
 
-        IncidentReportService(repository, notifier).ingest("not-json{{{")
+        IncidentReportService(repository, events).ingest("not-json{{{")
 
         assertEquals(0, repository.upserted.size)
-        assertEquals(0, notifier.notified.size)
+        assertEquals(0, events.published.size)
     }
 }
