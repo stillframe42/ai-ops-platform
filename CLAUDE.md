@@ -33,4 +33,4 @@
 
 ## 작업 체크리스트
 
-날짜별 작업 로그는 `plans/` (로컬 전용, git 미추적) 에서 관리한다. 주 단위 마스터 plan(`weekly-plan.md`)에서 매일 착수 시점에 당일 파일(`tasks_YYYYMMDD.md`)을 분리 생성해 진행을 체크한다. 현재 체크리스트: `plans/202607-3w/tasks_20260727.md`
+날짜별 작업 로그는 `plans/` (로컬 전용, git 미추적) 에서 관리한다. 주 단위 마스터 plan(`weekly-plan.md`)에서 매일 착수 시점에 당일 파일(`tasks_YYYYMMDD.md`)을 분리 생성해 진행을 체크한다. 현재 체크리스트: `plans/202607-3w/tasks_20260728.md`
