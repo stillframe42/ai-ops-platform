@@ -22,11 +22,15 @@ C4 다이어그램(System Context / Container)은 [`docs/architecture.md`](docs/
 | 영역 | 선택 | 비고 |
 |------|------|------|
 | 관제/게이트웨이 | Kotlin + Spring Boot 4.x | control-plane, target-app |
-| 에이전트 | Python + LangGraph | uv 기반 |
-| 메트릭 수집 | Prometheus | |
+| 에이전트 | Python + LangGraph | uv 기반, Durable Execution ([ADR-0009](docs/adr/0009-postgres-checkpointer.md)) |
+| LLM 프로바이더 | Anthropic Claude Sonnet 5 | 설정으로 전환 가능 ([ADR-0007](docs/adr/0007-llm-provider.md)) |
+| 도구 노출 | MCP (Streamable HTTP) | control-plane 운영 도구 → 에이전트 ([ADR-0010](docs/adr/0010-mcp-tool-exposure.md)) |
+| 이벤트 파이프라인 | Kafka (KRaft) | Alert → 인시던트 → 분석 결과 ([ADR-0011](docs/adr/0011-kafka-trigger.md)) |
+| 메트릭 수집 | Prometheus | Alertmanager 룰 기반 웹훅 ([ADR-0003](docs/adr/0003-alertmanager-webhook.md)) |
+| 로그 | Loki + Alloy | 분석 에이전트 조회 도구 ([ADR-0004](docs/adr/0004-loki-adoption.md)) |
 | 대시보드 | Grafana | |
-| 알림/승인 채널 | Slack | webhook vs Slack App 미정 ([ADR 후보](docs/adr/)) |
-| LLM 프로바이더 | 미정 | 모델 선정 포함 ADR 로 결정 예정 |
+| LLM 관측·비용 | Langfuse v3 (자가 호스팅) | 세션 = 인시던트 |
+| 알림/승인 채널 | Slack | 분석 보고 알림은 incoming webhook 확정 — 승인 인터랙션 방식은 미정 (ADR-0006 예약) |
 | 로컬 실행 | docker-compose | `infra/` 단일 통합 지점 ([ADR-0001](docs/adr/0001-monorepo.md)) |
 
 ## 비목표 (Non-goals)

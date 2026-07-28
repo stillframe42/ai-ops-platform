@@ -1,6 +1,8 @@
 # 시스템 아키텍처 (C4)
 
-C4 모델의 Level 1(System Context)·Level 2(Container) 초안. 미결인 경로는 **점선**으로 표기해 "결정 전"임을 드러낸다 — 각 미결 항목은 [scenarios.md 의 ADR 후보 목록](scenarios.md#미결-사항--adr-후보)에 번호가 예약되어 있다. Alertmanager([ADR-0003](adr/0003-alertmanager-webhook.md))와 Loki([ADR-0004](adr/0004-loki-adoption.md))는 2026-07-14 에 도입 확정되어 실선으로 반영됨.
+C4 모델의 Level 1(System Context)·Level 2(Container). 미결인 경로는 **점선**으로 표기해 "결정 전"임을 드러낸다 — 각 미결 항목은 [scenarios.md 의 ADR 후보 목록](scenarios.md#미결-사항--adr-후보)에 번호가 예약되어 있다.
+
+갱신 이력: Alertmanager([ADR-0003](adr/0003-alertmanager-webhook.md))·Loki([ADR-0004](adr/0004-loki-adoption.md)) 확정 (2026-07-14) → 3주차 마감 반영 (2026-07-28): control-plane 실체화, 도구 노출 MCP([ADR-0010](adr/0010-mcp-tool-exposure.md)), 트리거 Kafka 이벤트([ADR-0011](adr/0011-kafka-trigger.md)), 결과 저장·Slack 알림 확정.
 
 ## Level 1 — System Context
 
@@ -38,14 +40,15 @@ flowchart TB
     operator["운영자 (사람)"]
 
     subgraph platform["ai-ops-platform (docker-compose)"]
-        cp["control-plane<br/>Kotlin / Spring Boot 4.x<br/>게이트웨이 · 오케스트레이션 진입점 · 승인 API"]
+        cp["control-plane<br/>Kotlin / Spring Boot 4.x<br/>Alert 수신 · 인시던트 발행 · MCP 도구 서버<br/>보고서 저장·조회 API · Slack 알림"]
         agents["agent-service<br/>Python / LangGraph<br/>모니터링 · 분석 · 실행 에이전트"]
+        kafka["Kafka (KRaft 단일 브로커)<br/>ops.alerts.raw · ops.incidents<br/>ops.analysis.results · ops.actions.pending(자리만)"]
         prom["Prometheus<br/>메트릭 수집·저장"]
         graf["Grafana<br/>대시보드"]
         am["Alertmanager<br/>알림 라우팅·webhook 발송"]
         loki["Loki<br/>로그 저장·조회"]
         alloy["Alloy<br/>로그 수송 (컨테이너 stdout 수집)"]
-        pg["PostgreSQL<br/>LangGraph 체크포인트 저장소 (ADR-0009)"]
+        pg["PostgreSQL (pgvector)<br/>LangGraph 체크포인트 (ADR-0009)<br/>vector_store · incident_reports (Flyway)"]
         lf["Langfuse v3<br/>LLM 관측·비용 추적<br/>(웹+worker · ClickHouse · MinIO · Redis)"]
     end
 
@@ -54,31 +57,38 @@ flowchart TB
     llm["LLM API"]
 
     prom -->|"scrape (HTTP /actuator/prometheus)"| target
+    prom -->|"scrape — MCP 도구 메트릭"| cp
     graf -->|"PromQL (HTTP)"| prom
     operator -->|"대시보드 조회 (HTTP)"| graf
 
-    cp <-->|"HTTP/REST<br/>오케스트레이션 트리거 ↔ 분석 결과·조치 제안"| agents
+    prom -->|"알림 룰 평가"| am
+    am -->|"alert webhook (ADR-0003)"| cp
+    cp -->|"인시던트 발행 ops.incidents<br/>정규화·멱등 (ADR-0011)"| kafka
+    kafka -->|"인시던트 소비 (aiokafka 수동 커밋)<br/>그래프 자동 트리거"| agents
+    agents -->|"분석 결과 발행<br/>ops.analysis.results"| kafka
+    kafka -->|"결과 소비 (@KafkaListener)<br/>upsert 멱등 · 신규만 알림"| cp
+
+    agents -->|"MCP 도구 호출 (Streamable HTTP · X-API-Key)<br/>배포 이력 · 유사 인시던트 · 앱 설정 (ADR-0010)"| cp
     agents -->|"HTTPS"| llm
-    cp -->|"Slack webhook (알림)"| slack
-    slack -->|"알림 / 승인 요청"| operator
-    operator -.->|"승인 인터랙션<br/>방식 미결 (ADR-0006)"| cp
+    cp -->|"보고서 저장 (JPA · 스키마는 Flyway 소유)"| pg
+    cp -->|"Slack webhook (분석 보고 알림)"| slack
+    slack -->|"알림 전달"| operator
+    operator -.->|"승인 인터랙션<br/>방식 미결 (ADR-0006 · 4주차)"| cp
 
     agents -->|"PromQL 조회 (HTTP)<br/>직접 조회 (ADR-0002)"| prom
-    prom -->|"알림 룰 평가"| am
-    am -->|"alert webhook<br/>(수신자 구현 전까지 placeholder)"| agents
     target -->|"stdout (docker logs)"| alloy
     alloy -->|"Loki push API (HTTP)"| loki
     graf -->|"LogQL (HTTP)"| loki
     agents -->|"LogQL 조회 (HTTP)<br/>분석 에이전트 도구 (ADR-0004 2단계 확정)"| loki
     agents -->|"체크포인트 저장/조회 (SQL)<br/>Durable Execution (ADR-0009)"| pg
     agents -->|"트레이스 전송 (OTel)<br/>키 미설정 시 비활성"| lf
-    agents -.->|"조치 실행 (docker API)<br/>실행 주체 미결 (ADR-0005)"| target
+    agents -.->|"조치 실행 (docker API)<br/>실행 주체 미결 (ADR-0005 · 4주차)"| target
 
     classDef person fill:#08427b,color:#fff,stroke:#052e56
     classDef container fill:#1168bd,color:#fff,stroke:#0b4884
     classDef external fill:#999,color:#fff,stroke:#6b6b6b
     class operator person
-    class cp,agents,prom,graf,am,loki,alloy,pg,lf container
+    class cp,agents,kafka,prom,graf,am,loki,alloy,pg,lf container
     class target,slack,llm external
 ```
 
@@ -88,45 +98,55 @@ Supervisor 오케스트레이션(StateGraph)과 개별 에이전트(create_agent
 
 ```mermaid
 flowchart LR
-    api["FastAPI<br/>trigger / resume / state / history"]
-    rt["GraphRuntime<br/>백그라운드 실행 · 상태 조회"]
+    consumer["IncidentConsumer<br/>ops.incidents 소비 (수동 커밋)<br/>중복 차단 · Semaphore(3)"]
+    api["FastAPI<br/>trigger / resume / state / history<br/>(수동 트리거는 디버그용)"]
+    rt["GraphRuntime<br/>백그라운드 실행 · 상태 조회<br/>결과를 ops.analysis.results 로 발행"]
 
     subgraph graph["Supervisor StateGraph"]
         sup["supervisor<br/>하이브리드 라우팅 (규칙 + LLM)"]
         mon["monitor<br/>메트릭 수집·상황 요약"]
-        ana["analysis<br/>원인 가설·검증"]
+        ana["analysis<br/>원인 가설·검증<br/>(MCP 도구: 배포 이력·유사 인시던트·앱 설정)"]
         act["action<br/>조치 계획 (실행은 승인 후)"]
     end
 
     ckpt["PostgreSQL 체크포인터<br/>super-step 마다 상태 저장"]
 
-    api --> rt --> graph
+    consumer --> rt
+    api --> rt
+    rt --> graph
     sup --> mon --> sup
     sup --> ana --> sup
     sup --> act --> sup
     graph --> ckpt
 ```
 
+- 트리거는 Kafka 소비가 기본 ([ADR-0011](adr/0011-kafka-trigger.md)) — thread_id = incident_id, done 재트리거 차단(결과는 재발행), 미완 체크포인트는 resume (Durable Execution 결합)
 - 에이전트 노드는 async — 노드별 타임아웃(협조적 취소)·재시도·error_handler 로 실패가 상태(`errors`)에 기록되고 부분 보고서로 종료한다 (DAY 13 복원력)
-- 개별 에이전트는 create_agent ReAct 루프 — monitor 는 Prometheus 도구, analysis 는 Loki·배포이력·기준선 도구를 사용
+- 개별 에이전트는 create_agent ReAct 루프 — monitor 는 Prometheus 도구, analysis 는 Loki·기준선 로컬 도구 + MCP 도구 3종(배포 이력·유사 인시던트·앱 설정 — [ADR-0010](adr/0010-mcp-tool-exposure.md), 카탈로그는 [tools-catalog.md](tools-catalog.md))을 사용
 
 ### 컨테이너 간 통신 프로토콜
 
 | 구간 | 프로토콜 | 상태 |
 |------|----------|------|
-| Prometheus → target-app | HTTP scrape (`/actuator/prometheus`) | 확정 |
-| control-plane ↔ agent-service | HTTP/REST | 확정 (계약 상세는 API 설계 시) |
+| Prometheus → target-app / control-plane | HTTP scrape (`/actuator/prometheus`) | 확정 — control-plane 은 MCP 도구 메트릭 (2026-07-24) |
+| agent-service → control-plane (도구) | MCP Streamable HTTP (`/mcp`, X-API-Key) | 확정 ([ADR-0010](adr/0010-mcp-tool-exposure.md)) — REST 직접 호출 대체, 수동 트리거 REST 는 디버그용 잔존 |
+| Prometheus → Alertmanager → control-plane | 알림 룰 + alert webhook (`/webhook/alertmanager`) | 확정 ([ADR-0003](adr/0003-alertmanager-webhook.md) 완결 2026-07-25) |
+| control-plane → Kafka | 프로듀서 — `ops.alerts.raw`(원본 보존)·`ops.incidents`(정규화·멱등, key=incident_id) | 확정 ([ADR-0011](adr/0011-kafka-trigger.md)) |
+| Kafka → agent-service | aiokafka 컨슈머 (수동 커밋, 배치 처리 후 commit) → 그래프 자동 트리거 | 확정 ([ADR-0011](adr/0011-kafka-trigger.md)) |
+| agent-service → Kafka | 분석 결과 발행 — `ops.analysis.results` (key=incident_id, at-least-once) | 확정 ([ADR-0011](adr/0011-kafka-trigger.md)) |
+| Kafka → control-plane | `@KafkaListener` 결과 소비 → upsert 멱등 저장, 신규만 알림 | 확정 (2026-07-27) |
+| control-plane → PostgreSQL | JPA (스키마 소유는 Flyway, `ddl-auto: validate`) — `incident_reports` | 확정 (2026-07-27) |
+| control-plane → Slack | incoming webhook (분석 보고 알림, 커밋 후 발송) | 확정 (2026-07-27 실전송) — 승인 버튼 인터랙션은 ADR-0006 |
 | agent-service → LLM API | HTTPS | 확정 — Anthropic Claude Sonnet 5 ([ADR-0007](adr/0007-llm-provider.md)) |
-| control-plane → Slack | incoming webhook (알림) | 확정 — 승인 버튼 인터랙션은 ADR-0006 |
 | Grafana → Prometheus | PromQL over HTTP | 확정 |
 | Grafana → Loki | LogQL over HTTP | 확정 ([ADR-0004](adr/0004-loki-adoption.md)) |
 | 에이전트의 관측 데이터 조회 | PromQL over HTTP — 직접 조회 | 확정 ([ADR-0002](adr/0002-observability-access-path.md)) |
-| Prometheus → Alertmanager → agent-service | 알림 룰 + alert webhook | 확정 ([ADR-0003](adr/0003-alertmanager-webhook.md)) — 수신자 구현 전까지 placeholder |
 | target-app → Alloy → Loki | 컨테이너 stdout 수집(docker discovery) + Loki push API | 확정 ([ADR-0004](adr/0004-loki-adoption.md) 추가 사항 — Promtail 은 EOL 로 제외) |
 | agent-service → Loki | LogQL 조회 | 확정 — 분석 에이전트 도구 ([ADR-0004](adr/0004-loki-adoption.md) 2단계, 2026-07-18) |
-| agent-service → PostgreSQL | SQL (커넥션 풀) | 확정 — LangGraph 체크포인트 ([ADR-0009](adr/0009-postgres-checkpointer.md)) |
+| agent-service → PostgreSQL | SQL (커넥션 풀) | 확정 — LangGraph 체크포인트 ([ADR-0009](adr/0009-postgres-checkpointer.md)) + pgvector 유사 인시던트 검색 |
 | agent-service → Langfuse | OTel (HTTP) | 확정 — 자체 compose 스택 (v3, thread_id = 세션), 키 미설정 시 비활성 |
-| 조치 실행 | docker API | 미결 (ADR-0005, 실행 주체 포함) |
+| control-plane → Kafka (`ops.actions.pending`) | 조치 승인 흐름 | 자리만 — 4주차 human-in-the-loop ([ADR-0006](scenarios.md#미결-사항--adr-후보) 과 함께) |
+| 조치 실행 | docker API | 미결 (ADR-0005, 실행 주체 포함 — 4주차) |
 | 분산 추적 (OTLP → Tempo) | OTLP | 로드맵 9월 — 도입 시 Level 2 갱신 |
 
 > OTLP/Tempo 는 현재 컨테이너 목록에 없다. [README 로드맵](../README.md#로드맵)의 9월(Observability) 단계에서 도입하며, 그 시점에 이 다이어그램을 갱신한다.

@@ -12,7 +12,8 @@
 
 - 책임: target-app 의 메트릭에서 트리거 조건 충족을 감지하고, 감지 이벤트(시나리오 종류·시각·근거 수치)를 만들어 분석 에이전트에게 넘긴다.
 - 하지 않는 것: 원인 판단, 조치 제안. 감지와 판단을 분리해 오탐 분석을 가능하게 한다.
-- 감지 방식: **Alertmanager 룰 기반 웹훅 수신** ([ADR-0003](adr/0003-alertmanager-webhook.md)) — 임계값형 트리거(시나리오 1·2)의 1차 판정은 Prometheus Alert Rule 이 담당하고, 에이전트는 webhook 을 받아 감지 이벤트로 정규화한다. 추세형 트리거(시나리오 3)는 예외로 에이전트의 범위 쿼리 판정을 유지한다.
+- 감지 방식: **Alertmanager 룰 기반 웹훅 수신** ([ADR-0003](adr/0003-alertmanager-webhook.md)) — 임계값형 트리거(시나리오 1·2)의 1차 판정은 Prometheus Alert Rule 이 담당한다. 추세형 트리거(시나리오 3)는 예외로 에이전트의 범위 쿼리 판정을 유지한다 (순간 위험 heap>85% 는 Alert Rule 안전망).
+- 유입 경로 (2026-07-28 갱신, [ADR-0011](adr/0011-kafka-trigger.md)): webhook 은 **control-plane** 이 수신해 인시던트로 정규화·멱등 처리 후 `ops.incidents` 로 발행하고, agent-service 컨슈머가 소비해 그래프를 자동 트리거한다 (thread_id = incident_id). REST 수동 트리거는 디버그용으로만 잔존.
 
 ### 분석 에이전트 — 원인 조사
 
@@ -180,3 +181,4 @@
 | [ADR-0008](adr/0008-hybrid-routing.md) | Supervisor 라우팅 방식 — LLM vs 규칙 | 전체 | **결정됨 (2026-07-19)** — 하이브리드: 명확한 전이는 규칙, 모호 구간(P1·P2 + 낮은 confidence)만 LLM |
 | [ADR-0009](adr/0009-postgres-checkpointer.md) | LangGraph 체크포인터 저장소 | 전체 | **결정됨 (2026-07-20)** — 처음부터 PostgreSQL (인메모리는 단위 테스트 전용), thread_id = incident id |
 | [ADR-0010](adr/0010-mcp-tool-exposure.md) | 운영 도구 노출 방식 — REST 직접 호출 vs MCP 표준 | 전체 | **결정됨 (2026-07-23)** — MCP 표준 (Streamable HTTP), 비교 실측은 클라이언트 연동 후 보강 |
+| [ADR-0011](adr/0011-kafka-trigger.md) | 에이전트 트리거 — REST 폴링/수동 vs Kafka 이벤트 | 전체 | **결정됨 (2026-07-26)** — Kafka 이벤트 (`ops.incidents` 소비, 수동 커밋 + 멱등 2층), 수동 트리거는 디버그용 |
