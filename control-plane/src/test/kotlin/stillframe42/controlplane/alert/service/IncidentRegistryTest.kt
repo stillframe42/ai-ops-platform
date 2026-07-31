@@ -85,4 +85,45 @@ class IncidentRegistryTest {
 
         assertNull(registry.resolve("unknown"))
     }
+
+    @Test
+    fun `untrack 은 활성 해제한다 - 발행 실패 롤백으로 다음 발화가 신규 재발행된다`() {
+        val registry = IncidentRegistry(clock)
+        val first = registry.track("d38f7c69cf7e2d2b", "error-rate-surge")
+
+        val removed = registry.untrack("d38f7c69cf7e2d2b", first.incidentId)
+        val refired = registry.track("d38f7c69cf7e2d2b", "error-rate-surge")
+
+        assertTrue(removed)
+        // 발행 실패한 인시던트를 장부에 남기면 이후 발화가 전부 병합돼 재발행 주체가 소멸한다 (Exp D)
+        assertTrue(refired.isNew)
+        // 같은 초의 재등록도 id 는 새로 발급 — 발급 이력(issued)은 untrack 후에도 유지된다
+        assertNotEquals(first.incidentId, refired.incidentId)
+    }
+
+    @Test
+    fun `untrack 은 인시던트 id 불일치 시 제거하지 않는다 - 경합 보호`() {
+        val registry = IncidentRegistry(clock)
+        registry.track("d38f7c69cf7e2d2b", "error-rate-surge")
+
+        val removed = registry.untrack("d38f7c69cf7e2d2b", "inc-other-id")
+        val next = registry.track("d38f7c69cf7e2d2b", "error-rate-surge")
+
+        assertFalse(removed)
+        // 그 사이 resolve→재발화로 주인이 바뀐 엔트리를 오인 제거하면 안 된다
+        assertFalse(next.isNew)
+    }
+
+    @Test
+    fun `병합이 끼어들어도 untrack 은 같은 id 면 제거한다 - 병합은 발행하지 않으므로 미발행 상태다`() {
+        val registry = IncidentRegistry(clock)
+        val first = registry.track("d38f7c69cf7e2d2b", "error-rate-surge")
+        registry.track("d38f7c69cf7e2d2b", "error-rate-surge")
+
+        val removed = registry.untrack("d38f7c69cf7e2d2b", first.incidentId)
+        val refired = registry.track("d38f7c69cf7e2d2b", "error-rate-surge")
+
+        assertTrue(removed)
+        assertTrue(refired.isNew)
+    }
 }

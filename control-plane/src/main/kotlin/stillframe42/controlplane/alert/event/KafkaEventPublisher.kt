@@ -15,7 +15,7 @@ class KafkaEventPublisher(private val kafkaTemplate: KafkaTemplate<String, Strin
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    override fun publish(topic: String, key: String?, payload: String) {
+    override fun publish(topic: String, key: String?, payload: String): Boolean =
         runCatching {
             // send 의 key 파라미터가 non-null 시그니처 — null key(파티셔너 위임)는 2-인자 오버로드로
             val future = if (key == null) kafkaTemplate.send(topic, payload) else kafkaTemplate.send(topic, key, payload)
@@ -26,6 +26,5 @@ class KafkaEventPublisher(private val kafkaTemplate: KafkaTemplate<String, Strin
             }
         }.onFailure {
             logger.warn("Kafka 발행 실패(동기) — topic={} key={}: {}", topic, key, it.message)
-        }
-    }
+        }.isSuccess
 }

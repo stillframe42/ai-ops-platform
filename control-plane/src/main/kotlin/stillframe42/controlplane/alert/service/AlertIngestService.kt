@@ -83,7 +83,13 @@ class AlertIngestService(
             mergeCount = tracked.mergeCount,
         )
         // key = incident_id — 인시던트 단위 파티션 고정(순서 보장), 토픽 설계와 한 몸
-        publisher.publish(OpsTopics.INCIDENTS, tracked.incidentId, mapper.writeValueAsString(event.toWire()))
+        val published = publisher.publish(OpsTopics.INCIDENTS, tracked.incidentId, mapper.writeValueAsString(event.toWire()))
+        if (!published) {
+            // Exp D 유실 창 해소안 ① — 활성 해제로 다음 발화(repeat_interval 재전송 포함)를 재시도 주체로
+            registry.untrack(fingerprint, tracked.incidentId)
+            logger.warn("인시던트 발행 실패 — 활성 해제, 다음 발화가 재발행한다: {} ({})", tracked.incidentId, alertName)
+            return
+        }
         logger.info("인시던트 발행 — {} ({})", tracked.incidentId, alertName)
     }
 

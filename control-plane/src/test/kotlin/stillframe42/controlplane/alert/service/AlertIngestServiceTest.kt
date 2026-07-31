@@ -19,8 +19,13 @@ class AlertIngestServiceTest {
 
     private class RecordingPublisher : EventPublisher {
         val published = mutableListOf<Triple<String, String?, String>>()
-        override fun publish(topic: String, key: String?, payload: String) {
+
+        /** 여기 담긴 토픽으로의 발행은 동기 실패를 흉내낸다 (기록은 시도 기준 — 와이어 검증용). */
+        val failOn = mutableSetOf<String>()
+
+        override fun publish(topic: String, key: String?, payload: String): Boolean {
             published += Triple(topic, key, payload)
+            return topic !in failOn
         }
 
         fun topics() = published.map { it.first }
@@ -117,6 +122,24 @@ class AlertIngestServiceTest {
 
         assertEquals(1, publisher.onTopic(OpsTopics.ALERTS_RAW).size)
         assertEquals(0, publisher.onTopic(OpsTopics.INCIDENTS).size)
+    }
+
+    @Test
+    fun `인시던트 발행 실패 시 활성 해제한다 - 다음 발화가 병합이 아니라 신규 재발행이다`() {
+        val publisher = RecordingPublisher()
+        val service = service(publisher)
+
+        publisher.failOn += OpsTopics.INCIDENTS
+        service.ingest(firingPayload())
+        publisher.failOn.clear()
+        service.ingest(firingPayload())
+
+        // Exp D 유실 창 해소안 ① — 실패한 발행을 장부에 남기면 이후 발화 전부 병합돼 재발행 주체가 소멸
+        val incidents = publisher.onTopic(OpsTopics.INCIDENTS)
+        assertEquals(2, incidents.size)
+        val firstId = mapper.readTree(incidents[0].third)["incident_id"].asString()
+        val secondId = mapper.readTree(incidents[1].third)["incident_id"].asString()
+        assertNotEquals(firstId, secondId)
     }
 
     @Test

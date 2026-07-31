@@ -23,8 +23,9 @@ class AlertmanagerWebhookControllerTest {
 
     private class RecordingPublisher : EventPublisher {
         val published = mutableListOf<Triple<String, String?, String>>()
-        override fun publish(topic: String, key: String?, payload: String) {
+        override fun publish(topic: String, key: String?, payload: String): Boolean {
             published += Triple(topic, key, payload)
+            return true
         }
     }
 

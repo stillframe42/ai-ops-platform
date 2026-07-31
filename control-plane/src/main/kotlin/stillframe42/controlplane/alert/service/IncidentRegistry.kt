@@ -46,6 +46,26 @@ class IncidentRegistry(private val clock: Clock = Clock.systemUTC()) {
     /** 활성 해제 — 추적 중이 아니면 null (오류 아님: 재기동 후의 resolved 수신 등). */
     fun resolve(fingerprint: String): String? = active.remove(fingerprint)?.incidentId
 
+    /**
+     * 발행 실패 롤백 (DAY 21 — Exp D 유실 창 해소안 ①): 미발행 인시던트를 장부에 남기면
+     * 이후 발화가 전부 병합돼 재발행 주체가 소멸한다 — 해제해서 다음 발화를 재시도 주체로 만든다.
+     * id 일치 조건은 경합 보호 (그 사이 resolve→재발화로 주인이 바뀐 엔트리 오인 제거 방지).
+     * 병합 횟수는 조건에 넣지 않는다 — 병합은 발행하지 않으므로 같은 id 면 여전히 미발행 상태다.
+     * 발급 이력(issued)은 유지 — 재등록 id 의 유일성(thread_id 충돌 방지)은 그대로 지켜야 한다.
+     */
+    fun untrack(fingerprint: String, incidentId: String): Boolean {
+        var removed = false
+        active.computeIfPresent(fingerprint) { _, current ->
+            if (current.incidentId == incidentId) {
+                removed = true
+                null
+            } else {
+                current
+            }
+        }
+        return removed
+    }
+
     // inc-{scenario}-{UTC ts} 는 agent-service build_incident 규약 — 같은 초의 fingerprint
     // 충돌(그룹 내 다중 alert)을 앞 6자 접미로 분리한다
     private fun newIncidentId(scenario: String, fingerprint: String): String {
