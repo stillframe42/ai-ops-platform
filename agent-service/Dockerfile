@@ -13,6 +13,8 @@ RUN uv sync --frozen --no-dev
 
 COPY app ./app
 
+# stdout 버퍼링이 로그를 지연·유실시키지 않게 — 로그 시각이 측정 근거인 프로젝트 특성
+ENV PYTHONUNBUFFERED=1
 ENV PATH="/app/.venv/bin:$PATH"
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
