@@ -42,6 +42,11 @@ Alertmanager → control-plane webhook → **Kafka** (`ops.incidents`) → agent
 - **부재 vs 다운 구분**: 기동 시 브로커 부재 = 컨슈머 생성 실패로 Exit 1 / 실행 중 부재 = rebootstrap 재시도로 생존
 - 해소안 결정은 보류 상태 유지 — 후보: ① 발행 실패 시 활성 해제(다음 재발화가 재시도) ② registry 영속화(4주차 승인 테이블과 결합) ③ 수용+문서화
 
+## 추가 사항 (2026-07-31 — 유실 창 해소안 결정)
+
+- **① 발행 실패 시 활성 해제 채택·구현**: `EventPublisher.publish` 가 동기 접수 성패를 반환하고, 실패 시 `IncidentRegistry.untrack`(인시던트 id 일치 조건부 제거 — 경합 보호)으로 활성 해제한다. 다음 발화(repeat_interval 재전송 포함)가 재시도 주체가 되어 유실 창이 닫힌다. 반환값이 못 잡는 비동기 실패(delivery timeout)는 알려진 한계로 계약에 명시 — Future 전파는 수집 경로의 비동기 합성 비용 대비 보류
+- **② registry 영속화는 채택하지 않음**: 승인 테이블(action_approvals)과 도메인이 다르다 (alert 병합 상태 vs 조치 승인) — 결합 이득이 없고, ① 이 유실 창을 닫은 뒤 남는 재기동 리스크는 "중복 인시던트 발행" 1건으로 컨슈머 thread_id 차단 + upsert 멱등의 기존 2차 방어와 동일 (registry KDoc 의 수용 근거 유지)
+
 ## 참고
 
 - "서버 다운이 새 실패 지점" 단점은 Kafka 고유가 아니라 중개 계층 도입 공통 비용 (ADR-0010 보정과 같은 구조)
