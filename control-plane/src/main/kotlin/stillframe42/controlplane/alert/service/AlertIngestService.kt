@@ -90,7 +90,9 @@ class AlertIngestService(
             logger.warn("인시던트 발행 실패 — 활성 해제, 다음 발화가 재발행한다: {} ({})", tracked.incidentId, alertName)
             return
         }
-        logger.info("인시던트 발행 — {} ({})", tracked.incidentId, alertName)
+        // "접수"인 이유: 이 시점 확정은 동기 접수까지 — 비동기 전달 실패는 publisher 의
+        // whenComplete WARN(key=incident_id)으로만 관측된다 (EventPublisher KDoc 계약 한계)
+        logger.info("인시던트 발행 접수 — {} ({})", tracked.incidentId, alertName)
     }
 
     private fun JsonNode.stringOrNull(): String? = if (isString) stringValue() else null
