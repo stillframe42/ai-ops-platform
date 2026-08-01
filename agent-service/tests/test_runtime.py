@@ -209,7 +209,7 @@ def test_is_run_complete_requires_done_decision() -> None:
 
 
 def test_checkpoint_serializer_roundtrips_registered_state_models() -> None:
-    """상태 모델 5종이 허용 목록에 등록돼 경고 없이 직렬화 왕복된다 (업그레이드 대비).
+    """상태 모델 6종이 허용 목록에 등록돼 경고 없이 직렬화 왕복된다 (업그레이드 대비).
 
     기본(permissive) 직렬화는 미등록 pydantic 타입마다 "향후 차단 예정" 경고를 낸다 —
     명시 등록으로 경고를 없애고, langgraph 업그레이드 시 차단으로 바뀌어도 안전하다.
@@ -218,6 +218,7 @@ def test_checkpoint_serializer_roundtrips_registered_state_models() -> None:
     from app.supervisor.state import (
         ActionPlan,
         AnalysisResult,
+        ApprovalDecision,
         MonitoringResult,
         NodeFailure,
     )
@@ -229,6 +230,7 @@ def test_checkpoint_serializer_roundtrips_registered_state_models() -> None:
         AnalysisResult(root_cause_hypothesis="[스텁] 가설", confidence=0.9, severity="P2"),
         ActionPlan(actions=["NOTIFY_ONLY"], rationale="[스텁] 계획"),
         NodeFailure(node="monitor", error_type="E", message="m", occurred_at="t"),
+        ApprovalDecision(status="approved", decided_by="U0123ABC", note="[스텁] 승인"),
     ]
     for sample in samples:
         assert serde.loads_typed(serde.dumps_typed(sample)) == sample

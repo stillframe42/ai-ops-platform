@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.config.logging_setup import configure_logging
+from app.events.decisions_consumer import run_decisions_consumer
 from app.events.incident_consumer import run_incident_consumer
 from app.supervisor.runtime import build_incident, open_runtime
 
@@ -26,22 +27,29 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     async with open_runtime(settings) as runtime:
         app.state.runtime = runtime
-        # Kafka 인시던트 컨슈머 (DAY 18, ADR-0011) — 빈 bootstrap 이면 비활성 (수동 트리거만).
-        # 접속 실패는 컨슈머 안에서 백오프 재시도 — 앱 기동을 막지 않는다
-        consumer_task = (
-            asyncio.create_task(
-                run_incident_consumer(settings, runtime), name="kafka-incident-consumer"
-            )
+        # Kafka 컨슈머 2종 — 빈 bootstrap 이면 비활성 (수동 트리거만).
+        # incidents (DAY 18, ADR-0011): Alert → 그래프 트리거 / decisions (ADR-0005):
+        # 승인 결정 → 그래프 재개. 접속 실패는 컨슈머 안에서 백오프 재시도 — 앱 기동을 막지 않는다
+        consumer_tasks = (
+            [
+                asyncio.create_task(
+                    run_incident_consumer(settings, runtime), name="kafka-incident-consumer"
+                ),
+                asyncio.create_task(
+                    run_decisions_consumer(settings, runtime), name="kafka-decisions-consumer"
+                ),
+            ]
             if settings.kafka_bootstrap_servers
-            else None
+            else []
         )
         try:
             yield
         finally:
-            if consumer_task is not None:
-                consumer_task.cancel()
+            for task in consumer_tasks:
+                task.cancel()
+            for task in consumer_tasks:
                 with suppress(asyncio.CancelledError):
-                    await consumer_task
+                    await task
 
 
 app = FastAPI(title="ai-ops-platform agent-service", lifespan=lifespan)

@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.types import Command
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
@@ -20,6 +21,7 @@ from app.supervisor.graph import DONE, GRAPH_RECURSION_LIMIT, build_graph
 from app.supervisor.state import (
     ActionPlan,
     AnalysisResult,
+    ApprovalDecision,
     IncidentInfo,
     MonitoringResult,
     NodeFailure,
@@ -50,6 +52,7 @@ def build_checkpoint_serializer() -> JsonPlusSerializer:
             MonitoringResult,
             AnalysisResult,
             ActionPlan,
+            ApprovalDecision,
             NodeFailure,
         ]
     )
@@ -104,8 +107,20 @@ class GraphRuntime:
         )
 
     async def resume(self, incident_id: str) -> None:
-        """입력 None + 동일 thread_id — 마지막 체크포인트의 미완 노드부터 이어간다."""
+        """입력 None + 동일 thread_id — 마지막 체크포인트의 미완 노드부터 이어간다.
+
+        승인 대기(interrupt) 상태에서 호출되면 approval 노드가 재실행되며 다시 interrupt
+        로 멈춘다 — 결정 없는 재개는 대기를 갱신할 뿐이다 (반복 알림 재전달 경로).
+        """
         await self.graph.ainvoke(None, config=self._config(incident_id))
+
+    async def resume_with_decision(self, incident_id: str, decision: dict) -> None:
+        """승인 대기 중인 그래프를 결정으로 재개한다 — interrupt 지점이 이 값을 돌려받는다.
+
+        결정 페이로드 검증은 두 겹: 소비 측(DecisionEventProcessor)이 status 를 걸러 넣고,
+        approval 노드가 다시 정규화한다 (알 수 없는 값은 안전 측 거부).
+        """
+        await self.graph.ainvoke(Command(resume=decision), config=self._config(incident_id))
 
     def start_background(self, incident: IncidentInfo) -> None:
         self._spawn(incident.id, self.start(incident))
@@ -129,6 +144,15 @@ class GraphRuntime:
                 incident_id,
             )
 
+    @staticmethod
+    def _pending_interrupt_value(snapshot) -> dict | None:
+        """정지 중인 interrupt 의 페이로드 — 승인 대기면 승인 요청서(dict)가 나온다."""
+        for task in snapshot.tasks:
+            for intr in task.interrupts:
+                if isinstance(intr.value, dict):
+                    return intr.value
+        return None
+
     async def get_state(self, incident_id: str) -> dict | None:
         snapshot = await self.graph.aget_state(self._config(incident_id))
         if not snapshot.values:
@@ -138,6 +162,8 @@ class GraphRuntime:
             "incident_id": incident_id,
             "next": list(snapshot.next),
             "done": is_run_complete(snapshot.next, values),
+            # 승인 대기 여부 — 미완 체크포인트(다운 후 재개 대상)와 구분하는 신호 (ADR-0005)
+            "awaiting_approval": self._pending_interrupt_value(snapshot) is not None,
             "supervisor_decision": values.get("supervisor_decision"),
             "supervisor_visits": values.get("supervisor_visits", 0),
             "completed": {
@@ -185,11 +211,23 @@ class GraphRuntime:
             "monitoring": dump("monitoring"),
             "analysis": dump("analysis"),
             "action": dump("action"),
+            "approval": dump("approval"),  # 승인 감사 정보 — control-plane 보고서의 입력
             "errors": errors,
             "pending_errors": pending_errors,
             "supervisor_visits": values.get("supervisor_visits", 0),
             "completed_at": datetime.now(UTC).isoformat(),
         }
+
+    async def get_pending_approval(self, incident_id: str) -> dict | None:
+        """승인 대기 중이면 interrupt 페이로드(승인 요청서)를 반환 — 아니면 None.
+
+        컨슈머가 이 값을 ops.actions.pending 으로 발행한다 — 그래프 실행 경로(start/
+        resume/재기동 후)와 무관하게 체크포인트에서 읽으므로 발행 시점이 어긋나지 않는다.
+        """
+        snapshot = await self.graph.aget_state(self._config(incident_id))
+        if not snapshot.values:
+            return None
+        return self._pending_interrupt_value(snapshot)
 
     async def get_history(self, incident_id: str) -> list[dict]:
         """체크포인트 히스토리 — 최신이 먼저 온다 (aget_state_history 순서 그대로)."""

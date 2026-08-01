@@ -30,9 +30,15 @@ def _event(**overrides) -> bytes:
 
 
 class FakeRuntime:
-    def __init__(self, state: dict | None = None, start_error: Exception | None = None):
+    def __init__(
+        self,
+        state: dict | None = None,
+        start_error: Exception | None = None,
+        pending_approval: dict | None = None,
+    ):
         self.state = state
         self.start_error = start_error
+        self.pending_approval = pending_approval
         self.started: list = []
         self.resumed: list[str] = []
 
@@ -41,6 +47,9 @@ class FakeRuntime:
 
     async def get_result(self, incident_id: str) -> dict | None:
         return {"incident_id": incident_id, "status": "completed"}
+
+    async def get_pending_approval(self, incident_id: str) -> dict | None:
+        return self.pending_approval
 
     async def start(self, incident) -> None:
         self.started.append(incident)
@@ -62,8 +71,12 @@ class RecordingPublisher:
         self.published.append((key, payload))
 
 
-def _processor(runtime: FakeRuntime, publisher: RecordingPublisher) -> IncidentEventProcessor:
-    return IncidentEventProcessor(runtime, publisher)
+def _processor(
+    runtime: FakeRuntime,
+    publisher: RecordingPublisher,
+    approval_publisher: RecordingPublisher | None = None,
+) -> IncidentEventProcessor:
+    return IncidentEventProcessor(runtime, publisher, approval_publisher or RecordingPublisher())
 
 
 def test_normal_event_starts_graph_and_publishes_result() -> None:
@@ -149,6 +162,38 @@ def test_publish_failure_propagates_for_commit_hold() -> None:
         raised = True
 
     assert raised  # 인프라 실패 — 호출자가 커밋을 보류하고 재수신해야 한다
+
+
+def test_awaiting_approval_publishes_pending_and_holds_result() -> None:
+    """interrupt 정지 = 승인 대기 — 승인 요청서만 pending 으로 발행하고 보고서는 보류한다.
+
+    보고서를 매 interrupt 마다 발행하면 승인 사이클마다 partial 알림이 중복된다 —
+    보고서 발행은 종결(완주·실패) 시점으로 유지한다 (ADR-0005 왕복 배선).
+    """
+    request = {"incident_id": "inc-error-rate-surge-20260726103000-d38f7c", "actions": ["RESTART_APP"]}
+    runtime = FakeRuntime(pending_approval=request)
+    publisher, approval_publisher = RecordingPublisher(), RecordingPublisher()
+
+    outcome = asyncio.run(_processor(runtime, publisher, approval_publisher).process(_event()))
+
+    assert outcome == "processed:awaiting-approval"
+    assert publisher.published == []  # 보고서 보류 — 종결 시 decisions 소비 측이 발행
+    (key, payload) = approval_publisher.published[0]
+    assert key == "inc-error-rate-surge-20260726103000-d38f7c"
+    assert payload["actions"] == ["RESTART_APP"]
+
+
+def test_approval_publish_failure_propagates_for_commit_hold() -> None:
+    runtime = FakeRuntime(pending_approval={"incident_id": "x", "actions": ["RESTART_APP"]})
+    publisher, approval_publisher = RecordingPublisher(), RecordingPublisher(fail=True)
+
+    try:
+        asyncio.run(_processor(runtime, publisher, approval_publisher).process(_event()))
+        raised = False
+    except RuntimeError:
+        raised = True
+
+    assert raised  # pending 발행 실패도 인프라 실패 — 커밋 보류 후 재수신 대상
 
 
 def test_same_incident_in_flight_is_skipped() -> None:

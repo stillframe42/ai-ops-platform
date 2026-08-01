@@ -17,6 +17,7 @@ from app.agents.action_agent import action_node
 from app.agents.analysis_agent import analysis_node
 from app.agents.monitor_agent import monitor_node
 from app.supervisor import router
+from app.supervisor.approval import approval_node
 from app.supervisor.state import AIOpsState, NodeFailure
 
 # Supervisor 라우팅 결정값
@@ -24,6 +25,9 @@ MONITOR = "monitor"
 ANALYSIS = "analysis"
 ACTION = "action"
 DONE = "done"
+
+# 승인 노드 — 라우팅 결정값이 아니라 action 뒤 정적 경유지 (ADR-0005)
+APPROVAL = "approval"
 
 # 무한 루프 방지 — LLM 라우터가 재분석을 반복해도 이 한도에서 끊는다.
 # 정상 흐름은 4회 (monitor/analysis/action 진입 3 + 종료 판정 1), 재분석 1회까지 허용.
@@ -169,15 +173,22 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
             timeout=NODE_TIMEOUTS[name],
         )
 
+    # 승인 노드는 순수 노드로 등록 — interrupt 가 예외 전파로 동작하므로 error_handler·
+    # retry 가 붙으면 승인 대기가 실패 기록으로 오인된다 (app/supervisor/approval.py)
+    builder.add_node(APPROVAL, approval_node)
+
     builder.add_edge(START, "supervisor")
     builder.add_conditional_edges(
         "supervisor",
         _route,
         {MONITOR: MONITOR, ANALYSIS: ANALYSIS, ACTION: ACTION, DONE: END},
     )
-    # 각 에이전트는 작업 후 반드시 Supervisor 로 복귀 — 라우팅 결정 지점을 한 곳으로 유지
+    # 각 에이전트는 작업 후 반드시 Supervisor 로 복귀 — 라우팅 결정 지점을 한 곳으로 유지.
+    # action 만 approval 을 경유한다 (조치 실행 전 human-in-the-loop, ADR-0005) —
+    # P3 는 supervisor 조기 종료로 action 에 오지 않으므로 승인 요구도 구조적으로 P1/P2 뿐.
     builder.add_edge(MONITOR, "supervisor")
     builder.add_edge(ANALYSIS, "supervisor")
-    builder.add_edge(ACTION, "supervisor")
+    builder.add_edge(ACTION, APPROVAL)
+    builder.add_edge(APPROVAL, "supervisor")
 
     return builder.compile(checkpointer=checkpointer)

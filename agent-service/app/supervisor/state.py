@@ -60,6 +60,17 @@ class ActionPlan(BaseModel):
     risk: str = ""
 
 
+class ApprovalDecision(BaseModel):
+    """승인 결정 — ops.actions.decisions 페이로드를 정규화한 그래프 재개 입력 (ADR-0005).
+
+    skipped 는 그래프 내부 전용: 실행 조치가 없어 승인 왕복 자체를 생략한 경우.
+    """
+
+    status: Literal["approved", "rejected", "expired", "skipped"]
+    decided_by: str = ""  # Slack user ID 또는 API 호출 주체 — 감사 기록 (ADR-0006)
+    note: str = ""
+
+
 class NodeFailure(BaseModel):
     """노드 실패 기록 — 실패가 전체 실행을 죽이지 않고 상태에 남는다 (DAY 13 복원력).
 
@@ -77,6 +88,7 @@ class AIOpsState(TypedDict):
     monitoring: NotRequired[MonitoringResult | None]
     analysis: NotRequired[AnalysisResult | None]
     action: NotRequired[ActionPlan | None]
+    approval: NotRequired[ApprovalDecision | None]
     supervisor_decision: NotRequired[str]  # 라우팅 결정 (관측·디버깅용으로 상태에 남긴다)
     supervisor_visits: NotRequired[int]  # 무한 루프 방지 카운터 — 한도 초과 시 강제 종료
     # 노드 실패 축적 — add 리듀서라 각 error_handler 의 기록이 덮어쓰지 않고 누적된다
