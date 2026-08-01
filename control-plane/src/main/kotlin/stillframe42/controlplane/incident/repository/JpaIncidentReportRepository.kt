@@ -1,19 +1,12 @@
 package stillframe42.controlplane.incident.repository
 
 import org.springframework.data.domain.PageRequest
-import org.springframework.data.domain.Pageable
-import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Repository
 import stillframe42.controlplane.incident.entity.IncidentReportEntity
 import stillframe42.controlplane.incident.model.IncidentReport
 import stillframe42.controlplane.incident.model.IncidentReportDetail
 import stillframe42.controlplane.incident.model.IncidentReportSummary
-
-/** IncidentReportEntity 의 Spring Data 저장소 — 쿼리는 메서드 이름 파생 (SQL 문자열 없음). */
-interface IncidentReportEntityRepository : JpaRepository<IncidentReportEntity, String> {
-    fun findAllByOrderByCreatedAtDesc(pageable: Pageable): List<IncidentReportEntity>
-}
 
 /**
  * IncidentReportRepository 의 JPA 구현 (DAY 19, JdbcClient 초안에서 전환).
