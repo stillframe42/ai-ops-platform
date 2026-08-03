@@ -2,7 +2,7 @@
 
 관제/API/게이트웨이 — Spring Boot 4.x + Kotlin. 에이전트 오케스트레이션 진입점과 human-in-the-loop 승인 API 를 담당한다.
 
-## 현재 제공 기능 (DAY 15~19)
+## 현재 제공 기능 (DAY 15~23)
 
 - **MCP 도구 서버** (Spring AI 2.0, Streamable HTTP) — 운영 도구 3종을 표준 프로토콜로 노출
   - `getDeploymentHistory(app)` — 최근 배포 이력 (시드)
@@ -26,6 +26,17 @@
 - **Slack 알림** (DAY 19) — 신규 보고서 저장 시 Incoming Webhook 발송 (P-등급·원인 가설·
   confidence·근거 3줄·제안 조치·상세 링크). env `SLACK_WEBHOOK_URL` 미설정이면 조용한 비활성
   (기동·발송 시점 로그로 진단 가능). 재수신(갱신)은 알림을 내지 않는다
+- **조치 승인 도메인** (DAY 22, ADR-0005) — `ops.actions.pending` 소비 → `action_approvals`
+  저장 (활성 pending 1건 멱등) → `POST /api/incidents/{id}/approve|reject` → 전이·감사 기록 +
+  `ops.actions.decisions` 발행 (접수 실패 시 롤백 = 503). 404/409 규약은 `ApprovalController`
+- **Slack 승인 카드 + Socket Mode 버튼** (DAY 23, ADR-0006) — 신규 pending 저장 시 Block Kit
+  카드 발송([승인][거부] 버튼), 버튼 클릭은 Socket Mode 로 수신해 승인 API 와 같은 decide 로
+  수렴 (클릭한 Slack user ID = `decided_by`). 결정되면 카드 버튼 제거 + 스레드 결과 회신 —
+  버튼·API·타임아웃 어느 경로든 동일. env `SLACK_BOT_TOKEN`/`SLACK_APP_TOKEN`/
+  `SLACK_APPROVAL_CHANNEL` 미설정이면 해당 기능만 조용한 비활성 (승인 API 는 항상 유효)
+- **승인 타임아웃** (DAY 23, ADR-0006) — 30분 미결정 시 스레드 재알림 1회 → 60분 시 expired
+  전이(조치 미실행 종결, `decided_by=system`) — decisions 발행까지 승인과 같은 경로. 값은
+  env `APPROVAL_REMIND_AFTER`/`APPROVAL_EXPIRE_AFTER`/`APPROVAL_SWEEP_INTERVAL` 로 설정
 
 ## 실행
 
