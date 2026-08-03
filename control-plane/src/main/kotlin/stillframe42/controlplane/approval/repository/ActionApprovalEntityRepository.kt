@@ -1,5 +1,6 @@
 package stillframe42.controlplane.approval.repository
 
+import java.time.Instant
 import org.springframework.data.jpa.repository.JpaRepository
 import stillframe42.controlplane.approval.entity.ActionApprovalEntity
 
@@ -7,4 +8,5 @@ import stillframe42.controlplane.approval.entity.ActionApprovalEntity
 interface ActionApprovalEntityRepository : JpaRepository<ActionApprovalEntity, Long> {
     fun findByIncidentIdAndStatus(incidentId: String, status: String): ActionApprovalEntity?
     fun findFirstByIncidentIdOrderByIdDesc(incidentId: String): ActionApprovalEntity?
+    fun findByStatusAndRequestedAtBefore(status: String, cutoff: Instant): List<ActionApprovalEntity>
 }

@@ -57,6 +57,17 @@ class ActionApprovalEntity(
 
     @Column(name = "execution_note")
     var executionNote: String? = null,
+
+    /** Slack 카드 좌표 (V4) — 미발송 카드는 null 유지 (토큰 미설정·발송 실패) */
+    @Column(name = "slack_channel")
+    var slackChannel: String? = null,
+
+    @Column(name = "slack_message_ts")
+    var slackMessageTs: String? = null,
+
+    /** 30분 재알림 1회 규약의 표식 (V4) — null 이면 아직 재알림 전 */
+    @Column(name = "reminded_at")
+    var remindedAt: Instant? = null,
 ) : AuditedEntity() {
 
     /** GENERATED ALWAYS AS IDENTITY — INSERT 에서 id 를 생략해야 하므로 Hibernate IDENTITY 전략 */
@@ -69,6 +80,16 @@ class ActionApprovalEntity(
         this.status = status
         this.decidedBy = decidedBy
         this.decidedAt = decidedAt
+    }
+
+    /** 카드 발송 성공 후 좌표 보존 — 마감(chat.update)·스레드 회신·재알림의 대상 (DAY 23) */
+    fun recordSlackMessage(channel: String, messageTs: String) {
+        this.slackChannel = channel
+        this.slackMessageTs = messageTs
+    }
+
+    fun markReminded(at: Instant) {
+        this.remindedAt = at
     }
 
     companion object {

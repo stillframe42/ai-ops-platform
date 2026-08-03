@@ -37,6 +37,9 @@ dependencies {
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("tools.jackson.module:jackson-module-kotlin")
 
+	implementation("com.slack.api:bolt-socket-mode:1.45.3")
+	implementation("org.java-websocket:Java-WebSocket:1.6.0")
+
 	runtimeOnly("org.flywaydb:flyway-database-postgresql")
 	runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 

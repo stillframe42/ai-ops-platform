@@ -82,6 +82,18 @@ ops:
     # Incoming Webhook URL (DAY 19) — 빈 값이면 알림 비활성 (Langfuse 키-게이트 관례).
     # URL 자체가 시크릿 — infra/.env 의 SLACK_WEBHOOK_URL 을 compose 가 주입 (git 미추적, 값 미출력)
     webhook-url: ${SLACK_WEBHOOK_URL:}
+    # 승인 카드 발송(Bot Token)·Socket Mode 수신(App Token) (DAY 23, ADR-0006) —
+    # 기존 Webhook 과 발신 경로 이원화: 버튼·chat.update·스레드는 App 경로만 가능.
+    # 셋 중 하나라도 빈 값이면 해당 기능 조용한 비활성 (승인 API 경로는 항상 유효)
+    bot-token: ${SLACK_BOT_TOKEN:}
+    app-token: ${SLACK_APP_TOKEN:}
+    approval-channel: ${SLACK_APPROVAL_CHANNEL:}
+  approval:
+    # 승인 타임아웃 정책 (ADR-0006): remind-after 경과 시 재알림 1회 → expire-after 경과 시
+    # expired 전이 = 조치 미실행 종결. 설정인 이유: Phase 4 3경로 검증이 단축값으로 실측 (30분 실대기 회피)
+    remind-after: ${APPROVAL_REMIND_AFTER:30m}
+    expire-after: ${APPROVAL_EXPIRE_AFTER:60m}
+    sweep-interval: ${APPROVAL_SWEEP_INTERVAL:60s}
   report:
     # Slack 메시지의 상세 링크 기준 주소 — 사람이 브라우저로 여는 링크라 호스트 노출 포트(8081) 기준
     base-url: ${REPORT_BASE_URL:http://localhost:8081}

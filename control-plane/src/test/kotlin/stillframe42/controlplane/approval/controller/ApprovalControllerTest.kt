@@ -2,6 +2,7 @@ package stillframe42.controlplane.approval.controller
 
 import java.time.Instant
 import kotlin.test.Test
+import org.springframework.context.ApplicationEventPublisher
 import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -9,7 +10,10 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import stillframe42.controlplane.alert.event.EventPublisher
 import stillframe42.controlplane.approval.model.ActionApprovalRequest
+import stillframe42.controlplane.approval.model.ApprovalCard
 import stillframe42.controlplane.approval.model.ApprovalStatus
+import stillframe42.controlplane.approval.model.PendingApproval
+import stillframe42.controlplane.approval.model.SlackMessageRef
 import stillframe42.controlplane.approval.repository.ActionApprovalRepository
 import stillframe42.controlplane.approval.service.ActionApprovalService
 
@@ -32,6 +36,10 @@ class ApprovalControllerTest {
         ): Boolean = transitioned
 
         override fun findLatestStatus(incidentId: String): String? = latestStatus
+        override fun recordSlackMessage(incidentId: String, message: SlackMessageRef): Boolean = false
+        override fun markReminded(incidentId: String, remindedAt: Instant): Boolean = false
+        override fun findPendingRequestedBefore(cutoff: Instant): List<PendingApproval> = emptyList()
+        override fun findLatestCard(incidentId: String): ApprovalCard? = null
     }
 
     private val incidentId = "inc-memory-pressure-20260801100000-ab12cd"
@@ -45,6 +53,7 @@ class ApprovalControllerTest {
             ActionApprovalService(
                 FakeRepository(transitioned, latestStatus),
                 EventPublisher { _, _, _ -> publishAccepted },
+                ApplicationEventPublisher { },
             ),
         ),
     ).build()

@@ -20,6 +20,14 @@ data class ActionApprovalRequest(
     val confidence: Double?,
     val requestedAt: Instant,
     val raw: String,
+    // 아래는 Slack 승인 카드 표시용 (DAY 23, ADR-0006 카드 내용 스펙) — 카드가 없으면 "-" 강등
+    val scenario: String? = null,
+    val alertName: String? = null,
+    val rootCauseHypothesis: String? = null,
+    val actions: List<String> = emptyList(),
+    val rationale: String? = null,
+    val expectedEffect: String? = null,
+    val risk: String? = null,
 ) {
 
     companion object {
@@ -42,6 +50,13 @@ data class ActionApprovalRequest(
                     ?.let { runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull() }
                     ?: Instant.now(),
                 raw = payload,
+                scenario = root.path("scenario").stringOrNull(),
+                alertName = root.path("alert_name").stringOrNull(),
+                rootCauseHypothesis = root.path("root_cause_hypothesis").stringOrNull(),
+                actions = actions,
+                rationale = root.path("rationale").stringOrNull(),
+                expectedEffect = root.path("expected_effect").stringOrNull(),
+                risk = root.path("risk").stringOrNull(),
             )
         }
 

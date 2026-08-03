@@ -41,6 +41,19 @@ class ActionApprovalRequestTest {
     }
 
     @Test
+    fun `승인 카드 표시 필드까지 추출한다 - ADR-0006 카드 내용 스펙`() {
+        val request = assertNotNull(ActionApprovalRequest.parse(payload()))
+
+        assertEquals("memory-pressure", request.scenario)
+        assertEquals("TargetAppHeapUsageHigh", request.alertName)
+        assertEquals("heap 누수 의심", request.rootCauseHypothesis)
+        assertEquals(listOf("RESTART_APP"), request.actions)
+        assertEquals("재시작 필요", request.rationale)
+        assertEquals("heap 정상화", request.expectedEffect)
+        assertEquals("요청 유실", request.risk)
+    }
+
+    @Test
     fun `대표 조치는 NOTIFY_ONLY 를 제외한 첫 실행 조치다`() {
         val request = ActionApprovalRequest.parse(payload(actions = """["NOTIFY_ONLY", "RESTART_APP"]"""))
 

@@ -4,7 +4,10 @@ import java.time.Instant
 import org.springframework.stereotype.Repository
 import stillframe42.controlplane.approval.entity.ActionApprovalEntity
 import stillframe42.controlplane.approval.model.ActionApprovalRequest
+import stillframe42.controlplane.approval.model.ApprovalCard
 import stillframe42.controlplane.approval.model.ApprovalStatus
+import stillframe42.controlplane.approval.model.PendingApproval
+import stillframe42.controlplane.approval.model.SlackMessageRef
 
 /**
  * ActionApprovalRepository 의 JPA 구현 (DAY 22). 트랜잭션 경계는 서비스가 소유 —
@@ -45,4 +48,38 @@ class JpaActionApprovalRepository(
 
     override fun findLatestStatus(incidentId: String): String? =
         entityRepository.findFirstByIncidentIdOrderByIdDesc(incidentId)?.status
+
+    override fun recordSlackMessage(incidentId: String, message: SlackMessageRef): Boolean {
+        val pending = entityRepository.findByIncidentIdAndStatus(incidentId, ApprovalStatus.PENDING)
+            ?: return false // 발송 왕복 사이에 결정이 끝난 경합 — 마감 리스너가 카드를 못 찾는 건 수용
+        pending.recordSlackMessage(message.channel, message.messageTs)
+        return true
+    }
+
+    override fun markReminded(incidentId: String, remindedAt: Instant): Boolean {
+        val pending = entityRepository.findByIncidentIdAndStatus(incidentId, ApprovalStatus.PENDING)
+            ?: return false
+        if (pending.remindedAt != null) {
+            return false // 재알림 1회 규약 — 표식이 이미 있으면 반복하지 않는다
+        }
+        pending.markReminded(remindedAt)
+        return true
+    }
+
+    override fun findPendingRequestedBefore(cutoff: Instant): List<PendingApproval> =
+        entityRepository.findByStatusAndRequestedAtBefore(ApprovalStatus.PENDING, cutoff)
+            .map { PendingApproval(it.incidentId, it.requestedAt, it.remindedAt, it.slackMessageOrNull()) }
+
+    override fun findLatestCard(incidentId: String): ApprovalCard? =
+        entityRepository.findFirstByIncidentIdOrderByIdDesc(incidentId)?.let { entity ->
+            // 카드 내용은 저장된 페이로드 원문에서 재파싱 — 저장 시 한 번 통과한 본문이라 실패는 예외적
+            ActionApprovalRequest.parse(entity.actionPayload)
+                ?.let { ApprovalCard(it, entity.slackMessageOrNull()) }
+        }
+
+    private fun ActionApprovalEntity.slackMessageOrNull(): SlackMessageRef? {
+        val channel = slackChannel ?: return null
+        val messageTs = slackMessageTs ?: return null
+        return SlackMessageRef(channel, messageTs)
+    }
 }
