@@ -87,6 +87,15 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       # Slack Incoming Webhook (DAY 19) — infra/.env (git 미추적) 에서 보간, 값 미출력. 빈 값이면 알림 비활성
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      # Slack App 승인 카드·Socket Mode 버튼 수신 (DAY 23, ADR-0006) — infra/.env 에서 보간, 값 미출력.
+      # 빈 값이면 승인 Slack 경로만 비활성 (승인 API 는 항상 유효). 채널은 카드를 보낼 채널 ID
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
+      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
+      SLACK_APPROVAL_CHANNEL: ${SLACK_APPROVAL_CHANNEL:-}
+      # 승인 타임아웃 정책 (DAY 23, ADR-0006) — 기본 30m 재알림/60m 만료, Phase 4 3경로 검증은 단축값으로 덮어쓴다
+      APPROVAL_REMIND_AFTER: ${APPROVAL_REMIND_AFTER:-30m}
+      APPROVAL_EXPIRE_AFTER: ${APPROVAL_EXPIRE_AFTER:-60m}
+      APPROVAL_SWEEP_INTERVAL: ${APPROVAL_SWEEP_INTERVAL:-60s}
       POSTGRES_USER: ${POSTGRES_USER:-aiops}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aiops}
     ports:
