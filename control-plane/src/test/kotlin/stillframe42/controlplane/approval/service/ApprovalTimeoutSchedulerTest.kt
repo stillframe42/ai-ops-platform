@@ -52,6 +52,7 @@ class ApprovalTimeoutSchedulerTest {
             pending.filter { it.requestedAt.isBefore(cutoff) }
 
         override fun findLatestCard(incidentId: String): ApprovalCard? = null
+        override fun markExecuted(incidentId: String, executedAt: Instant, note: String): Boolean = false
     }
 
     private class RecordingMessenger : ApprovalMessenger {

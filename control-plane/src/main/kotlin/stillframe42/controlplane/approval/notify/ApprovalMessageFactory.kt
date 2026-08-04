@@ -12,6 +12,7 @@ import com.slack.api.model.block.element.BlockElements.button
 import java.time.Duration
 import java.time.Instant
 import stillframe42.controlplane.approval.model.ActionApprovalRequest
+import stillframe42.controlplane.approval.model.ActionExecution
 import stillframe42.controlplane.approval.model.ApprovalStatus
 
 /**
@@ -63,6 +64,19 @@ object ApprovalMessageFactory {
     /** 결정 결과 스레드 회신 — 카드 갱신과 별개로 스레드에 남겨 결정 이력이 대화로 보이게 */
     fun resultThreadText(status: String, decidedBy: String, decidedAt: Instant): String =
         resultLine(status, decidedBy, decidedAt)
+
+    /** 조치 실행 결과 스레드 회신 (DAY 24) — 결정 회신과 별개 메시지: 실행은 결정보다 늦게 끝난다 */
+    fun executionThreadText(executions: List<ActionExecution>): String {
+        if (executions.isEmpty()) {
+            return ":gear: 실행할 조치 없음 — 결정 통보만 진행"
+        }
+        return ":gear: *조치 실행 결과*\n" + executions.joinToString("\n") {
+            // 수동 항목은 실행이 아니라 요청 — 운영자가 할 일이 남았음을 눈에 띄게 (2026-08-04 결정)
+            val mark = if (it.manual) ":hand:" else if (it.ok) ":white_check_mark:" else ":x:"
+            val label = if (it.manual) "${it.action} *수동 조치 필요*" else it.action
+            "$mark $label — ${it.detail}"
+        }
+    }
 
     fun reminderText(remindAfter: Duration, expireAfter: Duration): String =
         ":hourglass_flowing_sand: 승인 대기 ${remindAfter.toMinutes()}분 경과 — " +

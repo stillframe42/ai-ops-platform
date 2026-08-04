@@ -40,6 +40,7 @@ class ApprovalControllerTest {
         override fun markReminded(incidentId: String, remindedAt: Instant): Boolean = false
         override fun findPendingRequestedBefore(cutoff: Instant): List<PendingApproval> = emptyList()
         override fun findLatestCard(incidentId: String): ApprovalCard? = null
+        override fun markExecuted(incidentId: String, executedAt: Instant, note: String): Boolean = false
     }
 
     private val incidentId = "inc-memory-pressure-20260801100000-ab12cd"
@@ -108,9 +109,10 @@ class ApprovalControllerTest {
     }
 
     @Test
-    fun `decisions 발행 실패는 503 - 재시도 가능 신호`() {
+    fun `실행 없는 결정의 decisions 발행 실패는 503 - 재시도 가능 신호`() {
+        // approved 는 즉시 발행하지 않으므로(실행 후 발행, ADR-0005) 동기 발행 실패 경로는 거부 쪽
         mvc(publishAccepted = false)
-            .perform(post("/api/incidents/$incidentId/approve"))
+            .perform(post("/api/incidents/$incidentId/reject"))
             .andExpect(status().isServiceUnavailable)
     }
 }

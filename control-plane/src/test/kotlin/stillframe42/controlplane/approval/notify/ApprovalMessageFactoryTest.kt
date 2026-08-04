@@ -12,6 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 import stillframe42.controlplane.approval.model.ActionApprovalRequest
+import stillframe42.controlplane.approval.model.ActionExecution
 import stillframe42.controlplane.approval.model.ApprovalStatus
 
 /**
@@ -94,6 +95,35 @@ class ApprovalMessageFactoryTest {
 
         assertTrue(text.contains("30분"))
         assertTrue(text.contains("60분"))
+    }
+
+    @Test
+    fun `실행 결과 회신은 조치별 성패와 상세를 나열한다`() {
+        val text = ApprovalMessageFactory.executionThreadText(
+            listOf(
+                ActionExecution("CIRCUIT_BREAK", true, "chaos/reset 호출 완료"),
+                ActionExecution("RESTART_APP", false, "docker restart 시간 초과"),
+            ),
+        )
+
+        assertTrue(text.contains(":white_check_mark: CIRCUIT_BREAK"))
+        assertTrue(text.contains(":x: RESTART_APP"))
+        assertTrue(text.contains("docker restart 시간 초과"))
+    }
+
+    @Test
+    fun `수동 조치 항목은 실행이 아니라 요청으로 표시된다`() {
+        val text = ApprovalMessageFactory.executionThreadText(
+            listOf(ActionExecution("RESTART_APP", true, "운영자 직접 실행 대상", manual = true)),
+        )
+
+        assertTrue(text.contains(":hand:"))
+        assertTrue(text.contains("수동 조치 필요"))
+    }
+
+    @Test
+    fun `실행 결과가 비어 있으면 통보만 진행함을 명시한다`() {
+        assertTrue(ApprovalMessageFactory.executionThreadText(emptyList()).contains("실행할 조치 없음"))
     }
 
     @Test

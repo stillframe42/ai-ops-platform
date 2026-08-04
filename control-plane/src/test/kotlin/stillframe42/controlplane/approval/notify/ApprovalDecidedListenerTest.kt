@@ -32,6 +32,7 @@ class ApprovalDecidedListenerTest {
         override fun markReminded(incidentId: String, remindedAt: Instant): Boolean = false
         override fun findPendingRequestedBefore(cutoff: Instant): List<PendingApproval> = emptyList()
         override fun findLatestCard(incidentId: String): ApprovalCard? = card
+        override fun markExecuted(incidentId: String, executedAt: Instant, note: String): Boolean = false
     }
 
     private class RecordingMessenger : ApprovalMessenger {

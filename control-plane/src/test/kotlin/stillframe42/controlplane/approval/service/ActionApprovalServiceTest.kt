@@ -9,6 +9,7 @@ import org.springframework.context.ApplicationEventPublisher
 import stillframe42.controlplane.alert.event.EventPublisher
 import stillframe42.controlplane.alert.event.OpsTopics
 import stillframe42.controlplane.approval.model.ActionApprovalRequest
+import stillframe42.controlplane.approval.model.ActionExecution
 import stillframe42.controlplane.approval.model.ApprovalCard
 import stillframe42.controlplane.approval.model.ApprovalDecisionOutcome
 import stillframe42.controlplane.approval.model.ApprovalStatus
@@ -62,6 +63,12 @@ class ActionApprovalServiceTest {
         override fun findPendingRequestedBefore(cutoff: Instant): List<PendingApproval> = emptyList()
 
         override fun findLatestCard(incidentId: String): ApprovalCard? = null
+
+        val executed = mutableListOf<Triple<String, Instant, String>>()
+        override fun markExecuted(incidentId: String, executedAt: Instant, note: String): Boolean {
+            executed += Triple(incidentId, executedAt, note)
+            return true
+        }
     }
 
     private class RecordingPublisher(private val accepted: Boolean = true) : EventPublisher {
@@ -133,7 +140,7 @@ class ActionApprovalServiceTest {
     }
 
     @Test
-    fun `승인 결정은 전이 후 decisions 를 발행한다`() {
+    fun `승인 결정은 전이만 - decisions 는 조치 실행 후 리스너가 발행한다 (ADR-0005 실행 후 발행)`() {
         val publisher = RecordingPublisher()
 
         val outcome = service(publisher = publisher)
@@ -142,11 +149,7 @@ class ActionApprovalServiceTest {
         val decided = assertIs<ApprovalDecisionOutcome.Decided>(outcome)
         assertEquals(ApprovalStatus.APPROVED, decided.status)
         assertEquals("U0123ABC", decided.decidedBy)
-        val (topic, key, payload) = publisher.published.single()
-        assertEquals(OpsTopics.ACTIONS_DECISIONS, topic)
-        assertEquals(incidentId, key)
-        assert(payload.contains("\"approved\"")) { "결정 status 가 페이로드에 실려야 한다: $payload" }
-        assert(payload.contains("U0123ABC"))
+        assertEquals(0, publisher.published.size)
     }
 
     @Test
@@ -199,16 +202,79 @@ class ActionApprovalServiceTest {
     }
 
     @Test
-    fun `decisions 발행 실패면 예외 - 트랜잭션 롤백으로 전이도 되돌린다`() {
+    fun `실행 없는 결정의 발행 실패면 예외 - 트랜잭션 롤백으로 전이도 되돌린다`() {
         // 전이만 남고 발행이 유실되면 agent-service 가 영영 승인 대기 — 롤백 후 재시도가 정직하다
         val events = RecordingEvents()
         val failing = service(publisher = RecordingPublisher(accepted = false), events = events)
 
         assertFailsWith<DecisionPublishFailedException> {
-            failing.decide(incidentId, ApprovalStatus.APPROVED, decidedBy = "U0123ABC")
+            failing.decide(incidentId, ApprovalStatus.REJECTED, decidedBy = "U0123ABC")
         }
         // 롤백되는 결정의 ApprovalDecided 도 없어야 한다 — 마감 회신이 미결정 카드를 닫으면 안 됨
         assertEquals(0, events.published.size)
+    }
+
+    @Test
+    fun `만료 결정도 즉시 발행한다 - 실행이 없는 결정은 기존 규약 유지`() {
+        val publisher = RecordingPublisher()
+
+        service(publisher = publisher).decide(incidentId, ApprovalStatus.EXPIRED, decidedBy = "system")
+
+        assert(publisher.published.single().third.contains("\"expired\""))
+    }
+
+    @Test
+    fun `실행 결과 기록은 성패·상세를 note 로 병합해 저장소에 위임한다`() {
+        val repository = RecordingRepository()
+
+        service(repository).recordExecution(
+            incidentId,
+            Instant.parse("2026-08-04T01:00:00Z"),
+            listOf(
+                ActionExecution("CIRCUIT_BREAK", true, "chaos/reset 호출 완료"),
+                ActionExecution("RESTART_APP", true, "운영자 직접 실행 대상", manual = true),
+                ActionExecution("SCALE_OUT", false, "미지원 조치"),
+            ),
+        )
+
+        val (recordedId, _, note) = repository.executed.single()
+        assertEquals(incidentId, recordedId)
+        assert(note.contains("CIRCUIT_BREAK: 성공"))
+        assert(note.contains("RESTART_APP: 수동 안내"))
+        assert(note.contains("SCALE_OUT: 실패"))
+    }
+
+    @Test
+    fun `실행 후 발행은 실행 결과를 페이로드에 담는다`() {
+        val publisher = RecordingPublisher()
+        val decidedAt = Instant.parse("2026-08-04T01:00:00Z")
+
+        val accepted = service(publisher = publisher).publishExecutedDecision(
+            ApprovalDecided(incidentId, ApprovalStatus.APPROVED, "U0123ABC", decidedAt),
+            listOf(ActionExecution("CIRCUIT_BREAK", true, "chaos/reset 호출 완료")),
+            decidedAt.plusSeconds(2),
+        )
+
+        assert(accepted)
+        val (topic, key, payload) = publisher.published.single()
+        assertEquals(OpsTopics.ACTIONS_DECISIONS, topic)
+        assertEquals(incidentId, key)
+        assert(payload.contains("\"execution\"")) { "실행 결과가 페이로드에 실려야 한다: $payload" }
+        assert(payload.contains("CIRCUIT_BREAK"))
+        assert(payload.contains("\"executed_at\""))
+    }
+
+    @Test
+    fun `실행 후 발행 실패는 예외 없이 false - 실행은 물리적 사실이라 롤백할 본체가 없다`() {
+        val publisher = RecordingPublisher(accepted = false)
+
+        val accepted = service(publisher = publisher).publishExecutedDecision(
+            ApprovalDecided(incidentId, ApprovalStatus.APPROVED, "U0123ABC", Instant.now()),
+            emptyList(),
+            Instant.now(),
+        )
+
+        assertEquals(false, accepted)
     }
 
     @Test

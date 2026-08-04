@@ -45,6 +45,7 @@ class ApprovalButtonHandlerTest {
         override fun markReminded(incidentId: String, remindedAt: Instant): Boolean = false
         override fun findPendingRequestedBefore(cutoff: Instant): List<PendingApproval> = emptyList()
         override fun findLatestCard(incidentId: String): ApprovalCard? = null
+        override fun markExecuted(incidentId: String, executedAt: Instant, note: String): Boolean = false
     }
 
     private val incidentId = "inc-error-rate-surge-20260803120000-ab12cd"
@@ -97,9 +98,10 @@ class ApprovalButtonHandlerTest {
     }
 
     @Test
-    fun `decisions 발행 접수 실패는 재시도 안내를 즉답한다 - 전이는 롤백`() {
+    fun `실행 없는 결정의 발행 접수 실패는 재시도 안내를 즉답한다 - 전이는 롤백`() {
+        // approved 는 즉시 발행하지 않으므로(실행 후 발행, ADR-0005) 동기 발행 실패 경로는 거부 쪽
         val reply = handler(publishAccepted = false)
-            .handle(ApprovalMessageFactory.ACTION_APPROVE, incidentId, "U0123ABC")
+            .handle(ApprovalMessageFactory.ACTION_REJECT, incidentId, "U0123ABC")
 
         assertTrue(assertNotNull(reply).contains("다시"))
     }

@@ -77,6 +77,16 @@ class JpaActionApprovalRepository(
                 ?.let { ApprovalCard(it, entity.slackMessageOrNull()) }
         }
 
+    override fun markExecuted(incidentId: String, executedAt: Instant, note: String): Boolean {
+        val latest = entityRepository.findFirstByIncidentIdOrderByIdDesc(incidentId)
+            ?: return false
+        if (latest.status != ApprovalStatus.APPROVED) {
+            return false // 실행 기록은 approved 행에만 — 그 밖의 상태는 실행 자체가 없어야 한다
+        }
+        latest.recordExecution(executedAt, note)
+        return true
+    }
+
     private fun ActionApprovalEntity.slackMessageOrNull(): SlackMessageRef? {
         val channel = slackChannel ?: return null
         val messageTs = slackMessageTs ?: return null

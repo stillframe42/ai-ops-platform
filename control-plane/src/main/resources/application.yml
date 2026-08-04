@@ -94,6 +94,12 @@ ops:
     remind-after: ${APPROVAL_REMIND_AFTER:30m}
     expire-after: ${APPROVAL_EXPIRE_AFTER:60m}
     sweep-interval: ${APPROVAL_SWEEP_INTERVAL:60s}
+  action:
+    # 승인 조치 실행 대상 (DAY 24, ADR-0005 — control-plane 대행). 기본값 소유는 여기 한 곳 —
+    # 환경 차이(컨테이너 내부 주소)만 application-docker.yml 이 덮어쓴다 (datasource 선례).
+    # restart-container 는 수동 조치 안내 문구의 명령 예시에 쓰인다 (자동 재시작 제외 — 2026-08-04 결정)
+    target-app-base-url: http://localhost:8080
+    restart-container: target-app
   report:
     # Slack 메시지의 상세 링크 기준 주소 — 사람이 브라우저로 여는 링크라 호스트 노출 포트(8081) 기준
     base-url: ${REPORT_BASE_URL:http://localhost:8081}

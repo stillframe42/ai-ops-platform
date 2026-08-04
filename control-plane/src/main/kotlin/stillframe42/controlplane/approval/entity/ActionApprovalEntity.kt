@@ -92,6 +92,12 @@ class ActionApprovalEntity(
         this.remindedAt = at
     }
 
+    /** 실행 감사 기록 (DAY 24, ADR-0005) — 결정 커밋 후 실행 리스너의 별도 트랜잭션에서 채워진다 */
+    fun recordExecution(at: Instant, note: String) {
+        this.executedAt = at
+        this.executionNote = note
+    }
+
     companion object {
         fun pendingFrom(request: ActionApprovalRequest) = ActionApprovalEntity(
             incidentId = request.incidentId,

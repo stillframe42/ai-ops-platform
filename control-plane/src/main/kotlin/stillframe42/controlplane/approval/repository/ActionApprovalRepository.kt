@@ -33,4 +33,7 @@ interface ActionApprovalRepository {
 
     /** 최신 승인 행의 카드 재구성 정보 — 결정 후 Slack 카드 마감(chat.update)용 */
     fun findLatestCard(incidentId: String): ApprovalCard?
+
+    /** 실행 결과 기록 — 최신 행이 approved 일 때만 true (실행은 승인 이후에만 존재하는 사실) */
+    fun markExecuted(incidentId: String, executedAt: Instant, note: String): Boolean
 }
