@@ -37,6 +37,15 @@
 - **승인 타임아웃** (DAY 23, ADR-0006) — 30분 미결정 시 스레드 재알림 1회 → 60분 시 expired
   전이(조치 미실행 종결, `decided_by=system`) — decisions 발행까지 승인과 같은 경로. 값은
   env `APPROVAL_REMIND_AFTER`/`APPROVAL_EXPIRE_AFTER`/`APPROVAL_SWEEP_INTERVAL` 로 설정
+- **승인 조치 실행 대행** (DAY 24, ADR-0005) — approved 확정 시 AFTER_COMMIT 실행 리스너
+  (전용 스레드풀)가 조치를 처리: `CIRCUIT_BREAK` = target-app `chaos/reset` 호출(자동 실행),
+  `RESTART_APP` = **수동 조치 안내** (자동 실행 제외 — 2026-08-04 결정, ADR-0005 추가 사항:
+  명령 예시를 카드 스레드에 회신하고 실행은 운영자 직접). 실행 감사는
+  `executed_at`/`execution_note`, 결과는 decisions 페이로드(`execution[]`, `manual` 표식 포함)와
+  카드 스레드 회신에 실린다. **"실행 후 발행" = 상태별 비대칭**: rejected/expired 만 decide
+  트랜잭션 안 즉시 발행 (롤백 규약 유지). 미지원 조치(SCALE_OUT 등)는 명시적 실패로 기록
+- **종결 보고 확장** (DAY 24) — 보고서의 approval/recovery 를 파싱해 Slack 종결 알림에
+  승인·조치 실행·회복 3줄 추가 (scenarios.md "수행 내용/수행 시각/회복 여부" 스펙)
 
 ## 실행
 
