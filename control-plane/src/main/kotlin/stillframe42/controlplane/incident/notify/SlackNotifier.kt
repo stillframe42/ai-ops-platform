@@ -74,6 +74,22 @@ class SlackNotifier(
         if (report.suggestedActions.isNotEmpty()) {
             lines += "• 제안 조치: ${report.suggestedActions.joinToString(", ")}"
         }
+        // 승인·실행·회복 요약 (DAY 24, scenarios.md 실행 결과 보고 스펙: 수행 내용/수행 시각/회복 여부)
+        report.approvalStatus?.let { status ->
+            lines += "• 승인: $status" +
+                (report.approvalDecidedBy?.takeIf { it.isNotBlank() }?.let { " (by $it)" } ?: "")
+        }
+        if (report.executions.isNotEmpty()) {
+            lines += "• 조치 실행: " +
+                report.executions.joinToString(", ") {
+                    "${it.action} ${if (it.manual) "수동 안내" else if (it.ok) "성공" else "실패"}"
+                } +
+                (report.executedAt?.let { " ($it)" } ?: "")
+        }
+        report.recoveryStatus?.let { status ->
+            lines += "• 회복: $status" +
+                (report.recoveryDetail?.takeIf { it.isNotBlank() }?.let { " — $it" } ?: "")
+        }
         lines += "• 상세: $baseUrl/api/incidents/${report.incidentId}"
         return lines.joinToString("\n")
     }

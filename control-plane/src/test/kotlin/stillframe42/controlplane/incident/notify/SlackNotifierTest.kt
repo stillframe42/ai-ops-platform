@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import stillframe42.controlplane.approval.model.ActionExecution
 import stillframe42.controlplane.incident.model.IncidentReport
 
 /**
@@ -41,6 +42,35 @@ class SlackNotifierTest {
         assertTrue(message.contains("confidence: 0.85"))
         assertTrue(message.contains("제안 조치: ROLLBACK, NOTIFY_ONLY"))
         assertTrue(message.contains("http://localhost:8081/api/incidents/inc-error-rate-surge-20260727031500-a1b2c3"))
+    }
+
+    @Test
+    fun `승인·실행·회복 요약이 있으면 종결 보고에 싣는다 - 실행 결과 보고 스펙 (DAY 24)`() {
+        val message = notifier().buildMessage(
+            completedReport().copy(
+                approvalStatus = "approved",
+                approvalDecidedBy = "U0123ABC",
+                executions = listOf(
+                    ActionExecution("CIRCUIT_BREAK", true, "chaos/reset 호출 완료"),
+                    ActionExecution("RESTART_APP", true, "운영자 직접 실행 대상", manual = true),
+                ),
+                executedAt = Instant.parse("2026-08-04T01:05:00Z"),
+                recoveryStatus = "recovered",
+                recoveryDetail = "Alert 해소 확인",
+            ),
+        )
+
+        assertTrue(message.contains("승인: approved (by U0123ABC)"))
+        assertTrue(message.contains("조치 실행: CIRCUIT_BREAK 성공, RESTART_APP 수동 안내"))
+        assertTrue(message.contains("회복: recovered — Alert 해소 확인"))
+    }
+
+    @Test
+    fun `승인 왕복 없던 보고서는 승인·회복 줄 자체가 없다`() {
+        val message = notifier().buildMessage(completedReport())
+
+        assertFalse(message.contains("승인:"))
+        assertFalse(message.contains("회복:"))
     }
 
     @Test

@@ -2,6 +2,7 @@ package stillframe42.controlplane.incident.model
 
 import java.time.Instant
 import java.time.OffsetDateTime
+import stillframe42.controlplane.approval.model.ActionExecution
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
 
@@ -25,6 +26,13 @@ data class IncidentReport(
     val suggestedActions: List<String>,
     val completedAt: Instant?,
     val raw: String,
+    // 승인·실행·회복 요약 (DAY 24, ADR-0005) — 승인 왕복이 없던 보고서는 null·빈 목록 유지
+    val approvalStatus: String? = null,
+    val approvalDecidedBy: String? = null,
+    val executions: List<ActionExecution> = emptyList(),
+    val executedAt: Instant? = null,
+    val recoveryStatus: String? = null,
+    val recoveryDetail: String? = null,
 ) {
 
     companion object {
@@ -40,6 +48,8 @@ data class IncidentReport(
             val scenario = root.path("scenario").stringOrNull() ?: return null
             val status = root.path("status").stringOrNull() ?: return null
             val analysis = root.path("analysis")
+            val approval = root.path("approval")
+            val recovery = root.path("recovery")
             return IncidentReport(
                 incidentId = incidentId,
                 scenario = scenario,
@@ -55,8 +65,31 @@ data class IncidentReport(
                 completedAt = root.path("completed_at").stringOrNull()
                     ?.let { runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull() },
                 raw = payload,
+                approvalStatus = approval.path("status").stringOrNull(),
+                approvalDecidedBy = approval.path("decided_by").stringOrNull(),
+                executions = approval.path("executions").executionList(),
+                executedAt = approval.path("executed_at").stringOrNull()
+                    ?.let { runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull() },
+                recoveryStatus = recovery.path("status").stringOrNull(),
+                recoveryDetail = recovery.path("detail").stringOrNull(),
             )
         }
+
+        private fun JsonNode.executionList(): List<ActionExecution> =
+            if (isArray) {
+                mapNotNull { item ->
+                    item.path("action").stringOrNull()?.let { action ->
+                        ActionExecution(
+                            action = action,
+                            ok = item.path("ok").let { it.isBoolean && it.booleanValue() },
+                            detail = item.path("detail").stringOrNull() ?: "",
+                            manual = item.path("manual").let { it.isBoolean && it.booleanValue() },
+                        )
+                    }
+                }
+            } else {
+                emptyList()
+            }
 
         private fun JsonNode.stringOrNull(): String? = if (isString) stringValue() else null
 
