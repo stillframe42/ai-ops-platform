@@ -18,6 +18,7 @@ from app.agents.analysis_agent import analysis_node
 from app.agents.monitor_agent import monitor_node
 from app.supervisor import router
 from app.supervisor.approval import approval_node
+from app.supervisor.recovery import recovery_node
 from app.supervisor.state import AIOpsState, NodeFailure
 
 # Supervisor 라우팅 결정값
@@ -28,6 +29,9 @@ DONE = "done"
 
 # 승인 노드 — 라우팅 결정값이 아니라 action 뒤 정적 경유지 (ADR-0005)
 APPROVAL = "approval"
+
+# 회복 확인 노드 — approval 뒤 정적 경유지 (DAY 24): 실행 결과를 보고 Alert 해소를 재평가
+RECOVERY = "recovery"
 
 # 무한 루프 방지 — LLM 라우터가 재분석을 반복해도 이 한도에서 끊는다.
 # 정상 흐름은 4회 (monitor/analysis/action 진입 3 + 종료 판정 1), 재분석 1회까지 허용.
@@ -40,8 +44,9 @@ CONFIDENCE_THRESHOLD = 0.6
 GRAPH_RECURSION_LIMIT = 25
 
 # 노드별 타임아웃 (초) — 협조적 취소(asyncio) 기반이라 에이전트 노드가 async 인 것이 전제.
-# 분석은 도구 호출 루프가 길어 여유를 준다 (DAY 12 실측: 정상 노드 8~31초)
-NODE_TIMEOUTS: dict[str, float] = {MONITOR: 60.0, ANALYSIS: 180.0, ACTION: 120.0}
+# 분석은 도구 호출 루프가 길어 여유를 준다 (DAY 12 실측: 정상 노드 8~31초).
+# recovery 는 내부 폴링 예산(수동 조치 포함 시 600s)보다 크게 — 내부 예산이 1차, 노드 타임아웃이 2차 방어
+NODE_TIMEOUTS: dict[str, float] = {MONITOR: 60.0, ANALYSIS: 180.0, ACTION: 120.0, RECOVERY: 660.0}
 
 
 def retry_on_transient(exc: Exception) -> bool:
@@ -176,6 +181,13 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
     # 승인 노드는 순수 노드로 등록 — interrupt 가 예외 전파로 동작하므로 error_handler·
     # retry 가 붙으면 승인 대기가 실패 기록으로 오인된다 (app/supervisor/approval.py)
     builder.add_node(APPROVAL, approval_node)
+    # 회복 확인은 LLM 없는 규칙 폴링 — 재시도 정책 불요, 실패만 기록 (DAY 24)
+    builder.add_node(
+        RECOVERY,
+        recovery_node,
+        error_handler=record_node_failure,
+        timeout=NODE_TIMEOUTS[RECOVERY],
+    )
 
     builder.add_edge(START, "supervisor")
     builder.add_conditional_edges(
@@ -184,11 +196,13 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
         {MONITOR: MONITOR, ANALYSIS: ANALYSIS, ACTION: ACTION, DONE: END},
     )
     # 각 에이전트는 작업 후 반드시 Supervisor 로 복귀 — 라우팅 결정 지점을 한 곳으로 유지.
-    # action 만 approval 을 경유한다 (조치 실행 전 human-in-the-loop, ADR-0005) —
-    # P3 는 supervisor 조기 종료로 action 에 오지 않으므로 승인 요구도 구조적으로 P1/P2 뿐.
+    # action 만 approval → recovery 를 경유한다 (조치 실행 전 human-in-the-loop → 실행 후
+    # 회복 재평가, ADR-0005) — P3 는 supervisor 조기 종료로 action 에 오지 않으므로
+    # 승인·회복 확인도 구조적으로 P1/P2 뿐. supervisor 방문 수는 종전과 동일 (경유지 교체).
     builder.add_edge(MONITOR, "supervisor")
     builder.add_edge(ANALYSIS, "supervisor")
     builder.add_edge(ACTION, APPROVAL)
-    builder.add_edge(APPROVAL, "supervisor")
+    builder.add_edge(APPROVAL, RECOVERY)
+    builder.add_edge(RECOVERY, "supervisor")
 
     return builder.compile(checkpointer=checkpointer)

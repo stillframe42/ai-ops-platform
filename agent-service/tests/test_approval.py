@@ -131,7 +131,11 @@ def test_approved_decision_resumes_to_completion() -> None:
         "status": "approved",
         "decided_by": "U0123ABC",
         "note": "재시작 실행 완료",
+        "executions": [],
+        "executed_at": "",
     }
+    # 실행 결과 없는 승인은 회복 확인도 생략된다 (DAY 24)
+    assert result["recovery"]["status"] == "skipped"
 
 
 def test_rejected_decision_ends_without_execution() -> None:
@@ -162,6 +166,36 @@ def test_unknown_decision_payload_is_rejected_safely() -> None:
     result = asyncio.run(run())
     assert result["approval"]["status"] == "rejected"
     assert "알 수 없는 결정" in result["approval"]["note"]
+
+
+def test_execution_results_flow_into_recovery(monkeypatch) -> None:
+    """실행 결과가 재개 입력에 실리면 회복 확인이 Alert 해소를 재평가한다 (DAY 24, ADR-0005)."""
+    from app.supervisor import recovery as recovery_module
+
+    monkeypatch.setattr(recovery_module, "_active_alert_names", lambda: set())
+    runtime = _runtime()
+
+    async def run() -> dict:
+        await runtime.start(build_incident("memory-pressure", incident_id="inc-appr-006"))
+        await runtime.resume_with_decision(
+            "inc-appr-006",
+            {
+                "status": "approved",
+                "decided_by": "U0123ABC",
+                "execution": [
+                    {"action": "RESTART_APP", "ok": True, "detail": "docker restart 완료"}
+                ],
+                "executed_at": "2026-08-04T01:00:00Z",
+            },
+        )
+        return await runtime.get_result("inc-appr-006")
+
+    result = asyncio.run(run())
+    assert result["approval"]["executions"] == [
+        {"action": "RESTART_APP", "ok": True, "detail": "docker restart 완료", "manual": False}
+    ]
+    assert result["approval"]["executed_at"] == "2026-08-04T01:00:00Z"
+    assert result["recovery"]["status"] == "recovered"
 
 
 def test_notify_only_plan_skips_approval(monkeypatch) -> None:

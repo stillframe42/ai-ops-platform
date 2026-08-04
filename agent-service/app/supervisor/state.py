@@ -60,6 +60,19 @@ class ActionPlan(BaseModel):
     risk: str = ""
 
 
+class ActionExecution(BaseModel):
+    """조치 1건의 실행 결과 — control-plane 이 실행 후 decisions 페이로드로 전달 (DAY 24, ADR-0005).
+
+    manual = 자동 실행이 아니라 운영자 수동 조치 안내로 처리된 항목 (RESTART_APP, 2026-08-04 결정)
+    — 회복 확인이 사람 손 기준으로 대기 예산을 늘려 잡는 근거.
+    """
+
+    action: str = ""
+    ok: bool = False
+    detail: str = ""
+    manual: bool = False
+
+
 class ApprovalDecision(BaseModel):
     """승인 결정 — ops.actions.decisions 페이로드를 정규화한 그래프 재개 입력 (ADR-0005).
 
@@ -69,6 +82,18 @@ class ApprovalDecision(BaseModel):
     status: Literal["approved", "rejected", "expired", "skipped"]
     decided_by: str = ""  # Slack user ID 또는 API 호출 주체 — 감사 기록 (ADR-0006)
     note: str = ""
+    # 실행 결과 (DAY 24) — approved 는 control-plane 이 실행 후 발행하므로 채워진다, 회복 판정의 입력
+    executions: list[ActionExecution] = Field(default_factory=list)
+    executed_at: str = ""  # 실행 완료 시각 (ISO 문자열) — 종결 보고의 "수행 시각"
+
+
+class RecoveryResult(BaseModel):
+    """회복 판정 — 조치 후 트리거 조건(Alert) 재평가 결과 (DAY 24, scenarios.md 실행 결과 보고 스펙)."""
+
+    status: Literal["recovered", "not_recovered", "skipped"] = "skipped"
+    detail: str = ""
+    checked_at: str = ""  # ISO 8601 문자열 — 체크포인트 직렬화 안정성 우선
+    attempts: int = 0
 
 
 class NodeFailure(BaseModel):
@@ -89,6 +114,7 @@ class AIOpsState(TypedDict):
     analysis: NotRequired[AnalysisResult | None]
     action: NotRequired[ActionPlan | None]
     approval: NotRequired[ApprovalDecision | None]
+    recovery: NotRequired[RecoveryResult | None]
     supervisor_decision: NotRequired[str]  # 라우팅 결정 (관측·디버깅용으로 상태에 남긴다)
     supervisor_visits: NotRequired[int]  # 무한 루프 방지 카운터 — 한도 초과 시 강제 종료
     # 노드 실패 축적 — add 리듀서라 각 error_handler 의 기록이 덮어쓰지 않고 누적된다

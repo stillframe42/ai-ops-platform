@@ -19,12 +19,14 @@ from app.config.settings import Settings
 from app.config.tracing import build_langfuse_handler
 from app.supervisor.graph import DONE, GRAPH_RECURSION_LIMIT, build_graph
 from app.supervisor.state import (
+    ActionExecution,
     ActionPlan,
     AnalysisResult,
     ApprovalDecision,
     IncidentInfo,
     MonitoringResult,
     NodeFailure,
+    RecoveryResult,
     Scenario,
 )
 
@@ -53,6 +55,8 @@ def build_checkpoint_serializer() -> JsonPlusSerializer:
             AnalysisResult,
             ActionPlan,
             ApprovalDecision,
+            ActionExecution,
+            RecoveryResult,
             NodeFailure,
         ]
     )
@@ -212,6 +216,7 @@ class GraphRuntime:
             "analysis": dump("analysis"),
             "action": dump("action"),
             "approval": dump("approval"),  # 승인 감사 정보 — control-plane 보고서의 입력
+            "recovery": dump("recovery"),  # 회복 판정 (DAY 24) — 종결 보고의 "회복 여부"
             "errors": errors,
             "pending_errors": pending_errors,
             "supervisor_visits": values.get("supervisor_visits", 0),

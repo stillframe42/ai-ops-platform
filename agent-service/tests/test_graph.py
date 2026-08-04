@@ -89,8 +89,9 @@ def test_dummy_end_to_end() -> None:
     assert result["analysis"] is not None
     assert result["action"] is not None
     assert result["supervisor_decision"] == "done"
-    # 각 노드가 messages 에 흔적을 남긴다 — monitor/analysis/action 3건 + approval(승인 생략) 1건
-    assert len(result["messages"]) == 4
+    # 각 노드가 messages 에 흔적을 남긴다 — monitor/analysis/action 3건 + approval(승인 생략)
+    # + recovery(확인 생략, DAY 24) 각 1건
+    assert len(result["messages"]) == 5
 
 
 def test_p3_skips_action() -> None:

@@ -16,7 +16,7 @@ from datetime import UTC, datetime
 from langchain_core.messages import AIMessage
 from langgraph.types import interrupt
 
-from app.supervisor.state import AIOpsState, ApprovalDecision
+from app.supervisor.state import ActionExecution, AIOpsState, ApprovalDecision
 
 # 사람 승인 없이 지나가도 되는 조치 — 알림뿐이라 인프라 변경이 없다
 NO_APPROVAL_ACTIONS = frozenset({"NOTIFY_ONLY"})
@@ -44,12 +44,30 @@ def build_approval_request(state: AIOpsState) -> dict:
     }
 
 
+def _normalize_executions(raw: object) -> list[ActionExecution]:
+    """decisions 페이로드의 execution 배열 — 형식이 어긋난 항목은 버린다 (실행 결과는 참고 정보)."""
+    if not isinstance(raw, list):
+        return []
+    return [
+        ActionExecution(
+            action=str(item.get("action") or ""),
+            ok=bool(item.get("ok", False)),
+            detail=str(item.get("detail") or ""),
+            manual=bool(item.get("manual", False)),
+        )
+        for item in raw
+        if isinstance(item, dict)
+    ]
+
+
 def _normalize(raw: object) -> ApprovalDecision:
     if isinstance(raw, dict) and raw.get("status") in DECISION_STATUSES:
         return ApprovalDecision(
             status=raw["status"],
             decided_by=str(raw.get("decided_by") or ""),
             note=str(raw.get("note") or ""),
+            executions=_normalize_executions(raw.get("execution")),
+            executed_at=str(raw.get("executed_at") or ""),
         )
     # 알 수 없는 페이로드는 안전 측 거부 — 승인 없이 실행에 도달하는 경로를 만들지 않는다
     return ApprovalDecision(status="rejected", note=f"알 수 없는 결정 페이로드: {raw!r}"[:300])
