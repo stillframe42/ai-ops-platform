@@ -104,7 +104,7 @@ flowchart LR
     api["FastAPI<br/>trigger / resume / state / history<br/>(수동 트리거는 디버그용)"]
     rt["GraphRuntime<br/>백그라운드 실행 · 상태 조회<br/>결과를 ops.analysis.results 로 발행"]
 
-    subgraph graph["Supervisor StateGraph"]
+    subgraph sg["Supervisor StateGraph"]
         sup["supervisor<br/>하이브리드 라우팅 (규칙 + LLM)"]
         mon["monitor<br/>메트릭 수집·상황 요약"]
         ana["analysis<br/>원인 가설·검증<br/>(MCP 도구: 배포 이력·유사 인시던트·앱 설정)"]
@@ -117,11 +117,11 @@ flowchart LR
 
     consumer --> rt
     api --> rt
-    rt --> graph
+    rt --> sg
     sup --> mon --> sup
     sup --> ana --> sup
     sup --> act --> appr --> rec --> sup
-    graph --> ckpt
+    sg --> ckpt
 ```
 
 - 트리거는 Kafka 소비가 기본 ([ADR-0011](adr/0011-kafka-trigger.md)) — thread_id = incident_id, done 재트리거 차단(결과는 재발행), 미완 체크포인트는 resume (Durable Execution 결합)
