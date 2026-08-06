@@ -54,6 +54,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="ai-ops-platform agent-service", lifespan=lifespan)
 
+# A2A 병행 노출 (Phase 5 실험) — 기존 REST·Kafka 경로의 대체가 아니라 추가 진입점.
+# 카드는 /.well-known/agent-card.json, RPC 는 루트 POST 라 기존 라우트와 충돌 없음
+if get_settings().a2a_enabled:
+    from app.a2a.server import mount_a2a
+
+    mount_a2a(app, base_url=get_settings().a2a_base_url)
+
 
 class TriggerRequest(BaseModel):
     # "unknown" 은 Alert payload 정규화 실패 대비 값 — 수동 트리거로는 주입 불가

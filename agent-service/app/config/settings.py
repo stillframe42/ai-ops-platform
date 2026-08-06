@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     # LangGraph 체크포인트 저장소 (DAY 12, ADR-0009 예정)
     checkpoint_db_url: str | None = None
 
+    # A2A 서버 병행 노출 (Phase 5 실험 — feature/a2a-experiment 전용, 키-게이트 관례)
+    # base_url 은 Agent Card 에 실리는 외부 접근 주소 — 마운트된 앱의 공개 주소와 일치해야 한다
+    a2a_enabled: bool = False
+    a2a_base_url: str = "http://localhost:8000/"
+
     # Langfuse (DAY 14)
     langfuse_host: str | None = None
     langfuse_public_key: str | None = None
