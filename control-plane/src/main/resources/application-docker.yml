@@ -9,6 +9,10 @@ spring:
     # compose 내부 네트워크 기준 — controlplane DB 는 postgres 컨테이너에 분리 생성 (Langfuse 선례)
     url: jdbc:postgresql://postgres:5432/controlplane
 
+  kafka:
+    # compose 내부 리스너 — 환경 차이값은 프로파일 소유 (datasource 선례, 2026-08-07 compose env 정리로 이관)
+    bootstrap-servers: kafka:9092
+
 ops:
   action:
     # compose 내부 네트워크 기준 — 조치 실행(chaos/reset)은 컨테이너 이름으로 도달 (DAY 24)

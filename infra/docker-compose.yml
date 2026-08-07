@@ -58,7 +58,8 @@ services:
       # MCP 도구 서버 (DAY 16, ADR-0010) — 컨테이너 내부 네트워크 기준, 로컬 기본값(localhost:8081)을 덮어쓴다.
       # control-plane 에 depends_on 을 걸지 않는다 — 발견 실패 시 로컬 도구 강등(부분 진행)이 설계 경로
       MCP_SERVER_URL: http://control-plane:8080/mcp
-      MCP_API_KEY: ${MCP_API_KEY:-}
+      # 값 없는 선언 = pass-through (2026-08-07 정리) — 미설정 시 미전달, control-plane 과 같은 원천(.env) 공유
+      MCP_API_KEY:
       # Kafka 인시던트 컨슈머 (DAY 18, ADR-0011) — 컨테이너 내부 리스너, 로컬 기본값(localhost:9094)을 덮어쓴다.
       # kafka 에 depends_on 을 걸지 않는다 — 접속 실패는 컨슈머의 백오프 재시도가 흡수 (앱 기동 유지)
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
@@ -77,27 +78,31 @@ services:
     # 유사 인시던트 벡터 검색을 위해 postgres(pgvector) 의 controlplane DB 사용 (최초 1회 생성 — postgres 주석)
     build: ../control-plane
     container_name: control-plane
+    # 값 없는 선언 = pass-through (2026-08-07 정리, 8/3 합의): infra/.env 또는 셸 env 에 있으면
+    # 전달하고, 미설정이면 변수 자체를 전달하지 않는다 (빈 문자열 아님 — 실측 확인).
+    # 기본값 소유는 application.yml 한 곳 — compose 에 기본값을 복제하지 않는다.
+    # Kafka 접속 주소는 application-docker.yml 이관 (datasource 선례 — 환경 차이값은 프로파일 소유).
+    # kafka 에 depends_on 을 걸지 않는다 — Kafka 다운 시에도 webhook 202 수신은 유지(발행 실패는 로그)가 설계 경로
     environment:
-      # 시드 인시던트 임베딩 전용 키 (OpenAI) — infra/.env (git 미추적) 에서 보간, 값 미출력
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      # /mcp API Key 인증 (DAY 16) — agent-service 와 같은 값 공유, 빈 값이면 인증 생략
-      MCP_API_KEY: ${MCP_API_KEY:-}
-      # Kafka 프로듀서 (DAY 17) + 결과 컨슈머 (DAY 19) — 컨테이너 내부 리스너. 로컬 개발 기본값(localhost:9094)을 덮어쓴다.
-      # kafka 에 depends_on 을 걸지 않는다 — Kafka 다운 시에도 webhook 202 수신은 유지(발행 실패는 로그)가 설계 경로
-      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      # Slack Incoming Webhook (DAY 19) — infra/.env (git 미추적) 에서 보간, 값 미출력. 빈 값이면 알림 비활성
-      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
-      # Slack App 승인 카드·Socket Mode 버튼 수신 (DAY 23, ADR-0006) — infra/.env 에서 보간, 값 미출력.
-      # 빈 값이면 승인 Slack 경로만 비활성 (승인 API 는 항상 유효). 채널은 카드를 보낼 채널 ID
-      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN:-}
-      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN:-}
-      SLACK_APPROVAL_CHANNEL: ${SLACK_APPROVAL_CHANNEL:-}
-      # 승인 타임아웃 정책 (DAY 23, ADR-0006) — 기본 30m 재알림/60m 만료, Phase 4 3경로 검증은 단축값으로 덮어쓴다
-      APPROVAL_REMIND_AFTER: ${APPROVAL_REMIND_AFTER:-30m}
-      APPROVAL_EXPIRE_AFTER: ${APPROVAL_EXPIRE_AFTER:-60m}
-      APPROVAL_SWEEP_INTERVAL: ${APPROVAL_SWEEP_INTERVAL:-60s}
-      POSTGRES_USER: ${POSTGRES_USER:-aiops}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aiops}
+      # 시드 인시던트 임베딩 전용 키 (OpenAI) — 미설정 시 검색 도구만 조용히 비활성
+      OPENAI_API_KEY:
+      # /mcp API Key 인증 (DAY 16) — agent-service 와 같은 값 공유, 미설정 시 인증 생략
+      MCP_API_KEY:
+      # Slack Incoming Webhook (DAY 19) — 미설정 시 알림 비활성
+      SLACK_WEBHOOK_URL:
+      # Slack App 승인 카드·Socket Mode 버튼 수신 (DAY 23, ADR-0006) —
+      # 셋 중 하나라도 없으면 승인 Slack 경로만 비활성 (승인 API 는 항상 유효). 채널은 카드를 보낼 채널 ID
+      SLACK_BOT_TOKEN:
+      SLACK_APP_TOKEN:
+      SLACK_APPROVAL_CHANNEL:
+      # 승인 타임아웃 정책 (DAY 23, ADR-0006) — 기본값(30m/60m/60s)은 application.yml 소유,
+      # Phase 4 류의 단축값 검증은 셸 env 로 덮어쓴다 (예: APPROVAL_REMIND_AFTER=1m docker compose up -d control-plane)
+      APPROVAL_REMIND_AFTER:
+      APPROVAL_EXPIRE_AFTER:
+      APPROVAL_SWEEP_INTERVAL:
+      # DB 크리덴셜 — 기본값(aiops)은 application.yml 소유, postgres 서비스 초기화 값과 같은 원천(.env)을 공유
+      POSTGRES_USER:
+      POSTGRES_PASSWORD:
     ports:
       # 8080 은 target-app 이 점유 — control-plane 은 호스트 8081 로
       - "8081:8080"
