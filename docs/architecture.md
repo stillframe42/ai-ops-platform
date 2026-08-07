@@ -1,6 +1,6 @@
 # 시스템 아키텍처 (C4)
 
-C4 모델의 Level 1(System Context)·Level 2(Container). 미결인 경로는 **점선**으로 표기해 "결정 전"임을 드러낸다 — 각 미결 항목은 [scenarios.md 의 ADR 후보 목록](scenarios.md#미결-사항--adr-후보)에 번호가 예약되어 있다.
+C4 모델의 Level 1(System Context)·Level 2(Container). 미결 경로는 **점선**으로 표기하는 관례였으나, 2026-08-04 기준 예약된 미결 경로가 전부 확정 전환되어 현재 점선 없음 — 새 미결 경로가 생기면 같은 관례로 표기하고 [scenarios.md 의 ADR 후보 목록](scenarios.md#미결-사항--adr-후보)에 번호를 예약한다.
 
 갱신 이력: Alertmanager([ADR-0003](adr/0003-alertmanager-webhook.md))·Loki([ADR-0004](adr/0004-loki-adoption.md)) 확정 (2026-07-14) → 3주차 마감 반영 (2026-07-28): control-plane 실체화, 도구 노출 MCP([ADR-0010](adr/0010-mcp-tool-exposure.md)), 트리거 Kafka 이벤트([ADR-0011](adr/0011-kafka-trigger.md)), 결과 저장·Slack 알림 확정 → 4주차 반영 (2026-08-04): 승인 왕복 활성(`ops.actions.pending`/`decisions`), Slack 승인 카드·Socket Mode 버튼([ADR-0006](adr/0006-slack-approval-ux.md)), 조치 실행 control-plane 대행([ADR-0005](adr/0005-action-executor.md)), 회복 확인 노드.
 

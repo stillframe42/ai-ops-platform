@@ -6,16 +6,16 @@
 
 운영 중인 서비스의 장애를 사람이 대시보드를 지켜보다 발견하는 대신, 에이전트가 감지하고 분석해서 대응까지 이어주는 플랫폼이다. 모니터링 에이전트가 메트릭 이상(latency 급증, 에러율 상승, 메모리 누수 패턴)을 감지하면, 분석 에이전트가 메트릭과 로그를 조사해 원인 보고서를 만들고 Slack 으로 알린다. 재시작·스케일아웃 같은 조치가 필요한 경우 실행 에이전트가 대응을 제안하되, 반드시 사람의 승인(human-in-the-loop)을 거친 뒤에만 실행한다. 모니터링 대상은 저장소에 포함된 데모 앱(target-app)으로, 장애를 일부러 일으키는 fault-injection 수단을 제공해 전체 시나리오를 재현 가능하게 한다.
 
-## 목표 아키텍처
+## 아키텍처
 
 | 컴포넌트 | 책임 |
 |----------|------|
-| [`control-plane/`](control-plane/) | 관제/API/게이트웨이 — 에이전트 오케스트레이션 진입점과 human-in-the-loop 승인 API |
-| [`agent-service/`](agent-service/) | 멀티 에이전트 — 모니터링(감지)/분석(원인 조사)/실행(조치 제안) 에이전트 |
+| [`control-plane/`](control-plane/) | 관제/API/게이트웨이 — Alert 수신·인시던트 발행, MCP 운영 도구 서버, 보고서 저장·조회 API, Slack 알림·승인 카드, human-in-the-loop 승인 API·조치 실행 대행 |
+| [`agent-service/`](agent-service/) | 멀티 에이전트 — Supervisor 그래프가 모니터링(감지)/분석(원인 조사)/실행(조치 제안) 에이전트를 조율, 승인 대기(interrupt)·회복 확인 노드 포함 |
 | [`target-app/`](target-app/) | 모니터링 대상 데모 앱 — fault-injection(지연/에러율/메모리 누수) 제공 |
-| [`infra/`](infra/) | 로컬 실행 인프라 — docker-compose 단일 진입점, Prometheus, Grafana |
+| [`infra/`](infra/) | 로컬 실행 인프라 — docker-compose 단일 진입점 (Prometheus·Alertmanager·Grafana·Loki·Kafka·Langfuse·PostgreSQL) |
 
-C4 다이어그램(System Context / Container)은 [`docs/architecture.md`](docs/architecture.md)에서 관리한다. 아키텍처 결정 이력은 [`docs/adr/`](docs/adr/) 참고.
+C4 다이어그램(System Context / Container / agent-service 내부)과 컨테이너 간 통신 프로토콜 표는 [`docs/architecture.md`](docs/architecture.md)에서 관리한다. 시나리오 정의는 [`docs/scenarios.md`](docs/scenarios.md), 아키텍처 결정 이력은 [`docs/adr/`](docs/adr/) 참고.
 
 ## 기술 스택
 
@@ -30,8 +30,60 @@ C4 다이어그램(System Context / Container)은 [`docs/architecture.md`](docs/
 | 로그 | Loki + Alloy | 분석 에이전트 조회 도구 ([ADR-0004](docs/adr/0004-loki-adoption.md)) |
 | 대시보드 | Grafana | |
 | LLM 관측·비용 | Langfuse v3 (자가 호스팅) | 세션 = 인시던트 |
-| 알림/승인 채널 | Slack | 분석 보고 알림은 incoming webhook 확정 — 승인 인터랙션 방식은 미정 (ADR-0006 예약) |
+| 알림/승인 채널 | Slack | 분석 보고 알림은 incoming webhook, 승인은 Slack App — Block Kit 버튼 + Socket Mode 수신 ([ADR-0006](docs/adr/0006-slack-approval-ux.md)) |
 | 로컬 실행 | docker-compose | `infra/` 단일 통합 지점 ([ADR-0001](docs/adr/0001-monorepo.md)) |
+
+## 로컬 실행
+
+전체 스택은 `infra/` 의 docker-compose 하나로 기동한다 ([ADR-0001](docs/adr/0001-monorepo.md)).
+
+### 1. 사전 준비물 (.env 2곳, git 미추적)
+
+| 파일 | 항목 | 필수 여부 |
+|------|------|-----------|
+| `agent-service/.env` | `ANTHROPIC_API_KEY` | **필수** — 분석 LLM 호출 |
+| `infra/.env` | `SLACK_WEBHOOK_URL` / `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` / `SLACK_APPROVAL_CHANNEL` | 선택 — 없으면 Slack 알림·승인 카드만 조용히 비활성 (승인 API 는 항상 유효) |
+| `infra/.env` | `OPENAI_API_KEY` (임베딩 전용) / `MCP_API_KEY` | 선택 — 없으면 유사 인시던트 검색 / MCP 인증만 비활성 |
+
+미설정 항목은 기능 단위로 조용히 비활성되는 키-게이트 관례라, 최소 `ANTHROPIC_API_KEY` 하나로 시작할 수 있다.
+
+### 2. 기동
+
+```bash
+cd infra
+docker compose up -d postgres
+# 최초 1회 — 공유 postgres 에 DB 분리 생성 (Langfuse / control-plane)
+docker exec postgres createdb -U aiops langfuse
+docker exec postgres createdb -U aiops controlplane
+docker compose up -d
+```
+
+### 3. 데모 (시나리오 2 — 에러율 급증 + 승인 조치)
+
+```bash
+# chaos 주입: 요청의 30% 를 5xx 로 (k6 상시 트래픽이 표본을 채운다)
+curl -X POST 'http://localhost:8080/chaos/error-rate?percent=30'
+```
+
+3분 지속 후 Alert 발화 → 인시던트 발행 → 분석 → Slack 승인 카드가 도착한다. [승인] 클릭 시 control-plane 이 조치를 대행 실행하고, 회복 확인 후 종결 보고가 스레드로 온다. Slack 미연동 환경은 승인 API 로 대신한다:
+
+```bash
+curl -s http://localhost:8081/api/incidents                          # 인시던트·승인 대기 확인
+curl -X POST http://localhost:8081/api/incidents/{incidentId}/approve # 또는 /reject
+curl -X POST http://localhost:8080/chaos/reset                        # 데모 후 원복
+```
+
+### 4. 관측 UI (호스트 포트)
+
+| 포트 | 서비스 | 용도 |
+|------|--------|------|
+| 8080 | target-app | 데모 대상 · chaos 주입 |
+| 8081 | control-plane | 보고서·승인 API · MCP 서버 |
+| 8000 | agent-service | 인시던트 상태·히스토리 API (수동 트리거는 디버그용) |
+| 3002 | Grafana | 메트릭·로그 대시보드 |
+| 9091 / 9093 | Prometheus / Alertmanager | 룰·Alert 상태 확인 |
+| 3003 | Langfuse | LLM 트레이스·비용 (세션 = 인시던트) |
+| 8082 | kafka-ui | 토픽·오프셋 관찰 |
 
 ## 비목표 (Non-goals)
 
@@ -46,15 +98,14 @@ C4 다이어그램(System Context / Container)은 [`docs/architecture.md`](docs/
 
 각 단계는 이전 단계의 산출물을 입력으로 삼는다.
 
-**7월 — 코어 구축 (주 단위)**
+**7월 — 코어 구축 (완료, 주 단위 실적)**
 
 | 주차 | 마일스톤 | 산출물 |
 |------|----------|--------|
-| 1주 | 설계 | 저장소 구조, README, 시나리오 정의, C4 다이어그램, ADR |
-| 2주 | infra 기동 | docker-compose 로 Prometheus + Grafana 스택 기동 |
-| 3주 | target-app | 데모 앱 + fault-injection 엔드포인트 (시나리오에서 역산한 요구사항 반영) |
-| 4주 | 에이전트 | control-plane ↔ agent-service 연동, 모니터링/분석/실행 에이전트 구현 |
-| 5주 | E2E 데모 | 시나리오 3종(latency 급증 / 에러율 급증 + 승인 조치 / 메모리 누수) 시연 |
+| 1주 | 설계 + 관측 기반 | 시나리오 3종 정의·C4·초기 ADR, target-app + fault-injection, Prometheus/Grafana/Alertmanager/Loki 스택 |
+| 2주 | 멀티 에이전트 코어 | Supervisor StateGraph + 모니터링/분석/실행 에이전트, 하이브리드 라우팅 ([ADR-0008](docs/adr/0008-hybrid-routing.md)), Durable Execution ([ADR-0009](docs/adr/0009-postgres-checkpointer.md)) |
+| 3주 | 자동 파이프라인 | MCP 도구 노출 ([ADR-0010](docs/adr/0010-mcp-tool-exposure.md)), Kafka 트리거 ([ADR-0011](docs/adr/0011-kafka-trigger.md)) — chaos 주입부터 Slack 보고까지 사람 개입 없음, 장애 주입 실측 (다운 중 무유실) |
+| 4주 | human-in-the-loop | 승인 도메인 + Slack 승인 카드/Socket Mode ([ADR-0006](docs/adr/0006-slack-approval-ux.md)) + 조치 실행 대행 ([ADR-0005](docs/adr/0005-action-executor.md)) + 회복 확인 — 승인·거부·타임아웃 3경로 실측 (Alert 발화→종결 약 1분 54초) |
 
 **8월 — 클라우드 네이티브 + 보안**
 
