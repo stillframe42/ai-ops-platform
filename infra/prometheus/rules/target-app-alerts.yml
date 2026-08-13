@@ -38,17 +38,18 @@ groups:
           summary: "target-app 5xx 비율 임계값 초과"
           description: "비즈니스 API 5xx 비율이 10% 이상으로 3분간 지속 (현재 {{ $value | humanizePercentage }})"
 
-      # 순간 위험 안전망 — 시나리오 3의 추세 감지는 에이전트 담당 (ADR-0003 역할 분담)
+      # 순간 위험 안전망 — 시나리오 3의 추세 감지는 에이전트 담당 (ADR-0003 역할 분담).
+      # 임계 75% (2026-08-10 이월 검토 반영): 85% 는 발화→OOM 46초 (S3 실측)라 대응 여유 부족
       - alert: TargetAppHeapUsageHigh
         expr: |
           sum(jvm_memory_used_bytes{job="target-app", area="heap"})
           /
           sum(jvm_memory_max_bytes{job="target-app", area="heap"} > 0)
-          > 0.85
+          > 0.75
         for: 1m
         labels:
           severity: critical
           scenario: memory-pressure
         annotations:
-          summary: "target-app JVM heap 사용률 85% 초과"
+          summary: "target-app JVM heap 사용률 75% 초과"
           description: "heap 사용률 {{ $value | humanizePercentage }} — OOM 위험. 추세 분석은 에이전트 보고서 참조"
