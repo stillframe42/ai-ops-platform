@@ -1,0 +1,42 @@
+# 토픽 5종 명시 생성 (compose kafka-init 승계 — 파티션·보존은 values.topics 명세).
+# post-install/upgrade hook + --if-not-exists 라 재실행 멱등, 스크립트가 브로커 기동 대기를 겸한다
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-topics
+  labels:
+    app: kafka
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: kafka-topics
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: topics
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          command:
+            - bash
+            - -c
+            - |
+              set -e
+              BS=kafka.{{ .Release.Namespace }}.svc.cluster.local:9092
+              echo "브로커 기동 대기..."
+              for i in $(seq 1 60); do
+                /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server "$BS" > /dev/null 2>&1 && break
+                sleep 5
+              done
+              create() {
+                /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$BS" --create --if-not-exists \
+                  --topic "$1" --partitions "$2" --replication-factor 1 \
+                  --config retention.ms={{ .Values.retentionMs }}
+              }
+              {{- range .Values.topics }}
+              create {{ .name }} {{ .partitions }}
+              {{- end }}
+              echo "토픽 생성 완료:" && /opt/kafka/bin/kafka-topics.sh --bootstrap-server "$BS" --list

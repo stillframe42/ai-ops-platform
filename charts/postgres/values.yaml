@@ -1,0 +1,21 @@
+# 기본값 소유는 이 파일 하나 — 환경 차이값만 상위(umbrella values)에서 덮어쓴다
+image:
+  repository: pgvector/pgvector
+  tag: pg18
+
+# 크리덴셜은 차트 밖 Secret (infra/k8s/create-secrets.sh 가 생성) — 값을 차트에 두지 않는다
+existingSecret: postgres-secrets
+
+# 최초 1회 생성할 추가 DB (compose 주석의 createdb 2건 승계 — 스키마 소유는 앱: Flyway·checkpointer.setup())
+extraDatabases:
+  - langfuse
+  - controlplane
+
+storage: 2Gi
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi

@@ -1,0 +1,9 @@
+# Kafka 자체 차트 (5주차 Phase 2) — weekly-plan 의 "bitnami" 표기를 재검토해 자체 StatefulSet 로 확정:
+# PostgreSQL 과 같은 근거 (2025-08 bitnami 이미지 카탈로그 이관) + compose 검증 이미지(apache/kafka) 재사용.
+# 오퍼레이터(strimzi 등)는 단일 브로커 로컬 데모에 과함 — Phase 5 umbrella dependencies 편입 예정
+apiVersion: v2
+name: kafka
+description: 이상 이벤트 유입 계층 — KRaft 단일 브로커 + 토픽 명시 생성 (ADR-0011)
+type: application
+version: 0.1.0
+appVersion: "4.3.1"

@@ -1,0 +1,28 @@
+# 기본값 소유는 이 파일 하나 — 환경 차이값만 상위(umbrella values)에서 덮어쓴다
+image:
+  repository: apache/kafka
+  tag: "4.3.1"
+
+storage: 2Gi
+
+# 토픽 명세 (DAY 17 토픽 설계 결정값 유지 — compose kafka-init 승계).
+# ops.incidents 3파티션 = Phase 6 KEDA max replica 근거 (순서 검토 ⑦)
+topics:
+  - name: ops.alerts.raw
+    partitions: 1
+  - name: ops.incidents
+    partitions: 3
+  - name: ops.analysis.results
+    partitions: 3
+  - name: ops.actions.pending
+    partitions: 1
+  - name: ops.actions.decisions
+    partitions: 1
+retentionMs: "604800000"   # 7일
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 1Gi

@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+spec:
+  # 단일 인스턴스 로컬 데모 (복제 없음 — 고가용성은 범위 밖, weekly-plan 범위 밖 확인)
+  replicas: 1
+  serviceName: postgres-hl
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_DB
+              value: aiops
+          envFrom:
+            # POSTGRES_USER / POSTGRES_PASSWORD — 앱들과 같은 원천 (create-secrets.sh)
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+          volumeMounts:
+            # pg18 이미지는 PGDATA 가 /var/lib/postgresql/<major>/docker —
+            # 상위 경로를 마운트해야 지속된다 (compose 주석 승계)
+            - name: postgres-data
+              mountPath: /var/lib/postgresql
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d aiops"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -U $POSTGRES_USER -d aiops"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.storage }}

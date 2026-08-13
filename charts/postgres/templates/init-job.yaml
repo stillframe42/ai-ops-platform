@@ -1,0 +1,53 @@
+# 추가 DB 최초 1회 생성 (⑩ — createdb 2건이면 충분: 스키마 소유는 앱 쪽).
+# post-install/upgrade hook + 존재 검사라 재실행 멱등, 스크립트가 기동 대기를 겸한다
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-init
+  labels:
+    app: postgres
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: postgres-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: init
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          envFrom:
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+          env:
+            - name: PGHOST
+              value: postgres
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret }}
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.existingSecret }}
+                  key: POSTGRES_PASSWORD
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              echo "postgres 기동 대기..."
+              for i in $(seq 1 60); do
+                pg_isready -h "$PGHOST" -d aiops && break
+                sleep 5
+              done
+              {{- range .Values.extraDatabases }}
+              psql -h "$PGHOST" -d aiops -tAc "SELECT 1 FROM pg_database WHERE datname='{{ . }}'" | grep -q 1 \
+                || createdb -h "$PGHOST" {{ . }}
+              echo "DB 확인: {{ . }}"
+              {{- end }}

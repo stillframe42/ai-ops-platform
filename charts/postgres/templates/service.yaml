@@ -1,0 +1,30 @@
+# 접속용 Service — compose 의 postgres:5432 대응 (앱들의 접속 주소 유지)
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels:
+    app: postgres
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: postgres
+      name: postgres
+---
+# StatefulSet 신원용 headless Service (serviceName 짝 — pod 별 고정 DNS)
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-hl
+  labels:
+    app: postgres
+spec:
+  clusterIP: None
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: postgres
+      name: postgres

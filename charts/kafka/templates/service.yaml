@@ -1,0 +1,33 @@
+# 접속용 Service — compose 의 kafka:9092 대응 (앱들의 bootstrap 주소 유지)
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka
+  labels:
+    app: kafka
+spec:
+  selector:
+    app: kafka
+  ports:
+    - port: 9092
+      targetPort: client
+      name: client
+---
+# StatefulSet 신원용 headless Service — controller quorum 주소(kafka-0.kafka-hl...)의 근거
+apiVersion: v1
+kind: Service
+metadata:
+  name: kafka-hl
+  labels:
+    app: kafka
+spec:
+  clusterIP: None
+  selector:
+    app: kafka
+  ports:
+    - port: 9092
+      targetPort: client
+      name: client
+    - port: 9093
+      targetPort: controller
+      name: controller
