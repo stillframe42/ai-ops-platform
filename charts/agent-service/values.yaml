@@ -1,0 +1,28 @@
+image:
+  repository: aiops/agent-service
+  tag: local
+
+replicas: 1
+
+# ANTHROPIC_API_KEY·MCP_API_KEY (infra/k8s/create-secrets.sh) — LLM_MODEL 은 코드 기본값
+existingSecret: agent-service-secrets
+# CHECKPOINT_DB_URL 조합용 크리덴셜 원천 (postgres 초기화와 같은 Secret)
+postgresSecret: postgres-secrets
+
+# K8s 서비스 주소 (compose environment 덮어쓰기의 대응물 — 코드 기본값은 로컬 개발 기준).
+# 관측 스택은 monitoring namespace 라 FQDN, 나머지는 같은 namespace 의 Service 명
+env:
+  prometheusUrl: http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
+  lokiUrl: http://loki.monitoring.svc.cluster.local:3100
+  mcpServerUrl: http://control-plane:8080/mcp
+  kafkaBootstrapServers: kafka:9092
+
+# graceful shutdown 여유 — 체크포인터 재개와 조합 (진행 중 그래프는 재기동 후 체크포인트에서 재개)
+terminationGracePeriodSeconds: 60
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 1Gi

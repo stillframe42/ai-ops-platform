@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-plane
+  labels:
+    app: control-plane
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: control-plane
+  template:
+    metadata:
+      labels:
+        # app 라벨 = Alloy 의 service 라벨 원천 (LogQL 진입점 계약)
+        app: control-plane
+    spec:
+      containers:
+        - name: control-plane
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 8080
+              name: http
+          # 프로파일은 이미지의 docker 그대로 (K8s Service 명 = compose 컨테이너명이라 주소 유효 — 8/10 결정).
+          # 설정 기본값 소유는 application.yml — 여기엔 K8s 실행 형상값(JVM)만 둔다
+          env:
+            - name: JAVA_TOOL_OPTIONS
+              value: {{ .Values.javaToolOptions | quote }}
+          envFrom:
+            # OPENAI·MCP_API_KEY·SLACK 4종·POSTGRES 2종 — 미반입 키는 키-게이트 비활성 (pass-through 승계)
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            initialDelaySeconds: 45
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

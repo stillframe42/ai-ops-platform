@@ -1,0 +1,15 @@
+# Service 명 = compose 컨테이너명 — agent-service 의 MCP_SERVER_URL(http://control-plane:8080/mcp)과
+# Alertmanager 웹훅(control-plane.aiops.svc:8080)의 도달 주소. 이름이 곧 Prometheus job 라벨
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-plane
+  labels:
+    app: control-plane
+spec:
+  selector:
+    app: control-plane
+  ports:
+    - port: 8080
+      targetPort: http
+      name: http

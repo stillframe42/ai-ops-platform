@@ -1,0 +1,11 @@
+# 부하 스크립트 반입 — files/products-load.js 는 infra/load/products-load.js (compose 용 원본)의 사본:
+# 수정 시 양쪽 동기 필요 (x-logging 4파일 동기와 같은 수용 — 해소는 Phase 5 umbrella 때 재검토)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k6-load-script
+  labels:
+    app: k6-load
+data:
+  products-load.js: |
+{{ .Files.Get "files/products-load.js" | indent 4 }}

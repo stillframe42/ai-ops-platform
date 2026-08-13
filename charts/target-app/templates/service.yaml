@@ -1,0 +1,15 @@
+# Service 명 = compose 컨테이너명 — docker 프로파일 주소(http://target-app:8080)가 그대로 유효한 전제.
+# 이름이 곧 Prometheus job 라벨 (ServiceMonitor 기본 규칙) — 룰 표현식 job="target-app" 정합
+apiVersion: v1
+kind: Service
+metadata:
+  name: target-app
+  labels:
+    app: target-app
+spec:
+  selector:
+    app: target-app
+  ports:
+    - port: 8080
+      targetPort: http
+      name: http

@@ -1,0 +1,14 @@
+# MCP 도구 호출 계측 스크레이프 (compose prometheus.yml 의 control-plane job 대응 — mcp_tool_calls_*)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: control-plane
+  labels:
+    app: control-plane
+spec:
+  selector:
+    matchLabels:
+      app: control-plane
+  endpoints:
+    - port: http
+      path: /actuator/prometheus

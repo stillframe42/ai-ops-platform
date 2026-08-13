@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k6-load
+  labels:
+    app: k6-load
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k6-load
+  template:
+    metadata:
+      labels:
+        app: k6-load
+    spec:
+      containers:
+        - name: k6
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          # 스크립트 종료/실패 시 pod 재시작 정책이 상시 트래픽 보장 (compose restart: unless-stopped 대응).
+          # 대상 기본값 http://target-app:8080 은 K8s Service DNS 로 그대로 성립 (TARGET_BASE_URL 덮어쓰기 가능)
+          args: ["run", "/scripts/products-load.js"]
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: script
+          configMap:
+            name: k6-load-script

@@ -1,0 +1,7 @@
+# agent-service 앱 차트 (5주차 Phase 3) — LangGraph 멀티 에이전트 (Durable Execution)
+apiVersion: v2
+name: agent-service
+description: 모니터링/분석/실행 멀티 에이전트 — Kafka 트리거·postgres 체크포인터 (ADR-0009/0011)
+type: application
+version: 0.1.0
+appVersion: "local"

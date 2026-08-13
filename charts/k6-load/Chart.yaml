@@ -1,0 +1,7 @@
+# k6 상시 트래픽 차트 (5주차 Phase 3, 순서 검토 ③) — 비율 기반 트리거의 최소 표본 조건 충족 (scenarios.md)
+apiVersion: v2
+name: k6-load
+description: target-app 상시 기본 트래픽 — 비율 기반 Alert 의 최소 표본 조건 충족용
+type: application
+version: 0.1.0
+appVersion: "2.1.0"

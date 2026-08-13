@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-service
+  labels:
+    app: agent-service
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: agent-service
+  template:
+    metadata:
+      labels:
+        # app 라벨 = Alloy 의 service 라벨 원천 (LogQL 진입점 계약)
+        app: agent-service
+    spec:
+      # SIGTERM 후 체크포인트 기록·컨슈머 정리 여유 (Phase 6 스케일인 보호와 조합)
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      containers:
+        - name: agent-service
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: PROMETHEUS_URL
+              value: {{ .Values.env.prometheusUrl | quote }}
+            - name: LOKI_URL
+              value: {{ .Values.env.lokiUrl | quote }}
+            # control-plane 발견 실패 시 로컬 도구 강등(부분 진행)이 설계 경로 — 기동 의존 없음 (compose 승계)
+            - name: MCP_SERVER_URL
+              value: {{ .Values.env.mcpServerUrl | quote }}
+            # 접속 실패는 컨슈머 백오프가 흡수 (compose 승계 — 기동 의존 없음)
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ .Values.env.kafkaBootstrapServers | quote }}
+            # 체크포인트 DB — 크리덴셜은 postgres 와 같은 원천, URL 은 K8s env 의존 확장($(VAR))으로 조합
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresSecret }}
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresSecret }}
+                  key: POSTGRES_PASSWORD
+            - name: CHECKPOINT_DB_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/aiops"
+          envFrom:
+            # ANTHROPIC_API_KEY·MCP_API_KEY — LANGFUSE 미반입 = 트레이싱 비활성 (Phase 0 결정)
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

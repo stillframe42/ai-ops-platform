@@ -1,0 +1,7 @@
+# control-plane 앱 차트 (5주차 Phase 3) — 관제/API/게이트웨이 + MCP 도구 서버 + HITL 승인
+apiVersion: v2
+name: control-plane
+description: 관제/API/게이트웨이 — Alertmanager webhook 수신·MCP 도구 서버·Slack 승인 (ADR-0003/0010/0006)
+type: application
+version: 0.1.0
+appVersion: "local"

@@ -1,0 +1,18 @@
+image:
+  repository: aiops/control-plane
+  tag: local
+
+replicas: 1
+
+# 컨테이너 인지 heap — limits 기준 75% (고정 -Xmx 대신 limit 추종: limit 조정 시 heap 자동 연동)
+javaToolOptions: "-XX:MaxRAMPercentage=75.0"
+
+# 크리덴셜·시크릿은 차트 밖 Secret (infra/k8s/create-secrets.sh) — ⑩ 목록 8키
+existingSecret: control-plane-secrets
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 1Gi

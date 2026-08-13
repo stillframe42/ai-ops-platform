@@ -1,0 +1,16 @@
+# Prometheus 스크레이프 대상 등록 (compose prometheus.yml scrape_configs 의 K8s 대응물).
+# Prometheus 가 이 리소스를 선택하는 근거 = serviceMonitorSelectorNilUsesHelmValues: false (Phase 2 values)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: target-app
+  labels:
+    app: target-app
+spec:
+  selector:
+    matchLabels:
+      app: target-app
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: {{ .Values.serviceMonitor.interval }}

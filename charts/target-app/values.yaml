@@ -1,0 +1,20 @@
+image:
+  repository: aiops/target-app
+  tag: local
+
+replicas: 1
+
+# heap 시나리오 데모 결정성: max heap 고정 (compose 승계 — 85%→75% 룰 발화에 필요한 누수량 예측 가능)
+javaToolOptions: "-Xms128m -Xmx512m"
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 384Mi
+  limits:
+    # 고정 heap 512m + 비heap 여유 — limit 이 heap 보다 커야 OOMKill 전에 룰이 발화한다
+    memory: 768Mi
+
+serviceMonitor:
+  # 데모 시연 시간 단축 — 전역(15s)보다 촘촘하게 (compose prometheus.yml 승계)
+  interval: 5s
