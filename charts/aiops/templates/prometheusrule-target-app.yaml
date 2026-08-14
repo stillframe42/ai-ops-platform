@@ -1,14 +1,13 @@
-# target-app Alert Rule 의 PrometheusRule 이전 (infra/prometheus/rules/target-app-alerts.yml 원본).
-# 임계값 스펙은 docs/scenarios.md — heap 임계는 이월 검토 결과 75% 로 하향 (8/10 결정,
-# S3 실측 "85% 발화 후 46초 OOM" — 분석·승인·조치 리드타임 확보. compose 룰도 동기 수정).
-# 표현식의 job 라벨은 Phase 3 ServiceMonitor 의 Service 명과 일치해야 한다 (target-app)
+# target-app Alert Rule (infra/prometheus/rules 원본의 K8s 판 — Phase 2 이관분의 차트 편입).
+# heap 임계 75% (8/10 이월 검토 결정 — S3 실측 "85% 발화 후 46초 OOM" 리드타임 근거).
+# annotations 의 {{`{{ ... }}`}} 는 Prometheus 템플릿 — Helm 렌더링을 지나도록 raw 이스케이프
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: target-app-alerts
-  namespace: monitoring
   labels:
     app: aiops
+    {{- include "aiops.labels" . | nindent 4 }}
 spec:
   groups:
     - name: target-app
@@ -27,7 +26,7 @@ spec:
             scenario: latency-surge
           annotations:
             summary: "target-app p95 latency 임계값 초과"
-            description: "비즈니스 API p95 latency 가 3초 이상으로 5분간 지속 (현재 {{ $value | printf \"%.2f\" }}s)"
+            description: "비즈니스 API p95 latency 가 3초 이상으로 5분간 지속 (현재 {{`{{ $value | printf \"%.2f\" }}`}}s)"
 
         # 시나리오 2: 5xx 비율 ≥ 10% 가 3분 지속 + 최소 표본
         - alert: TargetAppHighErrorRate
@@ -45,7 +44,7 @@ spec:
             scenario: error-rate-surge
           annotations:
             summary: "target-app 5xx 비율 임계값 초과"
-            description: "비즈니스 API 5xx 비율이 10% 이상으로 3분간 지속 (현재 {{ $value | humanizePercentage }})"
+            description: "비즈니스 API 5xx 비율이 10% 이상으로 3분간 지속 (현재 {{`{{ $value | humanizePercentage }}`}})"
 
         # 순간 위험 안전망 — 시나리오 3의 추세 감지는 에이전트 담당 (ADR-0003 역할 분담).
         # 임계 75%: 85% 는 발화→OOM 46초 (S3 실측)라 대응 여유 부족
@@ -61,4 +60,4 @@ spec:
             scenario: memory-pressure
           annotations:
             summary: "target-app JVM heap 사용률 75% 초과"
-            description: "heap 사용률 {{ $value | humanizePercentage }} — OOM 위험. 추세 분석은 에이전트 보고서 참조"
+            description: "heap 사용률 {{`{{ $value | humanizePercentage }}`}} — OOM 위험. 추세 분석은 에이전트 보고서 참조"

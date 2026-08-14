@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: agent-service
   labels:
-    app: agent-service
+    {{- include "agent-service.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicas }}
   selector:

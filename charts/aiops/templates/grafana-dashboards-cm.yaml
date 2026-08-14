@@ -1,0 +1,15 @@
+# Grafana 대시보드 반입 — grafana_dashboard 라벨이 sidecar 수집 조건 (Phase 2 install.sh 단계의 차트 편입).
+# files/dashboards/*.json 은 infra/grafana/provisioning(compose 몫) 원본의 사본 — 수정 시 양쪽 동기
+# (k6 스크립트와 같은 수용 — 해소는 ADR-0013 의 compose 역할 결정 후)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards-aiops
+  labels:
+    grafana_dashboard: "1"
+    {{- include "aiops.labels" . | nindent 4 }}
+data:
+  {{- range $path, $_ := .Files.Glob "files/dashboards/*.json" }}
+  {{ base $path }}: |
+{{ $.Files.Get $path | indent 4 }}
+  {{- end }}

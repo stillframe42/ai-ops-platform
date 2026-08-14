@@ -3,7 +3,7 @@ kind: StatefulSet
 metadata:
   name: kafka
   labels:
-    app: kafka
+    {{- include "kafka.labels" . | nindent 4 }}
 spec:
   # KRaft 단일 브로커 (복제 없음 — compose 형상 승계, 고가용성은 범위 밖)
   replicas: 1

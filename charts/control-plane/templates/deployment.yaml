@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: control-plane
   labels:
-    app: control-plane
+    {{- include "control-plane.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicas }}
   selector:

@@ -5,7 +5,7 @@ kind: Job
 metadata:
   name: postgres-init
   labels:
-    app: postgres
+    {{- include "postgres.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": post-install,post-upgrade
     "helm.sh/hook-delete-policy": before-hook-creation

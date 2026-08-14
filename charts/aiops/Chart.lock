@@ -1,0 +1,30 @@
+dependencies:
+- name: postgres
+  repository: file://../postgres
+  version: 0.1.0
+- name: kafka
+  repository: file://../kafka
+  version: 0.1.0
+- name: control-plane
+  repository: file://../control-plane
+  version: 0.1.0
+- name: agent-service
+  repository: file://../agent-service
+  version: 0.1.0
+- name: target-app
+  repository: file://../target-app
+  version: 0.1.0
+- name: k6-load
+  repository: file://../k6-load
+  version: 0.1.0
+- name: kube-prometheus-stack
+  repository: https://prometheus-community.github.io/helm-charts
+  version: 88.2.0
+- name: loki
+  repository: https://grafana.github.io/helm-charts
+  version: 7.2.0
+- name: alloy
+  repository: https://grafana.github.io/helm-charts
+  version: 1.11.1
+digest: sha256:12fc5d923886ec6efceb461fdee2e283279dab732e84021cfbe90ea76292d512
+generated: "2026-08-13T15:15:16.228114+09:00"

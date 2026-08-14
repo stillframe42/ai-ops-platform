@@ -32,3 +32,6 @@ notes/
 
 # === Claude Code 로컬 설정 ===
 .claude/
+
+# === Helm (umbrella 의존성 수집물 — helm dependency build 로 재생성) ===
+charts/aiops/charts/

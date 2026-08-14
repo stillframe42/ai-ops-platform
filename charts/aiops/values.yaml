@@ -1,0 +1,144 @@
+# umbrella 전역 values — 환경 무관 구성만 (환경 차이값은 values-local.yaml / values-prod.yaml).
+# 자작 차트 6종의 기본값은 각 차트 values.yaml 소유 — 여기 복제하지 않는다 (기본값 소유 = 한 곳).
+# 외부 차트 3종의 구성은 Phase 2 의 infra/k8s/monitoring/values-*.yaml 을 이관한 것 (해당 디렉토리 폐지).
+# fullnameOverride 동결: 릴리스명(aiops)이 서비스명에 번지지 않게 — port-forward 습관·주소 계약 유지 (Phase 5 결정 ②)
+
+kube-prometheus-stack:
+  fullnameOverride: monitoring-kube-prometheus
+
+  grafana:
+    fullnameOverride: monitoring-grafana
+    grafana.ini:
+      # 데모 편의 — 로그인 없이 접근 (compose GF_AUTH_* 승계, 실 운영 금지 설정)
+      auth.anonymous:
+        enabled: true
+        org_role: Admin
+      auth:
+        disable_login_form: true
+    additionalDataSources:
+      # 같은 namespace 라 평이름 (Phase 5 결정 ① 부수 이득) — uid 는 대시보드 JSON 참조 정합
+      - name: Loki
+        uid: loki
+        type: loki
+        access: proxy
+        url: http://loki:3100
+
+  alertmanager:
+    config:
+      # compose alertmanager.yml 승계. route 는 map 병합·receivers 는 리스트 대체 —
+      # 차트 기본 하위 라우트(Watchdog→"null")가 살아남으므로 "null" 수신자 명시 필수 (Phase 2 실측)
+      route:
+        receiver: control-plane-webhook
+        group_by: [alertname]
+        group_wait: 10s
+        group_interval: 1m
+        repeat_interval: 30m
+        routes:
+          - receiver: "null"
+            matchers:
+              - alertname = "Watchdog"
+      receivers:
+        - name: control-plane-webhook
+          webhook_configs:
+            - url: http://control-plane:8080/webhook/alertmanager
+              send_resolved: true
+        - name: "null"
+
+  prometheus:
+    prometheusSpec:
+      scrapeInterval: 15s
+      evaluationInterval: 15s
+      # release 라벨 없는 자작 ServiceMonitor·PrometheusRule 도 선택
+      ruleSelectorNilUsesHelmValues: false
+      serviceMonitorSelectorNilUsesHelmValues: false
+      podMonitorSelectorNilUsesHelmValues: false
+
+  # Docker Desktop 기반 kind 마운트 문제 + 시나리오는 앱 메트릭 기반 — 비활성 (Phase 2 결정 승계)
+  nodeExporter:
+    enabled: false
+
+loki:
+  fullnameOverride: loki
+  deploymentMode: SingleBinary
+  loki:
+    auth_enabled: false
+    commonConfig:
+      replication_factor: 1
+    storage:
+      type: filesystem
+    schemaConfig:
+      configs:
+        - from: "2024-04-01"
+          store: tsdb
+          object_store: filesystem
+          schema: v13
+          index:
+            prefix: index_
+            period: 24h
+  singleBinary:
+    replicas: 1
+    persistence:
+      size: 2Gi
+  read:
+    replicas: 0
+  write:
+    replicas: 0
+  backend:
+    replicas: 0
+  gateway:
+    enabled: false
+  chunksCache:
+    enabled: false
+  resultsCache:
+    enabled: false
+  lokiCanary:
+    enabled: false
+  test:
+    enabled: false
+
+alloy:
+  fullnameOverride: alloy
+  controller:
+    type: daemonset
+  alloy:
+    configMap:
+      content: |
+        // pod 로그 수집 — service 라벨 = pod app 라벨 (LogQL 진입점 계약, ADR-0004 경로 유지)
+        discovery.kubernetes "pods" {
+          role = "pod"
+        }
+
+        discovery.relabel "pods" {
+          targets = discovery.kubernetes.pods.targets
+
+          rule {
+            source_labels = ["__meta_kubernetes_namespace"]
+            target_label  = "namespace"
+          }
+
+          rule {
+            source_labels = ["__meta_kubernetes_pod_name"]
+            target_label  = "pod"
+          }
+
+          rule {
+            source_labels = ["__meta_kubernetes_pod_container_name"]
+            target_label  = "container"
+          }
+
+          rule {
+            source_labels = ["__meta_kubernetes_pod_label_app"]
+            target_label  = "service"
+          }
+        }
+
+        loki.source.kubernetes "pods" {
+          targets    = discovery.relabel.pods.output
+          forward_to = [loki.write.default.receiver]
+        }
+
+        loki.write "default" {
+          endpoint {
+            url = "http://loki:3100/loki/api/v1/push"
+          }
+        }

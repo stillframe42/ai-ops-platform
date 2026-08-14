@@ -5,7 +5,7 @@ kind: ConfigMap
 metadata:
   name: k6-load-script
   labels:
-    app: k6-load
+    {{- include "k6-load.labels" . | nindent 4 }}
 data:
   products-load.js: |
 {{ .Files.Get "files/products-load.js" | indent 4 }}

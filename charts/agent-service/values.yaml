@@ -10,10 +10,11 @@ existingSecret: agent-service-secrets
 postgresSecret: postgres-secrets
 
 # K8s 서비스 주소 (compose environment 덮어쓰기의 대응물 — 코드 기본값은 로컬 개발 기준).
-# 관측 스택은 monitoring namespace 라 FQDN, 나머지는 같은 namespace 의 Service 명
+# namespace 단일화(8/13 Phase 5 결정 ①)로 전부 같은 ns 평이름 — 관측 스택 이름은
+# umbrella 의 fullnameOverride 동결값 (Phase 5 결정 ②)
 env:
-  prometheusUrl: http://monitoring-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
-  lokiUrl: http://loki.monitoring.svc.cluster.local:3100
+  prometheusUrl: http://monitoring-kube-prometheus-prometheus:9090
+  lokiUrl: http://loki:3100
   mcpServerUrl: http://control-plane:8080/mcp
   kafkaBootstrapServers: kafka:9092
 

@@ -5,7 +5,7 @@ kind: Service
 metadata:
   name: control-plane
   labels:
-    app: control-plane
+    {{- include "control-plane.labels" . | nindent 4 }}
 spec:
   selector:
     app: control-plane

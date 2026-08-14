@@ -4,7 +4,7 @@ kind: Service
 metadata:
   name: postgres
   labels:
-    app: postgres
+    {{- include "postgres.labels" . | nindent 4 }}
 spec:
   selector:
     app: postgres
@@ -19,7 +19,7 @@ kind: Service
 metadata:
   name: postgres-hl
   labels:
-    app: postgres
+    {{- include "postgres.labels" . | nindent 4 }}
 spec:
   clusterIP: None
   selector:

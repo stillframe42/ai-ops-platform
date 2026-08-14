@@ -3,7 +3,7 @@ kind: StatefulSet
 metadata:
   name: postgres
   labels:
-    app: postgres
+    {{- include "postgres.labels" . | nindent 4 }}
 spec:
   # 단일 인스턴스 로컬 데모 (복제 없음 — 고가용성은 범위 밖, weekly-plan 범위 밖 확인)
   replicas: 1

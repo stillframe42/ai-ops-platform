@@ -4,7 +4,7 @@ kind: Service
 metadata:
   name: agent-service
   labels:
-    app: agent-service
+    {{- include "agent-service.labels" . | nindent 4 }}
 spec:
   selector:
     app: agent-service

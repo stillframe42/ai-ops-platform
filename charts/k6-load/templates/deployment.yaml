@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: k6-load
   labels:
-    app: k6-load
+    {{- include "k6-load.labels" . | nindent 4 }}
 spec:
   replicas: 1
   selector:
