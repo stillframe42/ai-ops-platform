@@ -21,6 +21,15 @@ env:
 # graceful shutdown 여유 — 체크포인터 재개와 조합 (진행 중 그래프는 재기동 후 체크포인트에서 재개)
 terminationGracePeriodSeconds: 60
 
+# Kafka lag 기반 오토스케일링 (Phase 6, ADR-0014) — KEDA CRD 전제라 기본 비활성
+keda:
+  enabled: false
+  minReplicas: 1        # decisions 컨슈머 상주 필요 — scale-to-zero 불가
+  maxReplicas: 3        # = ops.incidents 파티션 수 (⑦)
+  lagThreshold: 5       # 파티션당 lag 임계 — 초과분만큼 replica 산정
+  pollingInterval: 15   # lag 확인 주기(초) — 기본 30, 데모 반응성으로 단축
+  cooldownPeriod: 120   # 무부하 지속 시 스케일인까지(초) — 기본 300, 실험 관찰용 단축
+
 resources:
   requests:
     cpu: 250m
