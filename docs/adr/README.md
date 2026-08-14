@@ -15,3 +15,4 @@
 | [0009](0009-postgres-checkpointer.md) | LangGraph 체크포인터 | 처음부터 PostgreSQL (Durable Execution), thread_id = incident id | 2026-07-20 |
 | [0010](0010-mcp-tool-exposure.md) | 운영 도구 노출 방식 | MCP 표준 (Streamable HTTP) — REST 직접 호출 대체 | 2026-07-23 |
 | [0011](0011-kafka-trigger.md) | 에이전트 트리거 | Kafka 이벤트 (`ops.incidents`) — 수동 커밋 + 멱등 2층, 다운 중 무유실 실측 | 2026-07-26 |
+| [0013](0013-k8s-migration.md) | K8s 이전·compose 역할 분담 | kind + Helm umbrella 가 운영 형상 표준 (docker 프로파일 무수정 재사용), compose 는 개발용 유지 — 폐기 재검토는 8월 말 | 2026-08-13 |
