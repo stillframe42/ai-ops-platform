@@ -73,6 +73,23 @@ E2E 실측(승인 → docker restart 자동 실행 → 회복 확인 완주) 직
 - 재평가 조건: 8월 K8s 전환으로 rolling restart 등 무중단 재시작 수단이 생기면 자동 실행
   후보로 복귀 검토.
 
+## 추가 사항 (2026-08-13): RESTART_APP 재평가 — 복귀 가능 판정, 구현은 보안 주간 결합
+
+재평가 조건(K8s 전환) 도달로 검토를 수행했다 (5주차 Phase 4, `kubectl rollout restart` 기준).
+
+- 2026-08-04 기각 근거 3건의 현재 상태: ① 다운타임 — **해소** (`rollout restart` 는 새 pod
+  Ready 후 구 pod 종료 — probe 가 무중단의 전제, Phase 3 배선 완료) ② 권한 표면 — **완화**
+  (docker socket ≈ 호스트 root 였던 것과 달리, K8s 는 Role 로 "aiops namespace 의
+  deployments/target-app patch" 한 줄 위임이 가능 — 좁은 범위 위임이 성립) ③ 파급 있는
+  조치는 사람의 자각 아래 — **잔존** (실행 수단이 바뀌어도 판단의 무게는 불변).
+- 결정: **자동 실행 복귀는 가능 판정하되 지금 구현하지 않는다** — control-plane 에
+  ServiceAccount·Role 을 부여하는 일은 8월 보안 주간의 권한 체계화(Secret 관리 재검토와
+  같은 묶음) 범위라, 임시 default SA 에 변이 권한을 부여하지 않는다 (임시 Secret 반입과 같은
+  부채를 늘리지 않는 판단). 그때까지 수동 조치 안내 유지 — 안내 명령 예시는 K8s 형상에
+  맞춰 `kubectl rollout restart` 로 갱신하는 것만 선반영 대상.
+- 재평가 조건(갱신): 보안 주간에 RBAC 최소 권한 설계와 함께 자동 실행 복귀를 최종 결정
+  (근거 ③의 수용 여부 포함 — 사람 자각 vs 자동화 이득).
+
 ## 결과
 
 - 쉬워지는 것: 승인·감사·실행의 단일 책임 지점. agent-service 의 읽기 전용 유지. 조치 이력이 `action_approvals` 한 테이블로 남는다.
