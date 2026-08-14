@@ -33,7 +33,7 @@ flowchart TB
 
 ## Level 2 — Container
 
-플랫폼 내부를 실행 단위(컨테이너)로 분해한다. 통합 지점은 `infra/` 의 docker-compose 하나 ([ADR-0001](adr/0001-monorepo.md)).
+플랫폼 내부를 실행 단위(컨테이너)로 분해한다. 배포 형상은 둘 — **운영 표준은 K8s (kind + Helm umbrella `charts/aiops`, 진입점 `helm install` 하나, [ADR-0013](adr/0013-k8s-migration.md))**, docker-compose ([ADR-0001](adr/0001-monorepo.md))는 개발용으로 유지한다. K8s Service 명 = compose 컨테이너명이라 아래 컨테이너 관계는 두 형상에서 동일하게 성립한다 (docker 프로파일 무수정 공유).
 
 ```mermaid
 flowchart TB
@@ -147,10 +147,10 @@ flowchart LR
 | Grafana → Prometheus | PromQL over HTTP | 확정 |
 | Grafana → Loki | LogQL over HTTP | 확정 ([ADR-0004](adr/0004-loki-adoption.md)) |
 | 에이전트의 관측 데이터 조회 | PromQL over HTTP — 직접 조회 | 확정 ([ADR-0002](adr/0002-observability-access-path.md)) |
-| target-app → Alloy → Loki | 컨테이너 stdout 수집(docker discovery) + Loki push API | 확정 ([ADR-0004](adr/0004-loki-adoption.md) 추가 사항 — Promtail 은 EOL 로 제외) |
+| target-app → Alloy → Loki | 컨테이너 stdout 수집 + Loki push API — compose 는 docker discovery, K8s 는 DaemonSet + K8s discovery (service 라벨 = pod `app` 라벨) | 확정 ([ADR-0004](adr/0004-loki-adoption.md) 추가 사항 — Promtail 은 EOL 로 제외, K8s 판은 [ADR-0013](adr/0013-k8s-migration.md)) |
 | agent-service → Loki | LogQL 조회 | 확정 — 분석 에이전트 도구 ([ADR-0004](adr/0004-loki-adoption.md) 2단계, 2026-07-18) |
 | agent-service → PostgreSQL | SQL (커넥션 풀) | 확정 — LangGraph 체크포인트 ([ADR-0009](adr/0009-postgres-checkpointer.md)) + pgvector 유사 인시던트 검색 |
-| agent-service → Langfuse | OTel (HTTP) | 확정 — 자체 compose 스택 (v3, thread_id = 세션), 키 미설정 시 비활성 |
+| agent-service → Langfuse | OTel (HTTP) | 확정 — 자체 compose 스택 (v3, thread_id = 세션), 키 미설정 시 비활성. K8s 형상에는 미배포 (주간 한정 비활성 — 9월 Observability 재검토) |
 | 승인 왕복 (`ops.actions.pending`/`decisions`) | agent-service 가 pending 발행 + interrupt 대기 → control-plane 소비·카드 발송·결정 → decisions 발행 (approved 는 실행 결과 포함) → agent-service 소비·재개 | 확정 ([ADR-0005](adr/0005-action-executor.md) — 2026-08-01 배선, 08-04 실행 결과 포함) |
 | 조치 실행 | control-plane 대행 — 자동 실행은 CIRCUIT_BREAK(target-app `chaos/reset` HTTP)뿐, RESTART_APP 은 수동 조치 안내로 전환 (docker socket 마운트 제거) | 확정 ([ADR-0005](adr/0005-action-executor.md) 추가 사항 — 2026-08-04 실측 후 조정) |
 | 분산 추적 (OTLP → Tempo) | OTLP | 로드맵 9월 — 도입 시 Level 2 갱신 |

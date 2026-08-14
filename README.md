@@ -85,6 +85,50 @@ curl -X POST http://localhost:8080/chaos/reset                        # 데모 �
 | 3003 | Langfuse | LLM 트레이스·비용 (세션 = 인시던트) |
 | 8082 | kafka-ui | 토픽·오프셋 관찰 |
 
+## K8s 배포 (kind)
+
+K8s(kind + Helm umbrella)가 운영 형상의 표준이고, 위의 compose 는 개발용이다 ([ADR-0013](docs/adr/0013-k8s-migration.md)). 사전 준비물은 `.env` 2곳(위 표와 동일) + `brew install kind helm kubernetes-cli`.
+
+### 빈 클러스터 → 전체 복원 (실측 약 3분 30초)
+
+```bash
+# 1. 클러스터 생성 (control-plane 1 + worker 2)
+kind create cluster --config infra/k8s/kind-config.yaml
+
+# 2. 이미지 빌드 + 클러스터 반입 (레지스트리 없음 — kind load)
+docker build -t aiops/target-app:local target-app/
+docker build -t aiops/control-plane:local control-plane/
+docker build -t aiops/agent-service:local agent-service/
+kind load docker-image --name aiops aiops/control-plane:local aiops/agent-service:local aiops/target-app:local
+
+# 3. Secret 반입 (.env 2곳 → K8s Secret, 값 미출력 — 임시 방식, 보안 주간 재검토 예정)
+./infra/k8s/create-secrets.sh
+
+# 4. 전체 설치 — umbrella 한 번으로 앱 4종 + DB/Kafka + 모니터링·로그
+helm dependency build charts/aiops
+helm install aiops charts/aiops -n aiops --create-namespace -f charts/aiops/values-local.yaml
+```
+
+`kubectl -n aiops get pods` 로 전체 Running 확인 후, 데모 절차는 로컬 실행의 3번과 동일하다 — 접근만 port-forward 로 바꾼다 (호스트 포트는 compose 관례와 동일):
+
+```bash
+kubectl -n aiops port-forward svc/target-app 8080:8080       # chaos 주입
+kubectl -n aiops port-forward svc/control-plane 8081:8080    # 승인 API
+kubectl -n aiops port-forward svc/monitoring-grafana 3002:80     # Grafana (namespace 는 aiops 단일 — ADR-0013)
+```
+
+검증 포인트: 분석 진행 중 `kubectl -n aiops delete pod -l app=agent-service` 를 실행해도 새 pod 가 체크포인트에서 재개해 무유실 완주한다 (Durable Execution × K8s — [ADR-0009](docs/adr/0009-postgres-checkpointer.md)·[ADR-0013](docs/adr/0013-k8s-migration.md)).
+
+### 선택: KEDA 오토스케일링 ([ADR-0014](docs/adr/0014-autoscaling-strategy.md))
+
+```bash
+helm repo add kedacore https://kedacore.github.io/charts
+helm install keda kedacore/keda --version 2.20.2 -n keda --create-namespace
+helm upgrade aiops charts/aiops -n aiops -f charts/aiops/values-local.yaml --set agent-service.keda.enabled=true
+```
+
+인시던트가 몰리면 ops.incidents lag 기반으로 agent-service 가 1→3(파티션 수 상한)으로 스케일아웃되고, 소진 후 1 로 복귀한다.
+
 ## 비목표 (Non-goals)
 
 데모/학습 프로젝트로 범위를 고정한다. 아래는 의도적으로 하지 않는다.
@@ -111,7 +155,7 @@ curl -X POST http://localhost:8080/chaos/reset                        # 데모 �
 
 | 마일스톤 | 산출물 |
 |----------|--------|
-| K8s 운영 설계 | 서비스별 독립 Deployment, HPA 전략(Spring Boot: CPU/메모리, 에이전트: 큐 길이), Helm Chart 패키징 — compose 와의 역할 분담은 ADR 로 결정 |
+| K8s 운영 설계 (완료 — 5주차) | kind 3노드 + Helm umbrella 9종 차트 (빈 클러스터→전체 복원 3분 24초 실측, [ADR-0013](docs/adr/0013-k8s-migration.md) — compose 는 개발용 유지), Durable Execution × pod 강제 삭제 무유실 실측, KEDA lag 기반 스케일링 (10건 동시 주입 무유실, [ADR-0014](docs/adr/0014-autoscaling-strategy.md) — CPU 는 LLM 워크로드의 수요 신호가 아님) |
 | LLM 게이트웨이 | 모델 라우팅(비용 vs 품질), Redis 의미 유사도 캐싱, Rate Limiting/비용 추적, 모델 폴백 — control-plane 내장 vs 별도 서비스는 ADR 로 결정 |
 | AI 시스템 보안 | Prompt Injection 방어, 민감 로그 자동 마스킹, Spring Security + 에이전트 권한 설계, Zero Trust 도구 범위 제한 |
 
