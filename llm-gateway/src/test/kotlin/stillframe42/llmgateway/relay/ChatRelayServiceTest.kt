@@ -3,8 +3,13 @@ package stillframe42.llmgateway.relay
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
+import org.springframework.ai.chat.messages.AssistantMessage
 import org.springframework.ai.chat.messages.MessageType
+import org.springframework.ai.chat.messages.ToolResponseMessage
 import stillframe42.llmgateway.api.ChatMessage
+import stillframe42.llmgateway.api.FunctionCallDto
+import stillframe42.llmgateway.api.ToolCallDto
 
 class ChatRelayServiceTest {
 
@@ -26,9 +31,46 @@ class ChatRelayServiceTest {
     }
 
     @Test
+    fun `content 블록 배열도 텍스트로 정규화된다 - langchain 1_x 전송 형태`() {
+        val messages = ChatRelayService.toSpringMessages(
+            listOf(
+                ChatMessage("user", listOf(mapOf("type" to "text", "text" to "heap "), mapOf("type" to "text", "text" to "분석"))),
+            ),
+        )
+        assertEquals("heap 분석", messages.single().text)
+    }
+
+    @Test
+    fun `tool_calls 를 담은 assistant 이력이 ToolCall 로 복원된다 - ReAct 루프 재전송 경로`() {
+        val messages = ChatRelayService.toSpringMessages(
+            listOf(
+                ChatMessage(
+                    role = "assistant",
+                    content = null,
+                    toolCalls = listOf(ToolCallDto("tc_1", "function", FunctionCallDto("query_loki", """{"q":"{}"}"""))),
+                ),
+                ChatMessage(role = "tool", content = "로그 3건", toolCallId = "tc_1"),
+            ),
+        )
+
+        val assistant = assertIs<AssistantMessage>(messages[0])
+        assertEquals("query_loki", assistant.toolCalls.single().name)
+        val toolResult = assertIs<ToolResponseMessage>(messages[1])
+        assertEquals("tc_1", toolResult.responses.single().id)
+        assertEquals("로그 3건", toolResult.responses.single().responseData)
+    }
+
+    @Test
+    fun `tool 메시지에 tool_call_id 가 없으면 거부한다`() {
+        assertFailsWith<IllegalArgumentException> {
+            ChatRelayService.toSpringMessages(listOf(ChatMessage(role = "tool", content = "결과")))
+        }
+    }
+
+    @Test
     fun `알 수 없는 role 은 거부한다`() {
         assertFailsWith<IllegalArgumentException> {
-            ChatRelayService.toSpringMessages(listOf(ChatMessage("tool", "결과")))
+            ChatRelayService.toSpringMessages(listOf(ChatMessage("developer", "결과")))
         }
     }
 }

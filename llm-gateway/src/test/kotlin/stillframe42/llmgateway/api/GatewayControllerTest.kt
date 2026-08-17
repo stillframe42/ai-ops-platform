@@ -31,7 +31,7 @@ class GatewayControllerTest {
             model = "claude-sonnet-5",
             messages = listOf(ChatMessage(role = "user", content = "ping")),
         )
-        given(chatRelay.relay(request)).willReturn(
+        given(chatRelay.relay(request, "monitoring-summary")).willReturn(
             ChatCompletionResponse(
                 id = "chatcmpl-test",
                 created = 1_755_400_000,
@@ -46,6 +46,7 @@ class GatewayControllerTest {
         mockMvc.perform(
             post("/v1/chat/completions")
                 .contentType(MediaType.APPLICATION_JSON)
+                .header("X-Task-Type", "monitoring-summary")
                 .content("""{"model":"claude-sonnet-5","messages":[{"role":"user","content":"ping"}]}"""),
         )
             .andExpect(status().isOk)

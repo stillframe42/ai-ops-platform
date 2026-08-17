@@ -3,10 +3,9 @@ spring:
     name: llm-gateway
 
   ai:
-    # Phase 1 은 자동구성 선택 속성으로 단일 ChatModel(Anthropic)·단일 EmbeddingModel(OpenAI) —
-    # Phase 2 라우팅에서 양쪽 ChatModel 동시 Bean 이 필요해지면 수동 구성으로 전환
+    # 멀티 프로바이더 (Phase 2): model.chat 미지정 = Anthropic·OpenAI 챗 자동구성 동시 활성 —
+    # 선택은 라우팅 정책(gateway.routing)이 요청별로 수행
     model:
-      chat: anthropic
       embedding: openai
     anthropic:
       # 키-게이트 관례: 빈 값이어도 기동은 되고 호출 시점에만 실패 (compose pass-through 승계, 값 미출력)
@@ -24,6 +23,29 @@ spring:
       embedding:
         # flat 키 (embedding.options.* 는 deprecated 미바인딩 — anthropic 과 같은 함정)
         model: text-embedding-3-small
+
+# 태스크 유형 → 모델 라우팅 (Phase 2, 순서 검토 ② 실매핑 — ADR-0007 역할별 차등의 실현)
+gateway:
+  routing:
+    rules:
+      # 모니터링 요약 — 저비용 (관측 데이터 요약은 추론 부담 낮음)
+      - task: monitoring-summary
+        provider: anthropic
+        model: claude-haiku-4-5
+        max-tokens: 2000
+      # 근본원인 분석 — 고품질 (가설 검증·tool calling 품질이 핵심, ADR-0007)
+      - task: root-cause-analysis
+        provider: anthropic
+        model: claude-sonnet-5
+      # 교차 검증 — 타 프로바이더 (현재 호출자 없음 — 모델명은 사용 시점 실측 확정)
+      - task: code-review-critical
+        provider: openai
+        model: gpt-5.6-terra
+    # 미등록 태스크·무헤더 무모델 요청 — 기존 동작 등가(sonnet-5), 다운그레이드는 Phase 4 예산 소관
+    default-rule:
+      task: default
+      provider: anthropic
+      model: claude-sonnet-5
 
 server:
   port: 8090

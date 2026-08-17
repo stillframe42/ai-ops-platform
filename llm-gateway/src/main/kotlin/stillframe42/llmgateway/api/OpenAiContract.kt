@@ -1,12 +1,15 @@
 package stillframe42.llmgateway.api
 
-import tools.jackson.databind.annotation.JsonNaming
-import tools.jackson.databind.PropertyNamingStrategies
+import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.annotation.JsonProperty
+import tools.jackson.databind.JsonNode
+import tools.jackson.databind.PropertyNamingStrategies
+import tools.jackson.databind.annotation.JsonNaming
 
 /**
  * OpenAI 호환 표면 계약 (ADR-0015) — 클라이언트는 base-url 전환만으로 접속한다.
  * 스트리밍 미지원 (Phase 0 결정 — 유예): stream=true 요청은 400.
+ * 도구는 passthrough — 게이트웨이는 정의를 중계하고 tool_calls 를 반환할 뿐, 실행 주체는 클라이언트.
  */
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
 data class ChatCompletionRequest(
@@ -15,11 +18,51 @@ data class ChatCompletionRequest(
     val maxTokens: Int? = null,
     val temperature: Double? = null,
     val stream: Boolean? = null,
+    val tools: List<ToolSpec>? = null,
+    // OpenAI 계약상 문자열("auto"/"none"/"required") 또는 강제 지정 객체 — JsonNode 로 받아 프로바이더별 번역
+    val toolChoice: JsonNode? = null,
 )
 
+@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)
+@JsonInclude(JsonInclude.Include.NON_NULL)
 data class ChatMessage(
     val role: String,
-    val content: String,
+    // OpenAI 계약상 문자열 또는 블록 배열([{type:text, text:...}]) — langchain 1.x 는 배열로 보낸다 (DAY 31 실측 400)
+    val content: Any? = null,
+    val toolCalls: List<ToolCallDto>? = null,
+    val toolCallId: String? = null,
+) {
+    fun contentText(): String = when (content) {
+        null -> ""
+        is String -> content
+        is List<*> -> content.joinToString("") { block ->
+            (block as? Map<*, *>)?.let { it["text"]?.toString() ?: "" } ?: ""
+        }
+        else -> content.toString()
+    }
+}
+
+data class ToolSpec(
+    val type: String = "function",
+    val function: FunctionSpec,
+)
+
+data class FunctionSpec(
+    val name: String,
+    val description: String? = null,
+    // JSON Schema — 해석하지 않고 프로바이더에 그대로 전달
+    val parameters: JsonNode? = null,
+)
+
+data class ToolCallDto(
+    val id: String,
+    val type: String = "function",
+    val function: FunctionCallDto,
+)
+
+data class FunctionCallDto(
+    val name: String,
+    val arguments: String,
 )
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)

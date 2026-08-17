@@ -2,6 +2,7 @@ package stillframe42.llmgateway.api
 
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestHeader
 import org.springframework.web.bind.annotation.RestController
 import stillframe42.llmgateway.relay.ChatRelayService
 import stillframe42.llmgateway.relay.EmbeddingRelayService
@@ -13,7 +14,10 @@ class GatewayController(
 ) {
 
     @PostMapping("/v1/chat/completions")
-    fun chatCompletions(@RequestBody request: ChatCompletionRequest): ChatCompletionResponse {
+    fun chatCompletions(
+        @RequestBody request: ChatCompletionRequest,
+        @RequestHeader("X-Task-Type", required = false) taskType: String?,
+    ): ChatCompletionResponse {
         if (request.stream == true) {
             // Phase 0 결정: 스트리밍 미지원 (현행 클라이언트 사용 0건 실측 — 배제 아닌 유예)
             throw InvalidRequestException("스트리밍은 지원하지 않습니다 (stream=false 로 요청)", param = "stream")
@@ -21,7 +25,7 @@ class GatewayController(
         if (request.messages.isEmpty()) {
             throw InvalidRequestException("messages 는 비어 있을 수 없습니다", param = "messages")
         }
-        return chatRelay.relay(request)
+        return chatRelay.relay(request, taskType)
     }
 
     @PostMapping("/v1/embeddings")
