@@ -54,7 +54,7 @@ def get_monitor_agent():
     """모니터링 에이전트를 지연 생성한다 — import 시점에 LLM API 키를 요구하지 않기 위해."""
     settings = get_settings()
     return create_agent(
-        model=create_llm(settings),
+        model=create_llm(settings, task_type="monitoring-summary"),
         tools=MONITOR_TOOLS,
         system_prompt=MONITOR_SYSTEM_PROMPT,
     )

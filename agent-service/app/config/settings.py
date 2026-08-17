@@ -6,10 +6,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # LLM — "프로바이더:모델" 형식 (ADR-0007 추가 사항: 설정으로 프로바이더 전환)
-    llm_model: str = "anthropic:claude-sonnet-5"
-    anthropic_api_key: str | None = None
-    openai_api_key: str | None = None
+    # LLM — 모든 호출은 llm-gateway 경유 (6주차, ADR-0015).
+    # llm_client 는 와이어 프로토콜(게이트웨이의 OpenAI 호환 표면 = langchain ChatOpenAI)이지 모델의
+    # 프로바이더가 아니다 — 모델 선택은 게이트웨이 라우팅(X-Task-Type) 소관.
+    # llm_default_model 은 게이트웨이 별칭 (실모델명 아님 — "default" = 게이트웨이 default 규칙):
+    # 에이전트 설정에는 프로바이더 모델명이 등장하지 않는다
+    llm_client: str = "openai"
+    llm_default_model: str = "default"
+    # 기본 주소는 호스트 실행 기준 (compose/K8s 는 env 로 llm-gateway 컨테이너 주소를 덮어쓴다)
+    llm_base_url: str = "http://localhost:8090/v1"
+    # 게이트웨이는 이 키를 검증하지 않는다 (자리 표시 — 인증 전파는 보안 주간). 프로바이더 실키는 게이트웨이만 보유
+    llm_api_key: str = "gateway-local"
 
     # 관측 스택 — 직접 조회 (ADR-0002)
     prometheus_url: str = "http://localhost:9091"
@@ -33,20 +40,9 @@ class Settings(BaseSettings):
     langfuse_secret_key: str | None = None
 
     @property
-    def llm_provider(self) -> str:
-        return self.llm_model.split(":", 1)[0]
-
-    def active_llm_api_key(self) -> str:
-        """활성 프로바이더의 API 키만 검증한다 — 비활성 프로바이더 키는 없어도 된다."""
-        key = {
-            "anthropic": self.anthropic_api_key,
-            "openai": self.openai_api_key,
-        }.get(self.llm_provider)
-        if not key:
-            raise ValueError(
-                f"LLM_MODEL={self.llm_model} 에 필요한 {self.llm_provider.upper()}_API_KEY 가 없습니다 (.env 확인)"
-            )
-        return key
+    def llm_model(self) -> str:
+        """init_chat_model 이 해석하는 "클라이언트:모델" 조합 문자열."""
+        return f"{self.llm_client}:{self.llm_default_model}"
 
 
 @lru_cache

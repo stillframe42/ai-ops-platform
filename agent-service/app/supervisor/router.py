@@ -39,7 +39,10 @@ class RouteDecision(BaseModel):
 def get_route_llm():
     """라우팅 판단용 구조화 출력 LLM — 도구가 없는 단발 판단이라 create_agent 불필요."""
     settings = get_settings()
-    return create_llm(settings).with_structured_output(RouteDecision)
+    # method="function_calling" 고정 — 게이트웨이 도구 passthrough 경로 사용 (json_schema 는 게이트웨이 미지원)
+    return create_llm(settings, task_type="routing-decision").with_structured_output(
+        RouteDecision, method="function_calling"
+    )
 
 
 def decide_ambiguous_route(analysis) -> RouteDecision:

@@ -141,7 +141,7 @@ def _patch_agent_factory(monkeypatch, load_behavior):
     monkeypatch.setattr(analysis_agent, "load_mcp_tools", fake_load)
     stub_settings = SimpleNamespace(mcp_server_url="http://stub:8081/mcp")
     monkeypatch.setattr(analysis_agent, "get_settings", lambda: stub_settings)
-    monkeypatch.setattr(analysis_agent, "create_llm", lambda settings: "stub-llm")
+    monkeypatch.setattr(analysis_agent, "create_llm", lambda settings, task_type=None: "stub-llm")
 
     def fake_create_agent(**kwargs):
         calls["tools"].append(kwargs["tools"])

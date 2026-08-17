@@ -87,7 +87,7 @@ async def get_analysis_agent():
         mcp_tools, discovered = [], False
 
     agent = create_agent(
-        model=create_llm(settings),
+        model=create_llm(settings, task_type="root-cause-analysis"),
         tools=LOCAL_ANALYSIS_TOOLS + mcp_tools,
         system_prompt=ANALYSIS_SYSTEM_PROMPT,
         response_format=AnalysisResult,
