@@ -55,4 +55,10 @@ args_from "$AGENT_ENV" ANTHROPIC_API_KEY
 args_from "$INFRA_ENV" MCP_API_KEY   # control-plane 과 같은 원천 공유 (compose 관례 승계)
 make_secret agent-service-secrets
 
+# llm-gateway (6주차 Phase 1) — 채팅(ANTHROPIC)·임베딩/교차(OPENAI), 원천은 기존 2곳 공유
+LITERALS=()
+args_from "$AGENT_ENV" ANTHROPIC_API_KEY
+args_from "$INFRA_ENV" OPENAI_API_KEY
+make_secret llm-gateway-secrets
+
 echo "완료 — 확인: kubectl -n $NS get secrets"
