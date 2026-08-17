@@ -10,7 +10,7 @@
 | [0004](0004-loki-adoption.md) | 로그 스택 도입 | Loki 도입 (범위 제한), 히스토리는 Prometheus 기본 보존 | 2026-07-14 |
 | [0005](0005-action-executor.md) | 조치 실행 주체 | control-plane 대행 — LLM 프로세스에 인프라 변경 권한 미부여, 승인·감사·실행 수렴. RESTART_APP 은 자동 실행 제외 (추가 사항) | 2026-07-31 |
 | [0006](0006-slack-approval-ux.md) | Slack 승인 UX | Slack App + Socket Mode, Block Kit 승인 버튼, 승인자 user ID 감사, 30m 재알림 → 60m 만료 | 2026-07-31 |
-| [0007](0007-llm-provider.md) | LLM 프로바이더 | Anthropic Claude Sonnet 5 기본, 설정(`프로바이더:모델`)으로 전환 가능 | 2026-07-16 |
+| [0007](0007-llm-provider.md) | LLM 프로바이더 | Anthropic Claude Sonnet 5 기본, 설정(`프로바이더:모델`)으로 전환 가능. 역할별 차등은 게이트웨이 라우팅으로 실현 (추가 사항) | 2026-07-16 |
 | [0008](0008-hybrid-routing.md) | Supervisor 라우팅 | 하이브리드 — 명확한 전이는 규칙, 모호 구간만 LLM | 2026-07-19 |
 | [0009](0009-postgres-checkpointer.md) | LangGraph 체크포인터 | 처음부터 PostgreSQL (Durable Execution), thread_id = incident id | 2026-07-20 |
 | [0010](0010-mcp-tool-exposure.md) | 운영 도구 노출 방식 | MCP 표준 (Streamable HTTP) — REST 직접 호출 대체 | 2026-07-23 |
