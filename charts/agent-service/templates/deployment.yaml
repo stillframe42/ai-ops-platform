@@ -24,6 +24,9 @@ spec:
             - containerPort: 8000
               name: http
           env:
+            # 모든 LLM 호출은 llm-gateway 경유 (6주차, ADR-0015) — 모델 선택은 게이트웨이 라우팅 소관
+            - name: LLM_BASE_URL
+              value: {{ .Values.env.llmBaseUrl | quote }}
             - name: PROMETHEUS_URL
               value: {{ .Values.env.prometheusUrl | quote }}
             - name: LOKI_URL
