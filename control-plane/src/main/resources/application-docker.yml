@@ -13,6 +13,11 @@ spring:
     # compose 내부 리스너 — 환경 차이값은 프로파일 소유 (datasource 선례, 2026-08-07 compose env 정리로 이관)
     bootstrap-servers: kafka:9092
 
+  ai:
+    openai:
+      # 임베딩의 llm-gateway 경유 주소 — 컨테이너 내부 네트워크 기준 (K8s Service 명 = compose 컨테이너명 계약)
+      base-url: http://llm-gateway:8090/v1
+
 ops:
   action:
     # compose 내부 네트워크 기준 — 조치 실행(chaos/reset)은 컨테이너 이름으로 도달 (DAY 24)

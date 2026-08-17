@@ -50,10 +50,14 @@ spring:
       # 임베딩 전용 키 — .env / 환경 변수 (git 미추적, 값 미출력).
       # 기본값 빈 문자열: 키가 없어도 기동은 되고, 검색 도구만 조용히 비활성 (Langfuse 키-게이트 관례)
       api-key: ${OPENAI_API_KEY:}
+      # 임베딩 호출은 llm-gateway 경유 (ADR-0015 단일 통과점) — 기본값은 호스트 실행 기준, docker 프로파일이 덮어쓴다.
+      # /v1 포함 필수 — 공식 SDK 는 base-url 에 /embeddings 만 덧붙인다 (DAY 31 실측 404)
+      base-url: http://localhost:8090/v1
       embedding:
-        options:
-          # 한국어 시드 본문 임베딩 품질 사유로 선택 (Phase 0 결정, 2026-07-23)
-          model: text-embedding-3-small
+        # 한국어 시드 본문 임베딩 품질 사유로 선택 (Phase 0 결정, 2026-07-23).
+        # flat 키 필수 — embedding.options.* 는 Spring AI 2.0 에서 deprecated 미바인딩 (6주차 DAY 30 실측:
+        # 그동안 라이브러리 기본 ada-002 로 임베딩되던 잠복 버그 — 교정 시 vector_store 재적재 필요)
+        model: text-embedding-3-small
     # OpenAI 는 임베딩 전용 — 채팅 모델 자동구성 비활성 (LLM 은 agent-service 의 Anthropic)
     model:
       chat: none
