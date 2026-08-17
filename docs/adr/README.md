@@ -17,3 +17,4 @@
 | [0011](0011-kafka-trigger.md) | 에이전트 트리거 | Kafka 이벤트 (`ops.incidents`) — 수동 커밋 + 멱등 2층, 다운 중 무유실 실측 | 2026-07-26 |
 | [0013](0013-k8s-migration.md) | K8s 이전·compose 역할 분담 | kind + Helm umbrella 가 운영 형상 표준 (docker 프로파일 무수정 재사용), compose 는 개발용 유지 — 폐기 재검토는 8월 말 | 2026-08-13 |
 | [0014](0014-autoscaling-strategy.md) | 오토스케일링 전략 | agent-service 는 KEDA Kafka lag 기반 (min 1·max 3 = 파티션, LLM 워크로드는 CPU 가 수요 신호가 아님), control-plane 은 min 1 고정·HPA 생략 — 10건 무유실 실측 | 2026-08-14 |
+| [0015](0015-llm-gateway.md) | LLM 게이트웨이 도입 방식 | 별도 서비스 직접 구현 (Spring Boot + Spring AI, OpenAI 호환 노출) — 제안됨 (초안, 6주차 Phase 6 승인 예정) | 2026-08-17 |
