@@ -8,7 +8,7 @@ type: application
 version: 0.1.0
 
 dependencies:
-  # 자작 차트 6종 (로컬 경로 — 리소스명이 하드코딩이라 릴리스명 무관 = 주소 계약 유지)
+  # 자작 차트 7종 (로컬 경로 — 리소스명이 하드코딩이라 릴리스명 무관 = 주소 계약 유지)
   - name: postgres
     version: 0.1.0
     repository: "file://../postgres"
@@ -27,6 +27,9 @@ dependencies:
   - name: k6-load
     version: 0.1.0
     repository: "file://../k6-load"
+  - name: llm-gateway
+    version: 0.1.0
+    repository: "file://../llm-gateway"
   # 외부 차트 3종 — Phase 2 설치 실측 버전으로 고정 (재현성)
   - name: kube-prometheus-stack
     version: 88.2.0

@@ -1,0 +1,14 @@
+# Service 명 = 클라이언트 base-url 의 도달 주소 (http://llm-gateway:8090/v1) — 이름이 곧 Prometheus job 라벨
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-gateway
+  labels:
+    {{- include "llm-gateway.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: llm-gateway
+  ports:
+    - port: 8090
+      targetPort: http
+      name: http

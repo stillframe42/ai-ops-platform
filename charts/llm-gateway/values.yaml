@@ -1,0 +1,18 @@
+image:
+  repository: aiops/llm-gateway
+  tag: local
+
+replicas: 1
+
+# 컨테이너 인지 heap — limits 기준 75% (control-plane 관례)
+javaToolOptions: "-XX:MaxRAMPercentage=75.0"
+
+# ANTHROPIC(채팅)·OPENAI(임베딩) — 차트 밖 Secret (infra/k8s/create-secrets.sh)
+existingSecret: llm-gateway-secrets
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 1Gi

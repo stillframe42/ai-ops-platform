@@ -1,0 +1,7 @@
+# llm-gateway 앱 차트 (6주차 Phase 1) — 모든 LLM 호출의 단일 관문 (ADR-0015)
+apiVersion: v2
+name: llm-gateway
+description: LLM 게이트웨이 — OpenAI 호환 노출, 라우팅·캐싱·비용·폴백·한도 (ADR-0015)
+type: application
+version: 0.1.0
+appVersion: "local"

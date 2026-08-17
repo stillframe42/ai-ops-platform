@@ -17,6 +17,9 @@ dependencies:
 - name: k6-load
   repository: file://../k6-load
   version: 0.1.0
+- name: llm-gateway
+  repository: file://../llm-gateway
+  version: 0.1.0
 - name: kube-prometheus-stack
   repository: https://prometheus-community.github.io/helm-charts
   version: 88.2.0
@@ -26,5 +29,5 @@ dependencies:
 - name: alloy
   repository: https://grafana.github.io/helm-charts
   version: 1.11.1
-digest: sha256:12fc5d923886ec6efceb461fdee2e283279dab732e84021cfbe90ea76292d512
-generated: "2026-08-13T15:15:16.228114+09:00"
+digest: sha256:f4fc67f9229b81e9ac4acb886c0eab9aa6190118c8e36d0c581356be57268e0f
+generated: "2026-08-17T11:44:08.193079+09:00"
