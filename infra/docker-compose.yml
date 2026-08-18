@@ -83,10 +83,25 @@ services:
     environment:
       # 채팅(Anthropic) 키 — agent-service .env 재사용 (env_file), 임베딩(OpenAI) 키는 infra/.env pass-through
       OPENAI_API_KEY:
+      # L2 캐시(pgvector, llmgateway DB) 접속 — postgres 와 같은 크리덴셜 원천 (Phase 3)
+      POSTGRES_USER: ${POSTGRES_USER:-aiops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aiops}
     env_file:
       - ../agent-service/.env
     ports:
       - "8090:8090"
+    depends_on:
+      # L2 스키마 초기화(initialize-schema)가 기동 시점에 DB 를 요구 — redis 는 무캐시 통과라 미의존
+      postgres:
+        condition: service_healthy
+
+  redis:
+    # 용도: llm-gateway L1 캐시 (6주차 Phase 3) + Phase 4 rate limit 버킷.
+    # 공식 이미지 (bitnami 기각 선례) — L2 는 pgvector 라 검색 모듈 불요 (Phase 0 ⑦).
+    # 캐시 전용 무영속 — 소실 시 재계산으로 수렴, LRU 퇴출은 오류 아닌 캐시 미스
+    image: redis:8.2-alpine
+    container_name: redis
+    command: ["redis-server", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
 
   control-plane:
     # 용도: 관제/API/게이트웨이 — 운영 도구 MCP 서버 (Streamable HTTP, ADR-0010).
@@ -133,6 +148,7 @@ services:
     # DB 분리 목록 (최초 1회 생성 — 볼륨이 이미 있으면 아래 명령):
     #   docker exec postgres createdb -U aiops langfuse
     #   docker exec postgres createdb -U aiops controlplane
+    #   docker exec postgres createdb -U aiops llmgateway
     image: pgvector/pgvector:pg18
     container_name: postgres
     environment:
