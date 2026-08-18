@@ -1,0 +1,103 @@
+{
+  "uid": "llm-gateway",
+  "title": "LLM 게이트웨이 (llm-gateway)",
+  "tags": ["aiops", "llm-gateway"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {"from": "now-3h", "to": "now"},
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "캐시 히트율 (1시간 창, bypass 제외)",
+      "description": "히트율 = (정확 + 의미 히트) / (전체 - bypass). tool calling·no-cache 요청은 분모에서 제외 — 캐싱 대상이 아니라서 (llm-gateway/README 분류 기준)",
+      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "decimals": 1,
+          "noValue": "요청 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(gateway_cache_requests_total{result=~\"exact_hit|semantic_hit\"}[1h])) / sum(increase(gateway_cache_requests_total{result!=\"bypass\"}[1h]))"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "절감 비용 추정 (누적, USD)",
+      "description": "캐시 적중으로 아낀 토큰 × 표준 단가(2026-06 기준: sonnet $3/$15, haiku $1/$5 per 1M). 인트로 가격 미반영 — 단가 테이블 설정 외부화(Phase 4)에서 정밀화",
+      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4,
+          "noValue": "$0"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "((sum(gateway_cache_saved_tokens_total{model=~\".*sonnet.*\",kind=\"prompt\"}) * 3 or vector(0)) + (sum(gateway_cache_saved_tokens_total{model=~\".*sonnet.*\",kind=\"completion\"}) * 15 or vector(0)) + (sum(gateway_cache_saved_tokens_total{model=~\".*haiku.*\",kind=\"prompt\"}) * 1 or vector(0)) + (sum(gateway_cache_saved_tokens_total{model=~\".*haiku.*\",kind=\"completion\"}) * 5 or vector(0))) / 1e6"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "캐시 판정 분포 (5분 창)",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "none"}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (result) (increase(gateway_cache_requests_total[5m]))",
+          "legendFormat": "{{result}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "절감 토큰 누적 (모델·종류별)",
+      "description": "캐시 적중 시 재계산 없이 반환된 응답의 usage — kind=prompt/completion 구분 (completion 단가가 5배라 비용 기여 상이)",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "none"}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (model, kind) (gateway_cache_saved_tokens_total)",
+          "legendFormat": "{{model}} {{kind}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "태스크·모델별 요청 (5분 창) — Phase 2 라우팅 실측",
+      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 6},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "fieldConfig": {"defaults": {"unit": "none"}, "overrides": []},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (task, model) (increase(gateway_requests_total[5m]))",
+          "legendFormat": "{{task}} → {{model}}"
+        }
+      ]
+    }
+  ]
+}
