@@ -2,6 +2,9 @@ dependencies:
 - name: postgres
   repository: file://../postgres
   version: 0.1.0
+- name: redis
+  repository: file://../redis
+  version: 0.1.0
 - name: kafka
   repository: file://../kafka
   version: 0.1.0
@@ -29,5 +32,5 @@ dependencies:
 - name: alloy
   repository: https://grafana.github.io/helm-charts
   version: 1.11.1
-digest: sha256:f4fc67f9229b81e9ac4acb886c0eab9aa6190118c8e36d0c581356be57268e0f
-generated: "2026-08-17T11:44:08.193079+09:00"
+digest: sha256:6a2c68b53b7fc450dcdeddabfa6a9a528250b5b46f5d6566c9305e204b0003ed
+generated: "2026-08-18T14:22:54.479184+09:00"

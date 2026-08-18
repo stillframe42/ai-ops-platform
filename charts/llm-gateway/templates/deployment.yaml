@@ -29,6 +29,9 @@ spec:
             # ANTHROPIC·OPENAI — 미반입 키는 키-게이트 비활성 (pass-through 승계)
             - secretRef:
                 name: {{ .Values.existingSecret }}
+            # POSTGRES_USER/PASSWORD — L2 캐시(pgvector, llmgateway DB) 접속 (Phase 3)
+            - secretRef:
+                name: {{ .Values.postgresSecret }}
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness

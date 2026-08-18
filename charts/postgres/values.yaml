@@ -6,10 +6,12 @@ image:
 # 크리덴셜은 차트 밖 Secret (infra/k8s/create-secrets.sh 가 생성) — 값을 차트에 두지 않는다
 existingSecret: postgres-secrets
 
-# 최초 1회 생성할 추가 DB (compose 주석의 createdb 2건 승계 — 스키마 소유는 앱: Flyway·checkpointer.setup())
+# 최초 1회 생성할 추가 DB (compose 주석의 createdb 승계 — 스키마 소유는 앱: Flyway·checkpointer.setup())
 extraDatabases:
   - langfuse
   - controlplane
+  # llm-gateway L2 캐시 (6주차 Phase 3) — control-plane 의 vector_store 와 소유·임베딩 공간 분리
+  - llmgateway
 
 storage: 2Gi
 

@@ -10,6 +10,9 @@ javaToolOptions: "-XX:MaxRAMPercentage=75.0"
 # ANTHROPIC(채팅)·OPENAI(임베딩) — 차트 밖 Secret (infra/k8s/create-secrets.sh)
 existingSecret: llm-gateway-secrets
 
+# L2 캐시(pgvector) 접속 크리덴셜 — postgres 차트와 같은 Secret 공유 (Phase 3)
+postgresSecret: postgres-secrets
+
 resources:
   requests:
     cpu: 250m

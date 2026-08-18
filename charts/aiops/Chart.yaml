@@ -8,10 +8,13 @@ type: application
 version: 0.1.0
 
 dependencies:
-  # 자작 차트 7종 (로컬 경로 — 리소스명이 하드코딩이라 릴리스명 무관 = 주소 계약 유지)
+  # 자작 차트 8종 (로컬 경로 — 리소스명이 하드코딩이라 릴리스명 무관 = 주소 계약 유지)
   - name: postgres
     version: 0.1.0
     repository: "file://../postgres"
+  - name: redis
+    version: 0.1.0
+    repository: "file://../redis"
   - name: kafka
     version: 0.1.0
     repository: "file://../kafka"

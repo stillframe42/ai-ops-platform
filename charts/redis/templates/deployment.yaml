@@ -1,0 +1,42 @@
+# 캐시 전용이라 Deployment (StatefulSet 아님) — 데이터는 소모품, pod 교체 = 캐시 초기화 수용
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  labels:
+    {{- include "redis.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        # app 라벨 = Alloy 의 service 라벨 원천 (LogQL 진입점 계약)
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          args:
+            # 캐시 의미론 — 상한 도달 시 LRU 퇴출 (기본 noeviction 은 쓰기 오류라 캐시에 부적합)
+            - --maxmemory
+            - {{ .Values.maxMemory | quote }}
+            - --maxmemory-policy
+            - allkeys-lru
+          ports:
+            - containerPort: 6379
+              name: redis
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

@@ -1,0 +1,15 @@
+# 기본값 소유는 이 파일 하나 — 환경 차이값만 상위(umbrella values)에서 덮어쓴다
+image:
+  # 공식 이미지 (bitnami 기각 선례 — Phase 0 ⑦ 로 검색 모듈 불요, 표준 이미지로 충분)
+  repository: redis
+  tag: 8.2-alpine
+
+# 캐시 용도 상한 — 초과 시 LRU 퇴출 (캐시 미스로 강등될 뿐 오류 아님)
+maxMemory: 128mb
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 192Mi
