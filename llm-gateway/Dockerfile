@@ -11,4 +11,5 @@ WORKDIR /app
 COPY --from=build /workspace/build/libs/*.jar app.jar
 ENV SPRING_PROFILES_ACTIVE=docker
 EXPOSE 8090
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# --enable-native-access: netty 네이티브 로딩 명시 허용 (JDK 25 JEP 472 — 미래 릴리스 차단 예고 대응)
+ENTRYPOINT ["java", "--enable-native-access=ALL-UNNAMED", "-jar", "app.jar"]

@@ -44,15 +44,18 @@ class ChatRelayService(
     private val metrics: GatewayMetrics,
 ) {
 
-    fun relay(request: ChatCompletionRequest, taskType: String?): ChatCompletionResponse {
-        val route = router.resolve(taskType, request.model)
+    fun relay(request: ChatCompletionRequest, taskType: String?): ChatCompletionResponse =
+        relay(request, router.resolve(taskType, request.model))
+
+    // 라우팅 해석은 호출자(캐시 계층) 몫 — 모델별 캐시 키·필터와 중계가 같은 Route 를 공유한다 (Phase 3)
+    fun relay(request: ChatCompletionRequest, route: Route): ChatCompletionResponse {
         val chatModel = requireNotNull(chatModels[route.provider]) { "미구성 프로바이더: ${route.provider}" }
         val prompt = Prompt(toSpringMessages(request.messages), toOptions(route, request))
         val response = chatModel.call(prompt)
         val generation = checkNotNull(response.result) { "프로바이더 응답에 생성 결과가 없습니다" }
         val usage = response.metadata.usage
         val actualModel = response.metadata.model.takeIf { it.isNotBlank() } ?: route.model
-        metrics.record(taskType, route.provider, actualModel)
+        metrics.record(route.taskType, route.provider, actualModel)
 
         val toolCalls = generation.output.toolCalls.orEmpty().map {
             ToolCallDto(id = it.id, function = FunctionCallDto(name = it.name, arguments = it.arguments))

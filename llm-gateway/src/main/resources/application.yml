@@ -24,6 +24,9 @@ spring:
         # flat 키 (embedding.options.* 는 deprecated 미바인딩 — anthropic 과 같은 함정)
         model: text-embedding-3-small
 
+# 2단계 캐시 (Phase 3) — 정확 캐시 TTL·의미 캐시 임계값 기본값은 CacheProperties 소유,
+# 의미 캐시 접속만 docker 프로파일이 지정 (semantic.url 부재 = 비구성 — 로컬·테스트는 정확 캐시만)
+
 # 태스크 유형 → 모델 라우팅 (Phase 2, 순서 검토 ② 실매핑 — ADR-0007 역할별 차등의 실현)
 gateway:
   routing:
@@ -55,3 +58,8 @@ management:
     web:
       exposure:
         include: health,info,prometheus,metrics
+  health:
+    redis:
+      # 캐시 장애 = 무캐시 통과 설계 — readiness 가 Redis 에 결합되면 캐시 장애가 게이트웨이 전체를
+      # 라우팅에서 제외한다 (Phase 4 rate limit 이 Redis 를 필수화하면 재검토)
+      enabled: false

@@ -27,6 +27,10 @@ dependencies {
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("org.springframework.ai:spring-ai-starter-model-anthropic")
 	implementation("org.springframework.ai:spring-ai-starter-model-openai")
+	implementation("org.springframework.boot:spring-boot-starter-data-redis")
+	implementation("org.springframework.ai:spring-ai-pgvector-store")
+	implementation("com.zaxxer:HikariCP")
+	runtimeOnly("org.postgresql:postgresql")
 	implementation("tools.jackson.module:jackson-module-kotlin")
 	runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 	testImplementation("org.springframework.boot:spring-boot-starter-actuator-test")
@@ -49,4 +53,11 @@ kotlin {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+	jvmArgs(
+		// JDK 25 JEP 472: netty(lettuce·reactor-netty 전이 의존)의 System::loadLibrary 가
+		// 제한 메서드 — 미래 릴리스 차단 예고라 명시 허용 (경고 소거가 아니라 정책 선언).
+		"--enable-native-access=ALL-UNNAMED",
+		// Mockito 에이전트가 부트스트랩 클래스패스를 덧붙여 CDS 공유 불가 안내가 뜸 — 테스트에선 CDS 무익이라 비활성
+		"-Xshare:off",
+	)
 }

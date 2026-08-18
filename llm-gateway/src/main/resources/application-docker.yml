@@ -3,3 +3,17 @@ logging:
   structured:
     format:
       console: ecs
+
+spring:
+  data:
+    redis:
+      # 정확 일치 캐시 (Phase 3) — 클러스터·compose 공통 서비스명
+      host: redis
+
+gateway:
+  cache:
+    semantic:
+      # 의미 유사도 캐시 — postgres 재활용 (Phase 0 ⑦), 게이트웨이 전용 DB (init-job 이 생성)
+      url: jdbc:postgresql://postgres:5432/llmgateway
+      username: ${POSTGRES_USER}
+      password: ${POSTGRES_PASSWORD}

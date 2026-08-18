@@ -8,9 +8,12 @@ import org.springframework.http.MediaType
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
+import org.springframework.test.web.servlet.result.MockMvcResultMatchers.header
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
-import stillframe42.llmgateway.relay.ChatRelayService
+import stillframe42.llmgateway.cache.CacheStatus
+import stillframe42.llmgateway.cache.CachedChatResult
+import stillframe42.llmgateway.cache.CachingChatService
 import stillframe42.llmgateway.relay.EmbeddingRelayService
 
 @WebMvcTest(GatewayController::class)
@@ -20,10 +23,20 @@ class GatewayControllerTest {
     lateinit var mockMvc: MockMvc
 
     @MockitoBean
-    lateinit var chatRelay: ChatRelayService
+    lateinit var cachingChat: CachingChatService
 
     @MockitoBean
     lateinit var embeddingRelay: EmbeddingRelayService
+
+    private fun response() = ChatCompletionResponse(
+        id = "chatcmpl-test",
+        created = 1_755_400_000,
+        model = "claude-sonnet-5",
+        choices = listOf(
+            ChatChoice(index = 0, message = ChatMessage("assistant", "pong"), finishReason = "end_turn"),
+        ),
+        usage = TokenUsage(promptTokens = 10, completionTokens = 5, totalTokens = 15),
+    )
 
     @Test
     fun `채팅 완성 응답은 OpenAI 계약 형태 - snake_case usage 포함`() {
@@ -31,17 +44,8 @@ class GatewayControllerTest {
             model = "claude-sonnet-5",
             messages = listOf(ChatMessage(role = "user", content = "ping")),
         )
-        given(chatRelay.relay(request, "monitoring-summary")).willReturn(
-            ChatCompletionResponse(
-                id = "chatcmpl-test",
-                created = 1_755_400_000,
-                model = "claude-sonnet-5",
-                choices = listOf(
-                    ChatChoice(index = 0, message = ChatMessage("assistant", "pong"), finishReason = "end_turn"),
-                ),
-                usage = TokenUsage(promptTokens = 10, completionTokens = 5, totalTokens = 15),
-            ),
-        )
+        given(cachingChat.complete(request, "monitoring-summary", null))
+            .willReturn(CachedChatResult(response(), CacheStatus.MISS))
 
         mockMvc.perform(
             post("/v1/chat/completions")
@@ -50,11 +54,28 @@ class GatewayControllerTest {
                 .content("""{"model":"claude-sonnet-5","messages":[{"role":"user","content":"ping"}]}"""),
         )
             .andExpect(status().isOk)
+            .andExpect(header().string("X-Gateway-Cache", "miss"))
             .andExpect(jsonPath("$.object").value("chat.completion"))
             .andExpect(jsonPath("$.choices[0].message.content").value("pong"))
             .andExpect(jsonPath("$.choices[0].finish_reason").value("end_turn"))
             .andExpect(jsonPath("$.usage.prompt_tokens").value(10))
             .andExpect(jsonPath("$.usage.total_tokens").value(15))
+    }
+
+    @Test
+    fun `캐시 적중은 X-Gateway-Cache 헤더로 드러난다 - no-cache 헤더는 그대로 전달`() {
+        val request = ChatCompletionRequest(messages = listOf(ChatMessage(role = "user", content = "ping")))
+        given(cachingChat.complete(request, null, "no-cache"))
+            .willReturn(CachedChatResult(response(), CacheStatus.BYPASS))
+
+        mockMvc.perform(
+            post("/v1/chat/completions")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("X-Cache-Control", "no-cache")
+                .content("""{"messages":[{"role":"user","content":"ping"}]}"""),
+        )
+            .andExpect(status().isOk)
+            .andExpect(header().string("X-Gateway-Cache", "bypass"))
     }
 
     @Test

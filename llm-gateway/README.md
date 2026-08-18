@@ -7,7 +7,7 @@
 | # | 책임 | 상태 |
 |---|------|------|
 | 1 | 모델 라우팅 — `X-Task-Type` 헤더 기반 태스크별 모델 선택 | Phase 2 |
-| 2 | 응답 캐싱 — L1 정확 일치(Redis) + L2 의미 유사도(pgvector) | Phase 3 |
+| 2 | 응답 캐싱 — 정확 일치(Redis) + 의미 유사도(pgvector) 2단계 | Phase 3 |
 | 3 | 비용 추적 + 예산 통제 — 중앙 집계·초과 시 저비용 모델 다운그레이드 | Phase 4 |
 | 4 | 폴백 — Anthropic 장애 시 OpenAI 전환 (Resilience4j) | Phase 5 |
 | 5 | Rate Limiting — Bucket4j + Redis, 서비스별 한도 | Phase 4 |
@@ -41,13 +41,38 @@
 
 - control-plane 유사 인시던트 검색의 임베딩 호출이 경유 (Phase 0 결정 — "모든 LLM 호출 단일 통과점"의 완전성)
 
-### 예정 헤더 계약
+### 헤더 계약
 
-| 헤더 | 용도 | Phase |
-|------|------|-------|
-| `X-Task-Type` | 라우팅 정책 키 (monitoring-summary / root-cause-analysis / ...) | 2 |
-| `X-Cache-Control: no-cache` | 캐싱 제외 (실시간 메트릭 분석 요청) | 3 |
-| `X-Client-Service` | 비용 집계·rate limit 의 서비스 차원 | 4 |
+| 헤더 | 방향 | 용도 | Phase |
+|------|------|------|-------|
+| `X-Task-Type` | 요청 | 라우팅 정책 키 (monitoring-summary / root-cause-analysis / ...) | 2 |
+| `X-Cache-Control: no-cache` | 요청 | 캐싱 제외 (실시간 메트릭 분석 요청) | 3 |
+| `X-Gateway-Cache` | 응답 | 캐시 판정 노출 (`exact_hit` / `semantic_hit` / `miss` / `bypass`) | 3 |
+| `X-Client-Service` | 요청 | 비용 집계·rate limit 의 서비스 차원 (예정) | 4 |
+
+## 응답 캐싱 (Phase 3) — 2단계
+
+| | 정확 일치 캐시 (exact) | 의미 유사도 캐시 (semantic) |
+|---|---|---|
+| 저장소 | Redis (`gw:exact:` 접두 해시 키, TTL 1시간) | pgvector `llmgateway` DB `semantic_response_cache` |
+| 히트 조건 | 요청 정규화 해시 완전 일치 | 코사인 유사도 > 0.95 **+ 같은 해석 모델** |
+| 조회 비용 | ~1ms | 임베딩 API 1회 (text-embedding-3-small) |
+
+- 정확 캐시 키에는 해석된 프로바이더·모델·유효 max_tokens·temperature·메시지 전체가 들어간다 — 옵션이 다르면 다른 항목
+- 의미 캐시 히트는 정확 캐시로 승격 — 같은 정확 요청의 다음 조회는 임베딩 없이 적중
+- **캐시 저장소 장애 = 무캐시 통과** — 게이트웨이 가용성은 캐시에 종속되지 않는다 (Redis 헬스 인디케이터 비활성이 같은 이유)
+
+### 캐싱 가능 분류 기준 (제외 규칙)
+
+| 요청 | 판정 | 근거 |
+|------|------|------|
+| tool 정의(`tools`) 포함 | **제외 (bypass)** | 도구 실행 결과에 의존 — 같은 질문이라도 도구가 반환한 실시간 상태에 따라 응답이 달라진다 |
+| tool 이력(`role: tool`·`tool_calls`) 포함 대화 | **제외 (bypass)** | 위와 동일 — ReAct 루프 중간 상태는 재사용 불가 |
+| `X-Cache-Control: no-cache` | **제외 (bypass)** | 호출자가 실시간성을 선언 (예: 방금 주입된 장애의 메트릭 분석) |
+| 그 외 채팅 완성 | 캐싱 | 순수 텍스트 → 텍스트 — 같은 질문이면 같은 답 재사용 가능 |
+| `/v1/embeddings` | 미캐싱 | 임베딩은 결정적이라 정확 일치 캐싱이 유효하나 필수 아님 (Phase 0 ⑨ — 선택 유예) |
+
+주의: 에이전트의 ReAct 호출은 대부분 tool 정의를 포함하므로 제외된다 — 캐시의 주 수혜 경로는 도구 없는 요약·보고 태스크와 반복 질의. 알려진 한계: 의미 캐시 항목에 만료가 없다 (TTL 은 정확 캐시만 — 데모 규모 수용, 필요 시 `cached_at` 메타데이터 기반 청소 후행).
 
 ## 모듈 구조
 
@@ -55,11 +80,12 @@
 stillframe42.llmgateway
 ├── api/      # OpenAI 호환 표면 — DTO(계약)·컨트롤러. 형식 검증만, 정책 없음
 ├── relay/    # 프로바이더 중계 — Spring AI ChatModel/EmbeddingModel 호출·형식 번역
-└── (예정) routing/ caching/ cost/ ratelimit/   # Phase 2~5 — relay 앞뒤의 정책 계층
+├── routing/  # 태스크 유형 → 모델 라우팅 (Phase 2 — yml 외부화 정책)
+├── cache/    # 2단계 캐싱 (Phase 3 — 정확 일치 Redis + 의미 유사도 pgvector, 제외 규칙)
+└── (예정) cost/ ratelimit/   # Phase 4~5 — relay 앞뒤의 정책 계층
 ```
 
 - 원칙: **상태는 전부 밖** (캐시·카운터 = Redis/PostgreSQL) — 다중 replica 가 코드 무수정으로 성립
-- 프로바이더 선택은 현재 yml 자동구성 속성 (`spring.ai.model.chat: anthropic`) — Phase 2 라우팅에서 양쪽 ChatModel 수동 Bean 으로 전환
 
 ## 실행
 
