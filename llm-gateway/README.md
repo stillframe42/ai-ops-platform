@@ -48,7 +48,9 @@
 | `X-Task-Type` | 요청 | 라우팅 정책 키 (monitoring-summary / root-cause-analysis / ...) | 2 |
 | `X-Cache-Control: no-cache` | 요청 | 캐싱 제외 (실시간 메트릭 분석 요청) | 3 |
 | `X-Gateway-Cache` | 응답 | 캐시 판정 노출 (`exact_hit` / `semantic_hit` / `miss` / `bypass`) | 3 |
-| `X-Client-Service` | 요청 | 비용 집계·rate limit 의 서비스 차원 (예정) | 4 |
+| `X-Client-Service` | 요청 | 비용 집계·예산·rate limit 의 서비스 차원 (부재 = `unknown`) | 4 |
+| `X-Gateway-Downgrade: budget-exceeded` | 응답 | 예산 100% 도달로 저비용 모델 강제 전환됨 (응답 `model` 필드와 함께 확인) | 4 |
+| `Retry-After` | 응답 (429) | 분당 한도 초과 시 재시도 대기 초 | 4 |
 
 ## 응답 캐싱 (Phase 3) — 2단계
 
@@ -74,15 +76,30 @@
 
 주의: 에이전트의 ReAct 호출은 대부분 tool 정의를 포함하므로 제외된다 — 캐시의 주 수혜 경로는 도구 없는 요약·보고 태스크와 반복 질의. 알려진 한계: 의미 캐시 항목에 만료가 없다 (TTL 은 정확 캐시만 — 데모 규모 수용, 필요 시 `cached_at` 메타데이터 기반 청소 후행).
 
+## 비용 추적 + 예산 통제 (Phase 4)
+
+- **단가 테이블 yml 외부화** (`gateway.cost.prices` — 접두 매칭으로 프로바이더의 날짜 접미 모델명 흡수): Sonnet 5 인트로 가격 종료(8월 말) 시 설정만 갱신. 미등록 모델은 0 계상
+- **요청별 원장**: PostgreSQL `llm_cost_ledger` (`llmgateway` DB — 의미 캐시와 공용) — 서비스/태스크/모델/일별 차원, 캐시 히트는 지출 0 + 절감액(`saved_usd`) 기록. Micrometer `gateway.cost.usd`·`gateway.cost.saved.usd` 병행 (Grafana 패널 원천)
+- **일별 예산** (`gateway.budget`, UTC 기준): 80% 도달 → Slack 경고 1회, **100% 도달 → 저비용 모델 강제 다운그레이드 (차단 없음)** — 장애 대응 파이프라인은 멈추지 않는다. 카운터는 Redis (`gw:budget:` — replica 2 전제 외부 저장), 카운터 장애 = 통제 없이 통과
+- 발생 순서: 라우팅 해석 → 예산 판정(다운그레이드) → 캐시 → 중계 → 비용 계상·정산 — 다운그레이드된 라우트가 캐시 키·모델 필터에도 쓰여 원 모델 캐시와 격리
+
+## Rate Limiting (Phase 4)
+
+- Bucket4j + Redis 토큰 버킷 (`gw:rl:` — 분산 대응), `X-Client-Service` 별 분당 한도 (`gateway.ratelimit`, docker 프로파일만 활성)
+- 초과 시 **429 + `Retry-After`** (OpenAI `rate_limit_error` 계약 — 클라이언트 SDK 표준 재시도가 그대로 동작)
+- Redis 장애 = 통과 (fail-open — 가용성 우선, fail-closed 요건은 보안 주간 재검토)
+
 ## 모듈 구조
 
 ```
 stillframe42.llmgateway
-├── api/      # OpenAI 호환 표면 — DTO(계약)·컨트롤러. 형식 검증만, 정책 없음
-├── relay/    # 프로바이더 중계 — Spring AI ChatModel/EmbeddingModel 호출·형식 번역
-├── routing/  # 태스크 유형 → 모델 라우팅 (Phase 2 — yml 외부화 정책)
-├── cache/    # 2단계 캐싱 (Phase 3 — 정확 일치 Redis + 의미 유사도 pgvector, 제외 규칙)
-└── (예정) cost/ ratelimit/   # Phase 4~5 — relay 앞뒤의 정책 계층
+├── api/        # OpenAI 호환 표면 — DTO(계약)·컨트롤러. 형식 검증만, 정책 없음
+├── relay/      # 프로바이더 중계 — Spring AI ChatModel/EmbeddingModel 호출·형식 번역
+├── routing/    # 태스크 유형 → 모델 라우팅 (Phase 2 — yml 외부화 정책)
+├── cache/      # 2단계 캐싱 (Phase 3 — 정확 일치 Redis + 의미 유사도 pgvector, 제외 규칙)
+├── cost/       # 비용 계상·원장 (Phase 4 — 단가 외부화, PostgreSQL + Micrometer)
+├── budget/     # 일별 예산 판정·정산·경고 (Phase 4 — Redis 카운터, Slack, 다운그레이드)
+└── ratelimit/  # 서비스별 분당 한도 (Phase 4 — Bucket4j + Redis, 429 + Retry-After)
 ```
 
 - 원칙: **상태는 전부 밖** (캐시·카운터 = Redis/PostgreSQL) — 다중 replica 가 코드 무수정으로 성립

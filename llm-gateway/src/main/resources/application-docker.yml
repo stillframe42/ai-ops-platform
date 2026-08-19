@@ -11,9 +11,13 @@ spring:
       host: redis
 
 gateway:
-  cache:
-    semantic:
-      # 의미 유사도 캐시 — postgres 재활용 (Phase 0 ⑦), 게이트웨이 전용 DB (init-job 이 생성)
-      url: jdbc:postgresql://postgres:5432/llmgateway
-      username: ${POSTGRES_USER}
-      password: ${POSTGRES_PASSWORD}
+  # 게이트웨이 전용 DB (init-job 이 생성) — 의미 캐시(pgvector)·비용 원장 공용 (Phase 4 승격)
+  postgres:
+    url: jdbc:postgresql://postgres:5432/llmgateway
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
+  # 서비스별 분당 한도 (Phase 4) — 초과 시 429 + Retry-After, 버킷은 Redis (replica 2 전제)
+  ratelimit:
+    default-rpm: 30
+    service-rpm:
+      agent-service: 60

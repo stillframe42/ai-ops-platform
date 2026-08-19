@@ -1,7 +1,9 @@
 package stillframe42.llmgateway.cache
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+import java.time.Clock
 import java.time.Duration
+import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -19,6 +21,12 @@ import stillframe42.llmgateway.api.ChatMessage
 import stillframe42.llmgateway.api.FunctionSpec
 import stillframe42.llmgateway.api.TokenUsage
 import stillframe42.llmgateway.api.ToolSpec
+import stillframe42.llmgateway.budget.BudgetCounter
+import stillframe42.llmgateway.budget.BudgetGuard
+import stillframe42.llmgateway.budget.BudgetProperties
+import stillframe42.llmgateway.cost.CostCalculator
+import stillframe42.llmgateway.cost.CostProperties
+import stillframe42.llmgateway.cost.CostRecorder
 import stillframe42.llmgateway.relay.ChatRelayService
 import stillframe42.llmgateway.relay.GatewayMetrics
 import stillframe42.llmgateway.routing.ModelRouter
@@ -51,8 +59,10 @@ class CachingChatServiceTest {
         registry: SimpleMeterRegistry,
     ) : ChatRelayService(ModelRouter(RoutingProperties()), emptyMap(), GatewayMetrics(registry)) {
         var calls = 0
+        var lastRoute: Route? = null
         override fun relay(request: ChatCompletionRequest, route: Route): ChatCompletionResponse {
             calls++
+            lastRoute = route
             return result
         }
     }
@@ -84,15 +94,38 @@ class CachingChatServiceTest {
         }
     }
 
+    private class InMemoryBudgetCounter : BudgetCounter {
+        val totals = mutableMapOf<String, Double>()
+        private val flags = mutableSetOf<String>()
+        override fun add(scope: String, amount: Double): Double {
+            val next = (totals[scope] ?: 0.0) + amount
+            totals[scope] = next
+            return next
+        }
+        override fun current(scope: String): Double = totals[scope] ?: 0.0
+        override fun markOnce(flag: String): Boolean = flags.add(flag)
+    }
+
     private fun service(
         relay: StubRelay,
         exactCache: ExactMatchCacheStore = InMemoryExactCache(),
         vectorStore: VectorStore? = null,
+        budgetLimitUsd: Double? = null,
+        budgetCounter: BudgetCounter = InMemoryBudgetCounter(),
+        prices: List<CostProperties.ModelPrice> = emptyList(),
     ) = CachingChatService(
         router = ModelRouter(RoutingProperties()),
         relay = relay,
         exactCache = ExactResponseCache(exactCache, Duration.ofHours(1), mapper),
         semanticCache = SemanticResponseCache(vectorStore, 0.95, mapper),
+        budget = BudgetGuard(
+            properties = BudgetProperties(dailyLimitUsd = budgetLimitUsd),
+            counter = budgetCounter,
+            alerter = { },
+            metrics = metrics,
+            clock = Clock.systemUTC(),
+        ),
+        costRecorder = CostRecorder(CostCalculator(CostProperties(prices = prices)), ledger = null, metrics = metrics),
         metrics = metrics,
     )
 
@@ -101,8 +134,8 @@ class CachingChatServiceTest {
         val relay = StubRelay(response(), registry)
         val svc = service(relay)
 
-        val first = svc.complete(request(), taskType = null, cacheControl = null)
-        val second = svc.complete(request(), taskType = null, cacheControl = null)
+        val first = svc.complete(request(), taskType = null, cacheControl = null, service = "agent-service")
+        val second = svc.complete(request(), taskType = null, cacheControl = null, service = "agent-service")
 
         assertEquals(CacheStatus.MISS, first.cacheStatus)
         assertEquals(CacheStatus.EXACT_HIT, second.cacheStatus)
@@ -120,7 +153,7 @@ class CachingChatServiceTest {
         )
         val svc = service(relay, exactCache = exactCache, vectorStore = semanticStore)
 
-        val result = svc.complete(request("heap 이 왜 올라가나"), taskType = null, cacheControl = null)
+        val result = svc.complete(request("heap 이 왜 올라가나"), taskType = null, cacheControl = null, service = "agent-service")
 
         assertEquals(CacheStatus.SEMANTIC_HIT, result.cacheStatus)
         assertEquals(0, relay.calls)
@@ -135,7 +168,7 @@ class CachingChatServiceTest {
         val semanticStore = RecordingVectorStore()
         val svc = service(relay, exactCache = exactCache, vectorStore = semanticStore)
 
-        val result = svc.complete(request(), taskType = null, cacheControl = null)
+        val result = svc.complete(request(), taskType = null, cacheControl = null, service = "agent-service")
 
         assertEquals(CacheStatus.MISS, result.cacheStatus)
         assertEquals(1, relay.calls)
@@ -151,7 +184,7 @@ class CachingChatServiceTest {
         val semanticStore = RecordingVectorStore()
         val svc = service(relay, vectorStore = semanticStore)
 
-        svc.complete(request("heap 이 왜 올라가나"), taskType = null, cacheControl = null)
+        svc.complete(request("heap 이 왜 올라가나"), taskType = null, cacheControl = null, service = "agent-service")
 
         // OpenAiEmbeddingModel 기본 MetadataMode.EMBED 는 저장 시 metadata 를 임베딩 텍스트에 포함한다 —
         // 검색은 질의 텍스트만 임베딩하므로 섞이면 같은 문장끼리도 거리 0.30 (DAY 31 실측).
@@ -166,7 +199,7 @@ class CachingChatServiceTest {
         val semanticStore = RecordingVectorStore()
         val svc = service(relay, vectorStore = semanticStore)
 
-        svc.complete(request(), taskType = null, cacheControl = null)
+        svc.complete(request(), taskType = null, cacheControl = null, service = "agent-service")
 
         val search = semanticStore.lastSearch!!
         assertEquals(0.95, search.similarityThreshold)
@@ -185,7 +218,7 @@ class CachingChatServiceTest {
             messages = listOf(ChatMessage("user", "메트릭 조회")),
             tools = listOf(ToolSpec(function = FunctionSpec(name = "query_prometheus"))),
         )
-        val result = svc.complete(toolRequest, taskType = null, cacheControl = null)
+        val result = svc.complete(toolRequest, taskType = null, cacheControl = null, service = "agent-service")
 
         assertEquals(CacheStatus.BYPASS, result.cacheStatus)
         assertTrue(exactCache.map.isEmpty(), "우회 요청은 저장하지 않는다")
@@ -205,7 +238,7 @@ class CachingChatServiceTest {
                 ChatMessage("tool", "로그 3건", toolCallId = "tc_1"),
             ),
         )
-        val result = svc.complete(history, taskType = null, cacheControl = null)
+        val result = svc.complete(history, taskType = null, cacheControl = null, service = "agent-service")
 
         assertEquals(CacheStatus.BYPASS, result.cacheStatus)
         assertTrue(exactCache.map.isEmpty())
@@ -217,7 +250,7 @@ class CachingChatServiceTest {
         val exactCache = InMemoryExactCache()
         val svc = service(relay, exactCache = exactCache)
 
-        val result = svc.complete(request(), taskType = null, cacheControl = "no-cache")
+        val result = svc.complete(request(), taskType = null, cacheControl = "no-cache", service = "agent-service")
 
         assertEquals(CacheStatus.BYPASS, result.cacheStatus)
         assertEquals(1, relay.calls)
@@ -230,8 +263,8 @@ class CachingChatServiceTest {
         val exactCache = InMemoryExactCache()
         val svc = service(relay, exactCache = exactCache)
 
-        svc.complete(request(temperature = 0.0), taskType = null, cacheControl = null)
-        svc.complete(request(temperature = 0.7), taskType = null, cacheControl = null)
+        svc.complete(request(temperature = 0.0), taskType = null, cacheControl = null, service = "agent-service")
+        svc.complete(request(temperature = 0.7), taskType = null, cacheControl = null, service = "agent-service")
 
         assertEquals(2, relay.calls, "옵션이 다른 요청은 서로 다른 캐시 항목이다")
         assertEquals(2, exactCache.map.size)
@@ -243,7 +276,7 @@ class CachingChatServiceTest {
         val relay = StubRelay(response(), registry)
         val svc = service(relay, exactCache = FailingExactCache())
 
-        val result = svc.complete(request(), taskType = null, cacheControl = null)
+        val result = svc.complete(request(), taskType = null, cacheControl = null, service = "agent-service")
 
         assertEquals(CacheStatus.MISS, result.cacheStatus)
         assertEquals(1, relay.calls)
@@ -255,11 +288,43 @@ class CachingChatServiceTest {
         val relay = StubRelay(response(), registry)
         val svc = service(relay, vectorStore = null)
 
-        val first = svc.complete(request(), taskType = null, cacheControl = null)
-        val second = svc.complete(request(), taskType = null, cacheControl = null)
+        val first = svc.complete(request(), taskType = null, cacheControl = null, service = "agent-service")
+        val second = svc.complete(request(), taskType = null, cacheControl = null, service = "agent-service")
 
         assertEquals(CacheStatus.MISS, first.cacheStatus)
         assertEquals(CacheStatus.EXACT_HIT, second.cacheStatus)
+    }
+
+    @Test
+    fun `예산 한도 도달 시 다운그레이드 라우트로 중계하고 결과에 표시한다`() {
+        val relay = StubRelay(response(model = "claude-haiku-4-5"), registry)
+        val counter = InMemoryBudgetCounter()
+        counter.add("total:${LocalDate.now(Clock.systemUTC())}", 10.0)
+        val svc = service(relay, budgetLimitUsd = 10.0, budgetCounter = counter)
+
+        val result = svc.complete(request(), taskType = "root-cause-analysis", cacheControl = null, service = "agent-service")
+
+        assertTrue(result.downgraded)
+        assertEquals("claude-haiku-4-5", relay.lastRoute!!.model, "중계는 다운그레이드된 라우트를 사용해야 한다")
+    }
+
+    @Test
+    fun `미스의 실비용이 예산 카운터에 정산된다`() {
+        val relay = StubRelay(response(model = "claude-sonnet-5"), registry)
+        val counter = InMemoryBudgetCounter()
+        val svc = service(
+            relay,
+            budgetLimitUsd = 10.0,
+            budgetCounter = counter,
+            prices = listOf(CostProperties.ModelPrice("claude-sonnet-5", 3.0, 15.0)),
+        )
+
+        svc.complete(request(), taskType = null, cacheControl = null, service = "agent-service")
+
+        // 입력 100 × $3/MTok + 출력 50 × $15/MTok
+        val expected = 100 * 3.0 / 1_000_000 + 50 * 15.0 / 1_000_000
+        assertEquals(expected, counter.current("total:${LocalDate.now(Clock.systemUTC())}"), 1e-12)
+        assertEquals(expected, counter.current("service:agent-service:${LocalDate.now(Clock.systemUTC())}"), 1e-12)
     }
 
     @Test
@@ -267,8 +332,8 @@ class CachingChatServiceTest {
         val relay = StubRelay(response(), registry)
         val svc = service(relay)
 
-        svc.complete(request(), taskType = "root-cause-analysis", cacheControl = null)
-        svc.complete(request(), taskType = "root-cause-analysis", cacheControl = null)
+        svc.complete(request(), taskType = "root-cause-analysis", cacheControl = null, service = "agent-service")
+        svc.complete(request(), taskType = "root-cause-analysis", cacheControl = null, service = "agent-service")
 
         val saved = registry.find("gateway.cache.saved.tokens")
             .tag("model", "claude-sonnet-5").tag("kind", "completion").counter()

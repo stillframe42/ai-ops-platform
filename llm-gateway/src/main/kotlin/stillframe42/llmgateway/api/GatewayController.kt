@@ -19,6 +19,7 @@ class GatewayController(
         @RequestBody request: ChatCompletionRequest,
         @RequestHeader("X-Task-Type", required = false) taskType: String?,
         @RequestHeader("X-Cache-Control", required = false) cacheControl: String?,
+        @RequestHeader("X-Client-Service", required = false) clientService: String?,
     ): ResponseEntity<ChatCompletionResponse> {
         if (request.stream == true) {
             // Phase 0 결정: 스트리밍 미지원 (현행 클라이언트 사용 0건 실측 — 배제 아닌 유예)
@@ -27,11 +28,15 @@ class GatewayController(
         if (request.messages.isEmpty()) {
             throw InvalidRequestException("messages 는 비어 있을 수 없습니다", param = "messages")
         }
-        val result = cachingChat.complete(request, taskType, cacheControl)
-        return ResponseEntity.ok()
+        val result = cachingChat.complete(request, taskType, cacheControl, clientService ?: "unknown")
+        val builder = ResponseEntity.ok()
             // 캐시 판정 노출 — 확인 기준 실측·클라이언트 디버깅용 (OpenAI 계약 밖 부가 헤더라 무해)
             .header("X-Gateway-Cache", result.cacheStatus.name.lowercase())
-            .body(result.response)
+        if (result.downgraded) {
+            // 예산 100% 도달로 저비용 모델 강제 전환 — 응답 model 필드와 함께 확인 수단 (Phase 4)
+            builder.header("X-Gateway-Downgrade", "budget-exceeded")
+        }
+        return builder.body(result.response)
     }
 
     @PostMapping("/v1/embeddings")

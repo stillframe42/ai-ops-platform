@@ -44,7 +44,7 @@ class GatewayControllerTest {
             model = "claude-sonnet-5",
             messages = listOf(ChatMessage(role = "user", content = "ping")),
         )
-        given(cachingChat.complete(request, "monitoring-summary", null))
+        given(cachingChat.complete(request, "monitoring-summary", null, "unknown"))
             .willReturn(CachedChatResult(response(), CacheStatus.MISS))
 
         mockMvc.perform(
@@ -65,7 +65,7 @@ class GatewayControllerTest {
     @Test
     fun `캐시 적중은 X-Gateway-Cache 헤더로 드러난다 - no-cache 헤더는 그대로 전달`() {
         val request = ChatCompletionRequest(messages = listOf(ChatMessage(role = "user", content = "ping")))
-        given(cachingChat.complete(request, null, "no-cache"))
+        given(cachingChat.complete(request, null, "no-cache", "unknown"))
             .willReturn(CachedChatResult(response(), CacheStatus.BYPASS))
 
         mockMvc.perform(

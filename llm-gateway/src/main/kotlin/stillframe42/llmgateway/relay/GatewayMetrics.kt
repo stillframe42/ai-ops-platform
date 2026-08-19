@@ -40,4 +40,34 @@ class GatewayMetrics(
         registry.counter("gateway.cache.saved.tokens", "model", model, "kind", "completion")
             .increment(usage.completionTokens.toDouble())
     }
+
+    /** 실지출 USD (Phase 4) — 단가는 gateway.cost 외부화 테이블 단일 원천 */
+    fun costUsd(service: String, task: String?, model: String, amount: Double) {
+        registry.counter(
+            "gateway.cost.usd",
+            "service", service,
+            "task", task ?: "none",
+            "model", model,
+        ).increment(amount)
+    }
+
+    /** 캐시 히트로 아낀 USD — 대시보드 절감 비용 패널의 표준가 상수를 대체 */
+    fun costSavedUsd(service: String, task: String?, model: String, amount: Double) {
+        registry.counter(
+            "gateway.cost.saved.usd",
+            "service", service,
+            "task", task ?: "none",
+            "model", model,
+        ).increment(amount)
+    }
+
+    /** 예산 100% 도달로 저비용 모델 강제 전환된 요청 수 (Phase 4 — 차단 대신 다운그레이드) */
+    fun budgetDowngrade(service: String, fromModel: String) {
+        registry.counter("gateway.budget.downgrades", "service", service, "from", fromModel).increment()
+    }
+
+    /** 분당 한도 초과로 429 반환한 요청 수 (Phase 4 Rate Limiting) */
+    fun rateLimited(service: String) {
+        registry.counter("gateway.ratelimit.rejected", "service", service).increment()
+    }
 }

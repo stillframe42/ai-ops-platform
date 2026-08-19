@@ -135,5 +135,8 @@ data class OpenAiError(val error: Detail) {
     companion object {
         fun invalidRequest(message: String, param: String? = null) =
             OpenAiError(Detail(message = message, type = "invalid_request_error", param = param))
+
+        fun rateLimited(message: String) =
+            OpenAiError(Detail(message = message, type = "rate_limit_error", code = "rate_limit_exceeded"))
     }
 }

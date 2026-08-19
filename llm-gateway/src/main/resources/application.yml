@@ -2,6 +2,13 @@ spring:
   application:
     name: llm-gateway
 
+  # 주입 RestClient.Builder 공통 타임아웃 (8/19 — 사용처별 requestFactory 조립 중복 제거,
+  # Boot 4 현행 키는 clients 복수형: spring.http.client.* 는 4.0 부터 deprecated 실측)
+  http:
+    clients:
+      connect-timeout: 3s
+      read-timeout: 5s
+
   ai:
     # 멀티 프로바이더 (Phase 2): model.chat 미지정 = Anthropic·OpenAI 챗 자동구성 동시 활성 —
     # 선택은 라우팅 정책(gateway.routing)이 요청별로 수행
@@ -24,11 +31,37 @@ spring:
         # flat 키 (embedding.options.* 는 deprecated 미바인딩 — anthropic 과 같은 함정)
         model: text-embedding-3-small
 
-# 2단계 캐시 (Phase 3) — 정확 캐시 TTL·의미 캐시 임계값 기본값은 CacheProperties 소유,
-# 의미 캐시 접속만 docker 프로파일이 지정 (semantic.url 부재 = 비구성 — 로컬·테스트는 정확 캐시만)
+# 2단계 캐시 (Phase 3) — 정확 캐시 TTL·의미 캐시 임계값 기본값은 CacheProperties 소유.
+# 의미 캐시·비용 원장의 활성은 gateway.postgres.url 구성이 결정 (Phase 4 승격) —
+# 접속은 docker 프로파일만 지정 (부재 = 비구성, 로컬·테스트는 정확 캐시 + 메트릭만)
 
 # 태스크 유형 → 모델 라우팅 (Phase 2, 순서 검토 ② 실매핑 — ADR-0007 역할별 차등의 실현)
 gateway:
+  # 모델 단가 (Phase 4 ⑫ — 인트로 가격 종료 대비 외부화, 대시보드 절감 비용 패널과 단일 원천)
+  # 접두 매칭: 프로바이더 응답 모델명의 날짜 접미(claude-haiku-4-5-20251001) 흡수
+  cost:
+    prices:
+      - model-prefix: claude-sonnet-5
+        input-per-mtok: 3.0
+        output-per-mtok: 15.0
+      - model-prefix: claude-haiku-4-5
+        input-per-mtok: 1.0
+        output-per-mtok: 5.0
+      - model-prefix: text-embedding-3-small
+        input-per-mtok: 0.02
+  # 일별 예산 (Phase 4) — 100% 도달 = 차단 아닌 저비용 다운그레이드, 80% = Slack 경고 1회
+  budget:
+    daily-limit-usd: 5.0
+    service-daily-limit-usd:
+      agent-service: 4.0
+    downgrade:
+      provider: anthropic
+      model: claude-haiku-4-5
+      max-tokens: 2000
+  # 예산 경고 발송 — 키-게이트 (미설정 = 로그 대체)
+  alert:
+    slack-webhook-url: ${SLACK_WEBHOOK_URL:}
+  # rate limit 은 docker 프로파일만 활성 (default-rpm 부재 = 비활성 — 로컬은 Redis 없이 기동)
   routing:
     rules:
       # 모니터링 요약 — 저비용 (관측 데이터 요약은 추론 부담 낮음)

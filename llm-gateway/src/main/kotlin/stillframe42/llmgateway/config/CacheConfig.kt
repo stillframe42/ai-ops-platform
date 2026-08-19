@@ -1,7 +1,5 @@
 package stillframe42.llmgateway.config
 
-import com.zaxxer.hikari.HikariDataSource
-import javax.sql.DataSource
 import org.springframework.ai.embedding.EmbeddingModel
 import org.springframework.ai.vectorstore.VectorStore
 import org.springframework.ai.vectorstore.pgvector.PgVectorStore
@@ -20,8 +18,9 @@ import tools.jackson.databind.ObjectMapper
 
 /**
  * 2단계 캐시 배선 (Phase 3).
- * 의미 캐시는 gateway.cache.semantic.url 이 있을 때만 구성 — 기본 프로파일(로컬·테스트)은
+ * 의미 캐시는 게이트웨이 DB(gateway.postgres.url)가 구성될 때만 활성 — 기본 프로파일(로컬·테스트)은
  * DataSource 없이 기동하고 정확 일치 캐시만으로 동작한다 (키-게이트 관례의 캐시판).
+ * 스캔이 못 하는 조립만 Config 에 — 값 파라미터는 CacheProperties 에서 골라 넣는 코드가 필요.
  */
 @Configuration
 class CacheConfig {
@@ -41,21 +40,12 @@ class CacheConfig {
     ) = SemanticResponseCache(vectorStores.getIfAvailable(), properties.semantic.similarityThreshold, mapper)
 
     @Configuration
-    @ConditionalOnProperty("gateway.cache.semantic.url")
+    @ConditionalOnProperty("gateway.postgres.url")
     class SemanticCacheConfig {
 
-        // 게이트웨이 전용 DB(llmgateway) — control-plane 의 vector_store 와 임베딩 공간·소유를 분리
         @Bean
-        fun semanticCacheDataSource(properties: CacheProperties): DataSource = HikariDataSource().apply {
-            jdbcUrl = properties.semantic.url
-            username = properties.semantic.username
-            password = properties.semantic.password
-            maximumPoolSize = 4
-        }
-
-        @Bean
-        fun semanticCacheVectorStore(semanticCacheDataSource: DataSource, embeddingModel: EmbeddingModel): VectorStore =
-            PgVectorStore.builder(JdbcTemplate(semanticCacheDataSource), embeddingModel)
+        fun semanticCacheVectorStore(gatewayJdbcTemplate: JdbcTemplate, embeddingModel: EmbeddingModel): VectorStore =
+            PgVectorStore.builder(gatewayJdbcTemplate, embeddingModel)
                 // text-embedding-3-small 출력 차원 (control-plane 관례와 동일)
                 .dimensions(1536)
                 .distanceType(PgVectorStore.PgDistanceType.COSINE_DISTANCE)

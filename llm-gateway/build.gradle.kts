@@ -28,6 +28,7 @@ dependencies {
 	implementation("org.springframework.ai:spring-ai-starter-model-anthropic")
 	implementation("org.springframework.ai:spring-ai-starter-model-openai")
 	implementation("org.springframework.boot:spring-boot-starter-data-redis")
+	implementation("com.bucket4j:bucket4j_jdk17-lettuce:8.14.0")
 	implementation("org.springframework.ai:spring-ai-pgvector-store")
 	implementation("com.zaxxer:HikariCP")
 	runtimeOnly("org.postgresql:postgresql")
