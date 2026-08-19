@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.springframework.web.client.RestClient
 
 /**
  * 조치별 처리 방식 계약 — RESTART_APP 은 실행이 아니라 수동 안내(2026-08-04 결정),
@@ -15,6 +16,7 @@ class TargetAppActionExecutorTest {
         // 닫힌 포트 — CIRCUIT_BREAK 실패 경로 검증용 (성공 경로는 E2E 실측 몫)
         targetAppBaseUrl = "http://127.0.0.1:59999",
         restartContainer = "target-app",
+        builder = RestClient.builder(),
     )
 
     @Test

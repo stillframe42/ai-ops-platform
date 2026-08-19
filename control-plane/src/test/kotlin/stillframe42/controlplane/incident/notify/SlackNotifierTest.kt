@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import org.springframework.web.client.RestClient
 import stillframe42.controlplane.approval.model.ActionExecution
 import stillframe42.controlplane.incident.model.IncidentReport
 
@@ -15,7 +16,7 @@ import stillframe42.controlplane.incident.model.IncidentReport
 class SlackNotifierTest {
 
     private fun notifier(webhookUrl: String = "") =
-        SlackNotifier(webhookUrl = webhookUrl, baseUrl = "http://localhost:8081")
+        SlackNotifier(webhookUrl = webhookUrl, baseUrl = "http://localhost:8081", builder = RestClient.builder())
 
     private fun completedReport() = IncidentReport(
         incidentId = "inc-error-rate-surge-20260727031500-a1b2c3",

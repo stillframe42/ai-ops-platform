@@ -1,11 +1,8 @@
 package stillframe42.controlplane.incident.notify
 
-import java.net.http.HttpClient
-import java.time.Duration
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.MediaType
-import org.springframework.http.client.JdkClientHttpRequestFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import stillframe42.controlplane.incident.model.IncidentReport
@@ -15,22 +12,18 @@ import tools.jackson.databind.json.JsonMapper
  * Slack Incoming Webhook 알림 (DAY 19) — URL 미설정이면 조용한 비활성 (Langfuse 키-게이트 관례).
  * 메시지 포맷은 weekly-plan 스펙: P-등급·원인 가설·confidence·근거 3줄·제안 조치·상세 링크 —
  * 4주차 human-in-the-loop 승인 요청 포맷의 초안이기도 하다 (ADR-0006 연결 메모).
+ * 타임아웃은 Boot 중앙 설정(spring.http.clients.*) — 주입 빌더가 반영한다 (8/19 중복 제거).
  */
 @Component
 class SlackNotifier(
     @Value("\${ops.slack.webhook-url}") private val webhookUrl: String,
     @Value("\${ops.report.base-url}") private val baseUrl: String,
+    builder: RestClient.Builder,
 ) : Notifier {
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    private val restClient = RestClient.builder()
-        .requestFactory(
-            JdkClientHttpRequestFactory(
-                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build(),
-            ).apply { setReadTimeout(Duration.ofSeconds(5)) },
-        )
-        .build()
+    private val restClient = builder.build()
 
     private val mapper = JsonMapper.builder().build()
 

@@ -1,10 +1,7 @@
 package stillframe42.controlplane.approval.execute
 
-import java.net.http.HttpClient
-import java.time.Duration
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.http.client.JdkClientHttpRequestFactory
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
 import stillframe42.controlplane.approval.model.ActionExecution
@@ -22,17 +19,13 @@ import stillframe42.controlplane.approval.model.ActionExecution
 class TargetAppActionExecutor(
     @Value("\${ops.action.target-app-base-url}") private val targetAppBaseUrl: String,
     @Value("\${ops.action.restart-container}") private val restartContainer: String,
+    builder: RestClient.Builder,
 ) : ActionExecutor {
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    private val restClient = RestClient.builder()
-        .requestFactory(
-            JdkClientHttpRequestFactory(
-                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).build(),
-            ).apply { setReadTimeout(Duration.ofSeconds(5)) },
-        )
-        .build()
+    // 타임아웃은 Boot 중앙 설정(spring.http.clients.*) — 주입 빌더가 반영한다 (8/19 중복 제거)
+    private val restClient = builder.build()
 
     override fun execute(action: String): ActionExecution = when (action) {
         CIRCUIT_BREAK -> circuitBreak()

@@ -2,6 +2,13 @@ spring:
   application:
     name: control-plane
 
+  # 주입 RestClient.Builder 공통 타임아웃 (8/19 — SlackNotifier·TargetAppActionExecutor 의
+  # 사용처별 requestFactory 조립 중복 제거. Boot 4 현행 키는 clients 복수형)
+  http:
+    clients:
+      connect-timeout: 3s
+      read-timeout: 5s
+
   datasource:
     # 로컬 개발 기본값 — compose postgres 는 호스트 5433 으로 노출 (5432 는 호스트 로컬 PG 점유)
     # 컨테이너 실행 시에는 docker 프로파일이 URL 을 덮어쓴다
