@@ -10,7 +10,10 @@ def create_llm(settings: Settings, task_type: str | None = None) -> BaseChatMode
     task_type 은 게이트웨이 라우팅 정책 키 (X-Task-Type 헤더) — 모델 선택은 게이트웨이 소관이라
     에이전트 코드는 모델명을 모른다 (ADR-0007 "프로바이더를 모른다"의 게이트웨이 판).
     """
-    headers = {"X-Task-Type": task_type} if task_type else None
+    # X-Client-Service: 게이트웨이의 서비스별 비용 집계·한도(rate limit·예산) 식별자 (Phase 4)
+    headers = {"X-Client-Service": "agent-service"}
+    if task_type:
+        headers["X-Task-Type"] = task_type
     return init_chat_model(
         settings.llm_model,
         api_key=settings.llm_api_key,
