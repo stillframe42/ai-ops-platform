@@ -56,9 +56,10 @@ args_from "$INFRA_ENV" MCP_API_KEY   # control-plane 과 같은 원천 공유 (c
 make_secret agent-service-secrets
 
 # llm-gateway (6주차 Phase 1) — 채팅(ANTHROPIC)·임베딩/교차(OPENAI), 원천은 기존 2곳 공유
+# SLACK_WEBHOOK_URL (Phase 4) — 예산 임계 경고, control-plane 과 같은 원천 공유
 LITERALS=()
 args_from "$AGENT_ENV" ANTHROPIC_API_KEY
-args_from "$INFRA_ENV" OPENAI_API_KEY
+args_from "$INFRA_ENV" OPENAI_API_KEY SLACK_WEBHOOK_URL
 make_secret llm-gateway-secrets
 
 echo "완료 — 확인: kubectl -n $NS get secrets"

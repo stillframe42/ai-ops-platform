@@ -83,21 +83,23 @@ services:
     environment:
       # 채팅(Anthropic) 키 — agent-service .env 재사용 (env_file), 임베딩(OpenAI) 키는 infra/.env pass-through
       OPENAI_API_KEY:
-      # L2 캐시(pgvector, llmgateway DB) 접속 — postgres 와 같은 크리덴셜 원천 (Phase 3)
+      # 게이트웨이 DB(llmgateway — 의미 캐시·비용 원장 공용, Phase 4) 접속 — postgres 와 같은 크리덴셜 원천
       POSTGRES_USER: ${POSTGRES_USER:-aiops}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aiops}
+      # 예산 임계 경고 (Phase 4) — control-plane 과 같은 원천(infra/.env) 공유, 미설정 = 로그 대체
+      SLACK_WEBHOOK_URL:
     env_file:
       - ../agent-service/.env
     ports:
       - "8090:8090"
     depends_on:
-      # L2 스키마 초기화(initialize-schema)가 기동 시점에 DB 를 요구 — redis 는 무캐시 통과라 미의존
+      # 의미 캐시 스키마 초기화·비용 원장 생성이 기동 시점에 DB 를 요구 — redis 는 무캐시 통과라 미의존
       postgres:
         condition: service_healthy
 
   redis:
-    # 용도: llm-gateway L1 캐시 (6주차 Phase 3) + Phase 4 rate limit 버킷.
-    # 공식 이미지 (bitnami 기각 선례) — L2 는 pgvector 라 검색 모듈 불요 (Phase 0 ⑦).
+    # 용도: llm-gateway 정확 일치 캐시 (6주차 Phase 3) + 예산 카운터·rate limit 버킷 (Phase 4).
+    # 공식 이미지 (bitnami 기각 선례) — 의미 캐시는 pgvector 라 검색 모듈 불요 (Phase 0 ⑦).
     # 캐시 전용 무영속 — 소실 시 재계산으로 수렴, LRU 퇴출은 오류 아닌 캐시 미스
     image: redis:8.2-alpine
     container_name: redis
