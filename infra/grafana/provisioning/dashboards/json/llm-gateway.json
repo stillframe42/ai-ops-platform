@@ -1,10 +1,16 @@
 {
   "uid": "llm-gateway",
   "title": "LLM 게이트웨이 (llm-gateway)",
-  "tags": ["aiops", "llm-gateway"],
+  "tags": [
+    "aiops",
+    "llm-gateway"
+  ],
   "timezone": "browser",
   "refresh": "30s",
-  "time": {"from": "now-3h", "to": "now"},
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
   "schemaVersion": 39,
   "panels": [
     {
@@ -12,8 +18,16 @@
       "type": "stat",
       "title": "캐시 히트율 (1시간 창, bypass 제외)",
       "description": "히트율 = (정확 + 의미 히트) / (전체 - bypass). tool calling·no-cache 요청은 분모에서 제외 — 캐싱 대상이 아니라서 (llm-gateway/README 분류 기준)",
-      "gridPos": {"h": 6, "w": 6, "x": 0, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
@@ -34,10 +48,18 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "절감 비용 추정 (누적, USD)",
-      "description": "캐시 적중으로 아낀 토큰 × 표준 단가(2026-06 기준: sonnet $3/$15, haiku $1/$5 per 1M). 인트로 가격 미반영 — 단가 테이블 설정 외부화(Phase 4)에서 정밀화",
-      "gridPos": {"h": 6, "w": 6, "x": 6, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "title": "절감 비용 (누적, USD) — 게이트웨이 계상",
+      "description": "캐시 히트로 아낀 금액 — 단가는 gateway.cost.prices (yml 외부화) 단일 원천",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
       "fieldConfig": {
         "defaults": {
           "unit": "currencyUSD",
@@ -49,7 +71,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "((sum(gateway_cache_saved_tokens_total{model=~\".*sonnet.*\",kind=\"prompt\"}) * 3 or vector(0)) + (sum(gateway_cache_saved_tokens_total{model=~\".*sonnet.*\",kind=\"completion\"}) * 15 or vector(0)) + (sum(gateway_cache_saved_tokens_total{model=~\".*haiku.*\",kind=\"prompt\"}) * 1 or vector(0)) + (sum(gateway_cache_saved_tokens_total{model=~\".*haiku.*\",kind=\"completion\"}) * 5 or vector(0))) / 1e6"
+          "expr": "sum(gateway_cost_saved_usd_total) or vector(0)"
         }
       ]
     },
@@ -57,9 +79,22 @@
       "id": 3,
       "type": "timeseries",
       "title": "캐시 판정 분포 (5분 창)",
-      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 0},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "none"}, "overrides": []},
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -73,9 +108,22 @@
       "type": "timeseries",
       "title": "절감 토큰 누적 (모델·종류별)",
       "description": "캐시 적중 시 재계산 없이 반환된 응답의 usage — kind=prompt/completion 구분 (completion 단가가 5배라 비용 기여 상이)",
-      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 6},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "none"}, "overrides": []},
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -88,9 +136,22 @@
       "id": 5,
       "type": "timeseries",
       "title": "태스크·모델별 요청 (5분 창) — Phase 2 라우팅 실측",
-      "gridPos": {"h": 6, "w": 12, "x": 12, "y": 6},
-      "datasource": {"type": "prometheus", "uid": "prometheus"},
-      "fieldConfig": {"defaults": {"unit": "none"}, "overrides": []},
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
       "targets": [
         {
           "refId": "A",
@@ -98,6 +159,114 @@
           "legendFormat": "{{task}} → {{model}}"
         }
       ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "오늘 실지출 (UTC 24h, USD)",
+      "description": "예산 판정 기준은 게이트웨이 Redis 카운터(UTC 일별) — 이 패널은 Prometheus 근사",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 4
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(gateway_cost_usd_total[24h])) or vector(0)",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "서비스별 지출 (1시간 창, USD)",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (service) (increase(gateway_cost_usd_total[1h]))",
+          "refId": "A",
+          "legendFormat": "{{service}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "description": "X-Client-Service 차원 — 원장(llm_cost_ledger)의 일별 정밀 집계는 psql"
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "예산 다운그레이드·429 (5분 창)",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum by (service) (increase(gateway_budget_downgrades_total[5m]))",
+          "refId": "A",
+          "legendFormat": "downgrade {{service}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        },
+        {
+          "expr": "sum by (service) (increase(gateway_ratelimit_rejected_total[5m]))",
+          "refId": "B",
+          "legendFormat": "429 {{service}}",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          }
+        }
+      ],
+      "description": "예산 100% 도달 시 저비용 모델 강제 전환 횟수 + 분당 한도 초과 거절 횟수"
     }
   ]
 }
