@@ -63,4 +63,7 @@ kotlin {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+	// JDK 25 JEP 472: netty(kafka-clients·lettuce 전이 의존)의 System::loadLibrary 가 제한 메서드 —
+	// 미래 릴리스 차단 예고라 명시 허용 (경고 소거가 아니라 정책 선언, llm-gateway 와 동일 판단)
+	jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
