@@ -48,7 +48,7 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "절감 비용 (누적, USD) — 게이트웨이 계상",
+      "title": "절감 비용 (누적, USD) — 게이트웨이 기록",
       "description": "캐시 히트로 아낀 금액 — 단가는 gateway.cost.prices (yml 외부화) 단일 원천",
       "gridPos": {
         "h": 6,
