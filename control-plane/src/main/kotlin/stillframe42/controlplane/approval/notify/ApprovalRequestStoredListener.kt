@@ -17,14 +17,14 @@ import stillframe42.controlplane.approval.service.ApprovalRequestStored
  */
 @Component
 class ApprovalRequestStoredListener(
-    private val messenger: ApprovalMessenger,
-    private val service: ActionApprovalService,
+    private val approvalMessenger: ApprovalMessenger,
+    private val actionApprovalService: ActionApprovalService,
 ) {
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onStored(event: ApprovalRequestStored) {
-        val message = messenger.sendApprovalRequest(event.request) ?: return
-        service.recordSlackMessage(event.request.incidentId, message)
+        val message = approvalMessenger.sendApprovalRequest(event.request) ?: return
+        actionApprovalService.recordSlackMessage(event.request.incidentId, message)
     }
 }

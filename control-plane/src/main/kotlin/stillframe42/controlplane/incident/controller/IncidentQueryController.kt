@@ -17,18 +17,18 @@ import tools.jackson.databind.json.JsonMapper
  */
 @RestController
 @RequestMapping("/api/incidents")
-class IncidentQueryController(private val service: IncidentReportService) {
+class IncidentQueryController(private val incidentReportService: IncidentReportService) {
 
     private val mapper = JsonMapper.builder().build()
 
     @GetMapping
     fun list(@RequestParam(defaultValue = "20") limit: Int): List<IncidentSummaryResponse> =
-        service.findRecent(limit.coerceIn(1, MAX_LIMIT)).map { IncidentSummaryResponse.from(it) }
+        incidentReportService.findRecent(limit.coerceIn(1, MAX_LIMIT)).map { IncidentSummaryResponse.from(it) }
 
     @GetMapping("/{incidentId}")
     fun detail(@PathVariable incidentId: String): IncidentDetailResponse {
         // null 반환은 404 가 아니라 빈 200 이 된다 — 미존재는 예외로 상태 코드를 분리
-        val detail = service.findById(incidentId)
+        val detail = incidentReportService.findById(incidentId)
             ?: throw ResponseStatusException(HttpStatus.NOT_FOUND, "인시던트 없음: $incidentId")
         return IncidentDetailResponse(
             summary = IncidentSummaryResponse.from(detail.summary),

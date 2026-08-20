@@ -19,13 +19,13 @@ import stillframe42.controlplane.approval.model.ActionExecution
 class TargetAppActionExecutor(
     @Value("\${ops.action.target-app-base-url}") private val targetAppBaseUrl: String,
     @Value("\${ops.action.restart-container}") private val restartContainer: String,
-    builder: RestClient.Builder,
+    restClientBuilder: RestClient.Builder,
 ) : ActionExecutor {
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
     // 타임아웃은 Boot 중앙 설정(spring.http.clients.*) — 주입 빌더가 반영한다 (8/19 중복 제거)
-    private val restClient = builder.build()
+    private val restClient = restClientBuilder.build()
 
     override fun execute(action: String): ActionExecution = when (action) {
         CIRCUIT_BREAK -> circuitBreak()

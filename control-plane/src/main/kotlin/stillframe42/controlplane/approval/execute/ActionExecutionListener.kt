@@ -25,10 +25,10 @@ import stillframe42.controlplane.approval.service.ApprovalDecided
  */
 @Component
 class ActionExecutionListener(
-    private val repository: ActionApprovalRepository,
-    private val executor: ActionExecutor,
-    private val service: ActionApprovalService,
-    private val messenger: ApprovalMessenger,
+    private val actionApprovalRepository: ActionApprovalRepository,
+    private val actionExecutor: ActionExecutor,
+    private val actionApprovalService: ActionApprovalService,
+    private val approvalMessenger: ApprovalMessenger,
 ) {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -37,18 +37,18 @@ class ActionExecutionListener(
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onDecided(event: ApprovalDecided) {
         if (event.status != ApprovalStatus.APPROVED) return
-        val card = repository.findLatestCard(event.incidentId)
+        val card = actionApprovalRepository.findLatestCard(event.incidentId)
         val actions = card?.request?.actions?.filter { it != NOTIFY_ONLY }.orEmpty()
-        val executions = actions.map { executor.execute(it) }
+        val executions = actions.map { actionExecutor.execute(it) }
         val executedAt = Instant.now()
         if (executions.isEmpty()) {
             logger.warn("실행할 조치 없음 — {} (조치안 원문 파싱 실패 또는 실행 조치 0건)", event.incidentId)
         } else {
-            service.recordExecution(event.incidentId, executedAt, executions)
+            actionApprovalService.recordExecution(event.incidentId, executedAt, executions)
         }
-        service.publishExecutedDecision(event, executions, executedAt)
+        actionApprovalService.publishExecutedDecision(event, executions, executedAt)
         val message = card?.slackMessage ?: return
-        messenger.postThreadReply(message, ApprovalMessageFactory.executionThreadText(executions))
+        approvalMessenger.postThreadReply(message, ApprovalMessageFactory.executionThreadText(executions))
     }
 
     companion object {

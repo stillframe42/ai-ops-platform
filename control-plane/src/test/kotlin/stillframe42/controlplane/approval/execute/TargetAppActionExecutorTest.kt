@@ -16,7 +16,7 @@ class TargetAppActionExecutorTest {
         // 닫힌 포트 — CIRCUIT_BREAK 실패 경로 검증용 (성공 경로는 E2E 실측 몫)
         targetAppBaseUrl = "http://127.0.0.1:59999",
         restartContainer = "target-app",
-        builder = RestClient.builder(),
+        restClientBuilder = RestClient.builder(),
     )
 
     @Test

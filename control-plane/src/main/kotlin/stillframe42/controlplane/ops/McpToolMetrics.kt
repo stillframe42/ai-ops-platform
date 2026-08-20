@@ -20,12 +20,12 @@ import tools.jackson.databind.json.JsonMapper
  * - failure: 예외 전파 (관례 밖의 예상 밖 실패)
  */
 @Component
-class McpToolMetrics(private val registry: MeterRegistry) {
+class McpToolMetrics(private val meterRegistry: MeterRegistry) {
 
     private val mapper = JsonMapper.builder().build()
 
     fun <T> record(tool: String, call: () -> T): T {
-        val sample = Timer.start(registry)
+        val sample = Timer.start(meterRegistry)
         try {
             val result = call()
             sample.stop(timer(tool, outcomeOf(result)))
@@ -50,5 +50,5 @@ class McpToolMetrics(private val registry: MeterRegistry) {
             .description("MCP 도구 호출 횟수·응답 시간 (outcome: success/degraded/failure)")
             .tag("tool", tool)
             .tag("outcome", outcome)
-            .register(registry)
+            .register(meterRegistry)
 }

@@ -18,12 +18,12 @@ import tools.jackson.databind.json.JsonMapper
 class SlackNotifier(
     @Value("\${ops.slack.webhook-url}") private val webhookUrl: String,
     @Value("\${ops.report.base-url}") private val baseUrl: String,
-    builder: RestClient.Builder,
+    restClientBuilder: RestClient.Builder,
 ) : Notifier {
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    private val restClient = builder.build()
+    private val restClient = restClientBuilder.build()
 
     private val mapper = JsonMapper.builder().build()
 

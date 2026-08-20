@@ -21,15 +21,15 @@ import stillframe42.controlplane.approval.model.SlackMessageRef
  */
 @Repository
 class JpaActionApprovalRepository(
-    private val entityRepository: ActionApprovalEntityRepository,
+    private val actionApprovalEntityRepository: ActionApprovalEntityRepository,
 ) : ActionApprovalRepository {
 
     override fun insertPendingIfAbsent(request: ActionApprovalRequest): Boolean {
-        val pending = entityRepository.findByIncidentIdAndStatus(request.incidentId, ApprovalStatus.PENDING)
+        val pending = actionApprovalEntityRepository.findByIncidentIdAndStatus(request.incidentId, ApprovalStatus.PENDING)
         if (pending != null) {
             return false // 재수신 — 기존 pending 유지 (요청서 갱신 없음: 먼저 온 요청이 승인 대상)
         }
-        entityRepository.save(ActionApprovalEntity.pendingFrom(request))
+        actionApprovalEntityRepository.save(ActionApprovalEntity.pendingFrom(request))
         return true
     }
 
@@ -39,7 +39,7 @@ class JpaActionApprovalRepository(
         decidedBy: String,
         decidedAt: Instant,
     ): Boolean {
-        val pending = entityRepository.findByIncidentIdAndStatus(incidentId, ApprovalStatus.PENDING)
+        val pending = actionApprovalEntityRepository.findByIncidentIdAndStatus(incidentId, ApprovalStatus.PENDING)
             ?: return false
         // 트랜잭션 안 dirty checking — 변경 감지로 UPDATE 가 나간다 (명시 save 불필요)
         pending.decide(status, decidedBy, decidedAt)
@@ -47,17 +47,17 @@ class JpaActionApprovalRepository(
     }
 
     override fun findLatestStatus(incidentId: String): String? =
-        entityRepository.findFirstByIncidentIdOrderByIdDesc(incidentId)?.status
+        actionApprovalEntityRepository.findFirstByIncidentIdOrderByIdDesc(incidentId)?.status
 
     override fun recordSlackMessage(incidentId: String, message: SlackMessageRef): Boolean {
-        val pending = entityRepository.findByIncidentIdAndStatus(incidentId, ApprovalStatus.PENDING)
+        val pending = actionApprovalEntityRepository.findByIncidentIdAndStatus(incidentId, ApprovalStatus.PENDING)
             ?: return false // 발송 왕복 사이에 결정이 끝난 경합 — 마감 리스너가 카드를 못 찾는 건 수용
         pending.recordSlackMessage(message.channel, message.messageTs)
         return true
     }
 
     override fun markReminded(incidentId: String, remindedAt: Instant): Boolean {
-        val pending = entityRepository.findByIncidentIdAndStatus(incidentId, ApprovalStatus.PENDING)
+        val pending = actionApprovalEntityRepository.findByIncidentIdAndStatus(incidentId, ApprovalStatus.PENDING)
             ?: return false
         if (pending.remindedAt != null) {
             return false // 재알림 1회 규약 — 표식이 이미 있으면 반복하지 않는다
@@ -67,18 +67,18 @@ class JpaActionApprovalRepository(
     }
 
     override fun findPendingRequestedBefore(cutoff: Instant): List<PendingApproval> =
-        entityRepository.findByStatusAndRequestedAtBefore(ApprovalStatus.PENDING, cutoff)
+        actionApprovalEntityRepository.findByStatusAndRequestedAtBefore(ApprovalStatus.PENDING, cutoff)
             .map { PendingApproval(it.incidentId, it.requestedAt, it.remindedAt, it.slackMessageOrNull()) }
 
     override fun findLatestCard(incidentId: String): ApprovalCard? =
-        entityRepository.findFirstByIncidentIdOrderByIdDesc(incidentId)?.let { entity ->
+        actionApprovalEntityRepository.findFirstByIncidentIdOrderByIdDesc(incidentId)?.let { entity ->
             // 카드 내용은 저장된 페이로드 원문에서 재파싱 — 저장 시 한 번 통과한 본문이라 실패는 예외적
             ActionApprovalRequest.parse(entity.actionPayload)
                 ?.let { ApprovalCard(it, entity.slackMessageOrNull()) }
         }
 
     override fun markExecuted(incidentId: String, executedAt: Instant, note: String): Boolean {
-        val latest = entityRepository.findFirstByIncidentIdOrderByIdDesc(incidentId)
+        val latest = actionApprovalEntityRepository.findFirstByIncidentIdOrderByIdDesc(incidentId)
             ?: return false
         if (latest.status != ApprovalStatus.APPROVED) {
             return false // 실행 기록은 approved 행에만 — 그 밖의 상태는 실행 자체가 없어야 한다

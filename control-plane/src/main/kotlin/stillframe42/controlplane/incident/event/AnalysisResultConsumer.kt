@@ -11,8 +11,8 @@ import stillframe42.controlplane.incident.service.IncidentReportService
  * 예외 전파 시 기본 에러 핸들러가 재시도 후 건너뛴다 (장기 DB 다운 = 유실 경로, Phase 7 소재).
  */
 @Component
-class AnalysisResultConsumer(private val service: IncidentReportService) {
+class AnalysisResultConsumer(private val incidentReportService: IncidentReportService) {
 
     @KafkaListener(topics = [OpsTopics.ANALYSIS_RESULTS], groupId = "control-plane")
-    fun onResult(payload: String) = service.ingest(payload)
+    fun onResult(payload: String) = incidentReportService.ingest(payload)
 }

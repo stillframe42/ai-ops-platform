@@ -18,7 +18,7 @@ import stillframe42.controlplane.approval.service.DecisionPublishFailedException
  */
 @RestController
 @RequestMapping("/api/incidents")
-class ApprovalController(private val service: ActionApprovalService) {
+class ApprovalController(private val actionApprovalService: ActionApprovalService) {
 
     @PostMapping("/{incidentId}/approve")
     fun approve(
@@ -35,7 +35,7 @@ class ApprovalController(private val service: ActionApprovalService) {
     private fun decide(incidentId: String, status: String, body: DecisionRequest?): DecisionResponse {
         val decidedBy = body?.decidedBy?.takeIf { it.isNotBlank() } ?: DEFAULT_DECIDER
         val outcome = try {
-            service.decide(incidentId, status, decidedBy)
+            actionApprovalService.decide(incidentId, status, decidedBy)
         } catch (e: DecisionPublishFailedException) {
             // 전이는 롤백됐다 — 클라이언트가 그대로 재시도하면 된다
             throw ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, e.message, e)

@@ -13,11 +13,11 @@ import org.springframework.web.bind.annotation.RestController
  * 본문은 String 그대로 받는다 — 원본 보존(ops.alerts.raw)이 바인딩보다 우선.
  */
 @RestController
-class AlertmanagerWebhookController(private val service: AlertIngestService) {
+class AlertmanagerWebhookController(private val alertIngestService: AlertIngestService) {
 
     @PostMapping("/webhook/alertmanager")
     @ResponseStatus(HttpStatus.ACCEPTED)
     fun receive(@RequestBody body: String) {
-        service.ingestAsync(body)
+        alertIngestService.ingestAsync(body)
     }
 }

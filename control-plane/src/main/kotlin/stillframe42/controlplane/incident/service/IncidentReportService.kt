@@ -22,8 +22,8 @@ import stillframe42.controlplane.incident.repository.IncidentReportRepository
  */
 @Service
 class IncidentReportService(
-    private val repository: IncidentReportRepository,
-    private val events: ApplicationEventPublisher,
+    private val incidentReportRepository: IncidentReportRepository,
+    private val applicationEventPublisher: ApplicationEventPublisher,
 ) {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -40,16 +40,16 @@ class IncidentReportService(
             logger.warn("결과 페이로드 파싱 실패 — 건너뜀 (본문 {}자)", payload.length)
             return
         }
-        val isNew = repository.upsert(report)
+        val isNew = incidentReportRepository.upsert(report)
         if (isNew) {
             logger.info("인시던트 보고서 저장 — {} (status={})", report.incidentId, report.status)
-            events.publishEvent(IncidentReportStored(report))
+            applicationEventPublisher.publishEvent(IncidentReportStored(report))
         } else {
             logger.info("결과 재수신 — {} 갱신만 수행 (알림 생략)", report.incidentId)
         }
     }
 
-    fun findRecent(limit: Int): List<IncidentReportSummary> = repository.findRecent(limit)
+    fun findRecent(limit: Int): List<IncidentReportSummary> = incidentReportRepository.findRecent(limit)
 
-    fun findById(incidentId: String): IncidentReportDetail? = repository.findById(incidentId)
+    fun findById(incidentId: String): IncidentReportDetail? = incidentReportRepository.findById(incidentId)
 }

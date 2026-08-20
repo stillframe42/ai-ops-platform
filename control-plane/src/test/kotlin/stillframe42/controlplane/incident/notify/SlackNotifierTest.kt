@@ -16,7 +16,7 @@ import stillframe42.controlplane.incident.model.IncidentReport
 class SlackNotifierTest {
 
     private fun notifier(webhookUrl: String = "") =
-        SlackNotifier(webhookUrl = webhookUrl, baseUrl = "http://localhost:8081", builder = RestClient.builder())
+        SlackNotifier(webhookUrl = webhookUrl, baseUrl = "http://localhost:8081", restClientBuilder = RestClient.builder())
 
     private fun completedReport() = IncidentReport(
         incidentId = "inc-error-rate-surge-20260727031500-a1b2c3",

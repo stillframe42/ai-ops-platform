@@ -17,7 +17,7 @@ import stillframe42.controlplane.approval.service.DecisionPublishFailedException
  * 스레드로 담당하므로 여기서는 null (중복 회신 방지).
  */
 @Component
-class ApprovalButtonHandler(private val service: ActionApprovalService) {
+class ApprovalButtonHandler(private val actionApprovalService: ActionApprovalService) {
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -28,7 +28,7 @@ class ApprovalButtonHandler(private val service: ActionApprovalService) {
             else -> return null // 모르는 버튼 — 이 카드의 결정 입력이 아니다
         }
         return try {
-            when (val outcome = service.decide(incidentId, status, slackUserId)) {
+            when (val outcome = actionApprovalService.decide(incidentId, status, slackUserId)) {
                 is ApprovalDecisionOutcome.Decided -> null
                 is ApprovalDecisionOutcome.AlreadyDecided ->
                     "이미 ${outcome.status} 로 종결된 요청입니다 — `$incidentId`"

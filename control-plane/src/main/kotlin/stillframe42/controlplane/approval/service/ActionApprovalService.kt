@@ -29,9 +29,9 @@ import tools.jackson.databind.json.JsonMapper
  */
 @Service
 class ActionApprovalService(
-    private val repository: ActionApprovalRepository,
-    private val publisher: EventPublisher,
-    private val events: ApplicationEventPublisher,
+    private val actionApprovalRepository: ActionApprovalRepository,
+    private val eventPublisher: EventPublisher,
+    private val applicationEventPublisher: ApplicationEventPublisher,
 ) {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -44,7 +44,7 @@ class ActionApprovalService(
             logger.warn("승인 요청 페이로드 파싱 실패 — 건너뜀 (본문 {}자)", payload.length)
             return
         }
-        val isNew = repository.insertPendingIfAbsent(request)
+        val isNew = actionApprovalRepository.insertPendingIfAbsent(request)
         if (isNew) {
             logger.info(
                 "승인 요청 저장 — {} ({}, risk={})",
@@ -54,7 +54,7 @@ class ActionApprovalService(
             )
             // Slack 승인 카드 발송은 AFTER_COMMIT 리스너 (ApprovalRequestStoredListener) —
             // 저장이 롤백되면 카드도 나가지 않는다 (IncidentReportStored 와 같은 패턴, ADR-0006)
-            events.publishEvent(ApprovalRequestStored(request))
+            applicationEventPublisher.publishEvent(ApprovalRequestStored(request))
         } else {
             logger.info("승인 요청 재수신 — {} 기존 pending 유지", request.incidentId)
         }
@@ -64,14 +64,14 @@ class ActionApprovalService(
     fun decide(incidentId: String, status: String, decidedBy: String): ApprovalDecisionOutcome {
         require(status in ApprovalStatus.DECIDED) { "종결 상태가 아님: $status" }
         val decidedAt = Instant.now()
-        if (!repository.markDecided(incidentId, status, decidedBy, decidedAt)) {
-            val latest = repository.findLatestStatus(incidentId)
+        if (!actionApprovalRepository.markDecided(incidentId, status, decidedBy, decidedAt)) {
+            val latest = actionApprovalRepository.findLatestStatus(incidentId)
                 ?: return ApprovalDecisionOutcome.NotFound
             return ApprovalDecisionOutcome.AlreadyDecided(latest)
         }
         if (status != ApprovalStatus.APPROVED) {
             // 실행이 없는 결정만 즉시 발행 — approved 는 조치 실행 후 ActionExecutionListener 가 발행
-            val accepted = publisher.publish(
+            val accepted = eventPublisher.publish(
                 OpsTopics.ACTIONS_DECISIONS,
                 incidentId,
                 decisionPayload(incidentId, status, decidedBy, decidedAt),
@@ -83,14 +83,14 @@ class ActionApprovalService(
         logger.info("승인 결정 — {} {} (by {})", incidentId, status, decidedBy)
         // Slack 카드 마감·스레드 회신은 AFTER_COMMIT 리스너 (ApprovalDecidedListener) —
         // 입력 경로(버튼·API·타임아웃)와 무관하게 여기 한 곳에서 연결된다
-        events.publishEvent(ApprovalDecided(incidentId, status, decidedBy, decidedAt))
+        applicationEventPublisher.publishEvent(ApprovalDecided(incidentId, status, decidedBy, decidedAt))
         return ApprovalDecisionOutcome.Decided(incidentId, status, decidedBy, decidedAt)
     }
 
     /** 카드 발송 성공 후 좌표 보존 — AFTER_COMMIT 리스너 스레드에서 새 트랜잭션으로 연다 */
     @Transactional
     fun recordSlackMessage(incidentId: String, message: SlackMessageRef) {
-        if (!repository.recordSlackMessage(incidentId, message)) {
+        if (!actionApprovalRepository.recordSlackMessage(incidentId, message)) {
             logger.warn("Slack 카드 좌표 기록 실패 — {} 활성 pending 없음 (발송 사이 결정 경합)", incidentId)
         }
     }
@@ -98,7 +98,7 @@ class ActionApprovalService(
     /** 재알림 표식 — true 일 때만 호출 측이 재알림을 발송한다 (1회 규약의 트랜잭션 경계) */
     @Transactional
     fun markReminded(incidentId: String, remindedAt: Instant): Boolean =
-        repository.markReminded(incidentId, remindedAt)
+        actionApprovalRepository.markReminded(incidentId, remindedAt)
 
     /** 실행 결과 감사 기록 — 실행 리스너 스레드에서 새 트랜잭션 (물리적으로 이미 일어난 사실의 기록) */
     @Transactional
@@ -107,7 +107,7 @@ class ActionApprovalService(
             val outcome = if (it.manual) "수동 안내" else if (it.ok) "성공" else "실패"
             "${it.action}: $outcome — ${it.detail}"
         }
-        if (!repository.markExecuted(incidentId, executedAt, note)) {
+        if (!actionApprovalRepository.markExecuted(incidentId, executedAt, note)) {
             logger.warn("실행 결과 기록 실패 — {} approved 행 없음", incidentId)
         }
     }
@@ -122,7 +122,7 @@ class ActionApprovalService(
         executions: List<ActionExecution>,
         executedAt: Instant,
     ): Boolean {
-        val accepted = publisher.publish(
+        val accepted = eventPublisher.publish(
             OpsTopics.ACTIONS_DECISIONS,
             event.incidentId,
             decisionPayload(event.incidentId, event.status, event.decidedBy, event.decidedAt, executions, executedAt),

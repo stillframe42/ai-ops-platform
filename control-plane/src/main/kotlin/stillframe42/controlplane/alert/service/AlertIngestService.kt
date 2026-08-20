@@ -22,8 +22,8 @@ import tools.jackson.databind.json.JsonMapper
  */
 @Service
 class AlertIngestService(
-    private val registry: IncidentRegistry,
-    private val publisher: EventPublisher,
+    private val incidentRegistry: IncidentRegistry,
+    private val eventPublisher: EventPublisher,
     private val clock: Clock = Clock.systemUTC(),
 ) {
 
@@ -36,7 +36,7 @@ class AlertIngestService(
 
     fun ingest(rawBody: String) {
         val root = runCatching { mapper.readTree(rawBody) }.getOrNull()
-        publisher.publish(OpsTopics.ALERTS_RAW, root?.path("groupKey")?.stringOrNull(), rawBody)
+        eventPublisher.publish(OpsTopics.ALERTS_RAW, root?.path("groupKey")?.stringOrNull(), rawBody)
         if (root == null) {
             logger.warn("Alertmanager 본문 파싱 실패 — raw 보존만 수행 (본문 {}자)", rawBody.length)
             return
@@ -52,7 +52,7 @@ class AlertIngestService(
         val status = alert.path("status").stringOrNull()
         when (IncidentStatus.fromWire(status)) {
             IncidentStatus.FIRING -> fire(alert, fingerprint)
-            IncidentStatus.RESOLVED -> registry.resolve(fingerprint)?.also {
+            IncidentStatus.RESOLVED -> incidentRegistry.resolve(fingerprint)?.also {
                 logger.info("인시던트 해소 — {} (fingerprint {})", it, fingerprint)
             }
             null -> logger.warn("알 수 없는 alert status '{}' — 건너뜀", status)
@@ -65,7 +65,7 @@ class AlertIngestService(
             logger.warn("scenario 매핑 없는 alertname '{}' — raw 보존만 (인시던트화 생략)", alertName)
             return
         }
-        val tracked = registry.track(fingerprint, scenario)
+        val tracked = incidentRegistry.track(fingerprint, scenario)
         if (!tracked.isNew) {
             logger.info("반복 발화 병합 — {} ({}회째)", tracked.incidentId, tracked.mergeCount)
             return
@@ -83,14 +83,14 @@ class AlertIngestService(
             mergeCount = tracked.mergeCount,
         )
         // key = incident_id — 인시던트 단위 파티션 고정(순서 보장), 토픽 설계와 한 몸
-        val published = publisher.publish(OpsTopics.INCIDENTS, tracked.incidentId, mapper.writeValueAsString(event.toWire()))
+        val published = eventPublisher.publish(OpsTopics.INCIDENTS, tracked.incidentId, mapper.writeValueAsString(event.toWire()))
         if (!published) {
             // Exp D 유실 창 해소안 ① — 활성 해제로 다음 발화(repeat_interval 재전송 포함)를 재시도 주체로
-            registry.untrack(fingerprint, tracked.incidentId)
+            incidentRegistry.untrack(fingerprint, tracked.incidentId)
             logger.warn("인시던트 발행 실패 — 활성 해제, 다음 발화가 재발행한다: {} ({})", tracked.incidentId, alertName)
             return
         }
-        // "접수"인 이유: 이 시점 확정은 동기 접수까지 — 비동기 전달 실패는 publisher 의
+        // "접수"인 이유: 이 시점 확정은 동기 접수까지 — 비동기 전달 실패는 eventPublisher 의
         // whenComplete WARN(key=incident_id)으로만 관측된다 (EventPublisher KDoc 계약 한계)
         logger.info("인시던트 발행 접수 — {} ({})", tracked.incidentId, alertName)
     }

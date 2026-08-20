@@ -14,17 +14,17 @@ import stillframe42.controlplane.approval.service.ApprovalDecided
  */
 @Component
 class ApprovalDecidedListener(
-    private val repository: ActionApprovalRepository,
-    private val messenger: ApprovalMessenger,
+    private val actionApprovalRepository: ActionApprovalRepository,
+    private val approvalMessenger: ApprovalMessenger,
 ) {
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     fun onDecided(event: ApprovalDecided) {
-        val card = repository.findLatestCard(event.incidentId) ?: return
+        val card = actionApprovalRepository.findLatestCard(event.incidentId) ?: return
         val message = card.slackMessage ?: return
-        messenger.closeApprovalRequest(message, card.request, event.status, event.decidedBy, event.decidedAt)
-        messenger.postThreadReply(
+        approvalMessenger.closeApprovalRequest(message, card.request, event.status, event.decidedBy, event.decidedAt)
+        approvalMessenger.postThreadReply(
             message,
             ApprovalMessageFactory.resultThreadText(event.status, event.decidedBy, event.decidedAt),
         )

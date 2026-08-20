@@ -20,7 +20,7 @@ import stillframe42.controlplane.approval.notify.ApprovalMessageFactory
  */
 @Component
 class SocketModeApprovalReceiver(
-    private val handler: ApprovalButtonHandler,
+    private val approvalButtonHandler: ApprovalButtonHandler,
     @Value("\${ops.slack.bot-token}") private val botToken: String,
     @Value("\${ops.slack.app-token}") private val appToken: String,
 ) : SmartLifecycle {
@@ -57,7 +57,7 @@ class SocketModeApprovalReceiver(
             val incidentId = action?.value
             val slackUserId = req.payload.user?.id
             if (incidentId != null && slackUserId != null) {
-                handler.handle(actionId, incidentId, slackUserId)?.let { ctx.respond(it) }
+                approvalButtonHandler.handle(actionId, incidentId, slackUserId)?.let { ctx.respond(it) }
             }
             ctx.ack()
         }

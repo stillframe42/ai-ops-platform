@@ -17,15 +17,15 @@ import stillframe42.controlplane.incident.model.IncidentReportSummary
  */
 @Repository
 class JpaIncidentReportRepository(
-    private val entityRepository: IncidentReportEntityRepository,
+    private val incidentReportEntityRepository: IncidentReportEntityRepository,
 ) : IncidentReportRepository {
 
     override fun upsert(report: IncidentReport): Boolean {
         // 선조회 → 신규/갱신 분기. 경합 없음 — @KafkaListener 컨테이너는 기본 동시성 1(단일 스레드),
         // 같은 incident_id 는 같은 파티션이라 순서도 보장된다 (JdbcClient 구현과 같은 근거)
-        val existing = entityRepository.findByIdOrNull(report.incidentId)
+        val existing = incidentReportEntityRepository.findByIdOrNull(report.incidentId)
         if (existing == null) {
-            entityRepository.save(IncidentReportEntity.from(report))
+            incidentReportEntityRepository.save(IncidentReportEntity.from(report))
         } else {
             // 트랜잭션 안 dirty checking — 변경 감지로 UPDATE 가 나간다 (명시 save 불필요)
             existing.applyUpdate(report)
@@ -34,8 +34,8 @@ class JpaIncidentReportRepository(
     }
 
     override fun findRecent(limit: Int): List<IncidentReportSummary> =
-        entityRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, limit)).map { it.toSummary() }
+        incidentReportEntityRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, limit)).map { it.toSummary() }
 
     override fun findById(incidentId: String): IncidentReportDetail? =
-        entityRepository.findByIdOrNull(incidentId)?.let { IncidentReportDetail(it.toSummary(), it.report) }
+        incidentReportEntityRepository.findByIdOrNull(incidentId)?.let { IncidentReportDetail(it.toSummary(), it.report) }
 }

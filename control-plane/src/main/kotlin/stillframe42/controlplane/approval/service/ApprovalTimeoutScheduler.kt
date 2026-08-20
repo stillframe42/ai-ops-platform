@@ -22,9 +22,9 @@ import stillframe42.controlplane.approval.repository.ActionApprovalRepository
  */
 @Component
 class ApprovalTimeoutScheduler(
-    private val service: ActionApprovalService,
-    private val repository: ActionApprovalRepository,
-    private val messenger: ApprovalMessenger,
+    private val actionApprovalService: ActionApprovalService,
+    private val actionApprovalRepository: ActionApprovalRepository,
+    private val approvalMessenger: ApprovalMessenger,
     @Value("\${ops.approval.remind-after}") private val remindAfter: Duration,
     @Value("\${ops.approval.expire-after}") private val expireAfter: Duration,
 ) {
@@ -36,7 +36,7 @@ class ApprovalTimeoutScheduler(
 
     /** 기준 시각을 인자로 받는 이유: 테스트가 시계 대역 없이 경계를 실측하기 위해 */
     fun sweepAt(now: Instant) {
-        val stale = repository.findPendingRequestedBefore(now.minus(remindAfter))
+        val stale = actionApprovalRepository.findPendingRequestedBefore(now.minus(remindAfter))
         for (pending in stale) {
             // 한 건의 실패(발행 접수 등)가 나머지 스캔을 막지 않는다 — 다음 주기가 재시도
             runCatching { handle(pending, now) }
@@ -47,15 +47,15 @@ class ApprovalTimeoutScheduler(
     private fun handle(pending: PendingApproval, now: Instant) {
         if (!pending.requestedAt.isAfter(now.minus(expireAfter))) {
             logger.info("승인 대기 만료 — {} ({}분 경과)", pending.incidentId, expireAfter.toMinutes())
-            service.decide(pending.incidentId, ApprovalStatus.EXPIRED, TIMEOUT_DECIDER)
+            actionApprovalService.decide(pending.incidentId, ApprovalStatus.EXPIRED, TIMEOUT_DECIDER)
             // Slack 카드 마감·회신은 ApprovalDecided 리스너 — 버튼·API 결정과 같은 단일 지점
         } else if (pending.remindedAt == null) {
             // 표식 선기록 후 발송 — 발송 실패 시 재알림은 유실되지만 만료 안전망이 뒤에 있다
             // (반복 재알림 스팸보다 최대 1회 계약이 낫다)
-            if (service.markReminded(pending.incidentId, now)) {
+            if (actionApprovalService.markReminded(pending.incidentId, now)) {
                 logger.info("승인 대기 재알림 — {} ({}분 경과)", pending.incidentId, remindAfter.toMinutes())
                 pending.slackMessage?.let {
-                    messenger.postThreadReply(it, ApprovalMessageFactory.reminderText(remindAfter, expireAfter))
+                    approvalMessenger.postThreadReply(it, ApprovalMessageFactory.reminderText(remindAfter, expireAfter))
                 }
             }
         }
