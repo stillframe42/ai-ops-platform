@@ -7,6 +7,7 @@
 from datetime import UTC, datetime
 
 import httpx
+import openai
 from langchain_core.messages import AIMessage
 from langgraph.errors import NodeError, NodeTimeoutError
 from langgraph.graph import END, START, StateGraph
@@ -67,6 +68,12 @@ def retry_on_transient(exc: Exception) -> bool:
         )
     if isinstance(exc, httpx.HTTPStatusError):
         return exc.response.status_code >= 500  # 서버 측 오류만 — 4xx 는 요청 자체의 문제
+    # LLM 게이트웨이 호출 실패는 openai SDK 예외로 전파된다 (httpx 계열 아님 — Phase 5 실측).
+    # 연결 실패(순단·pod 교체)와 5xx·429(Retry-After) 만 — 4xx 는 요청 자체의 문제
+    if isinstance(exc, openai.APIConnectionError):
+        return True
+    if isinstance(exc, openai.APIStatusError):
+        return exc.status_code >= 500 or exc.status_code == 429
     return isinstance(exc, (ConnectionError, httpx.RequestError))
 
 

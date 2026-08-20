@@ -7,6 +7,8 @@ monitor 실패 → analysis 부분 진행 / analysis 실패 → 에스컬레이�
 
 import asyncio
 
+import httpx
+import openai
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
@@ -322,6 +324,37 @@ def test_retry_classifier_rejects_group_with_non_transient():
     """하나라도 비일시적 오류가 섞인 그룹은 재시도하지 않는다 — 프로그래밍 오류 반복 방지."""
     mixed = ExceptionGroup("혼합", [ConnectionError("일시적"), ValueError("프로그래밍 오류")])
     assert supervisor_graph.retry_on_transient(mixed) is False
+
+
+def _gateway_request() -> httpx.Request:
+    return httpx.Request("POST", "http://llm-gateway:8090/v1/chat/completions")
+
+
+def test_retry_classifier_accepts_gateway_connection_error():
+    """게이트웨이 순단(pod 교체·재기동)은 openai SDK 예외로 전파된다 — httpx 계열이 아니라
+    별도 분기 필요 (Phase 5 실측: SDK 내장 재시도 2회 소진 후 APIConnectionError)."""
+    exc = openai.APIConnectionError(request=_gateway_request())
+    assert supervisor_graph.retry_on_transient(exc) is True
+
+
+def test_retry_classifier_accepts_gateway_5xx_and_429():
+    """게이트웨이/프로바이더 측 오류(5xx)와 분당 한도(429, Retry-After)는 재시도 대상."""
+    unavailable = openai.InternalServerError(
+        "service unavailable", response=httpx.Response(503, request=_gateway_request()), body=None
+    )
+    rate_limited = openai.RateLimitError(
+        "rate limit", response=httpx.Response(429, request=_gateway_request()), body=None
+    )
+    assert supervisor_graph.retry_on_transient(unavailable) is True
+    assert supervisor_graph.retry_on_transient(rate_limited) is True
+
+
+def test_retry_classifier_rejects_gateway_4xx():
+    """400 은 요청 자체의 문제 — 재시도해도 결과가 같다."""
+    exc = openai.BadRequestError(
+        "bad request", response=httpx.Response(400, request=_gateway_request()), body=None
+    )
+    assert supervisor_graph.retry_on_transient(exc) is False
 
 
 def test_retry_classifier_unwraps_nested_group():
