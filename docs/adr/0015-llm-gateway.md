@@ -29,6 +29,10 @@
 - 어려워지는 것: 배포 단위 +1 (차트·이미지·관측 대상 추가), 모든 LLM 호출의 단일 장애점화 — HA(replica 2 + PDB)와 클라이언트 재시도·백오프(Kafka 재소비 복구)로 흡수 예정.
 - 되돌리기: OpenAI 호환 인터페이스가 계약이라 LiteLLM/Bifrost 로의 교체는 클라이언트 무수정 — base-url 이 가리키는 실체만 바뀐다. 직접 구현의 학습 산출(비교 기준)이 교체 판단 재료가 된다.
 
+## 추가 사항 (2026-08-20): 고가용성 방식 — replicaCount 2 고정 + PDB, HPA 기각
+
+"모든 LLM 호출의 단일 장애점화"의 흡수 방식을 확정한다. CPU HPA(min 2) 는 metrics-server 설치가 전제인데 클러스터에 의도적으로 미설치 상태(5주차 — KEDA 는 외부 메트릭이라 무관)이고, 실 사용자 트래픽 없음(비목표) 조건에서 자동 스케일의 실익이 없다 (control-plane min 1 결정과 같은 논리). 대신 **replicaCount 2 고정 + PodDisruptionBudget(minAvailable 1)** 로 자발적 중단(드레인)·단일 pod 장애를 흡수한다. replica 2 의 전제인 상태 외부화(캐시·예산 카운터·rate limit 버킷 = Redis/PostgreSQL)는 Phase 3~4 에서 이미 성립했다. 비자발적 장애의 나머지 반쪽은 클라이언트 측 — openai SDK 내장 재시도(연결 실패·5xx) + LangGraph 노드 재시도 허용 목록에 게이트웨이 호출 예외(openai SDK 계열) 추가로 담당한다.
+
 ## 추가 사항 예정 (Phase 6 승인 시)
 
 - LiteLLM / Bifrost 기능 비교표 (라우팅·캐싱·예산·폴백·가드레일 확장 축)
