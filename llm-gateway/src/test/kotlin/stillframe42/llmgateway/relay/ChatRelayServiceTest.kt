@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import org.springframework.ai.chat.messages.AssistantMessage
 import org.springframework.ai.chat.messages.MessageType
 import org.springframework.ai.chat.messages.ToolResponseMessage
@@ -58,6 +59,21 @@ class ChatRelayServiceTest {
         val toolResult = assertIs<ToolResponseMessage>(messages[1])
         assertEquals("tc_1", toolResult.responses.single().id)
         assertEquals("로그 3건", toolResult.responses.single().responseData)
+    }
+
+    @Test
+    fun `프로바이더 원문 finish_reason 이 OpenAI 표준값으로 매핑된다`() {
+        assertEquals("stop", ChatRelayService.standardFinishReason("end_turn"))
+        assertEquals("stop", ChatRelayService.standardFinishReason("STOP_SEQUENCE"))
+        assertEquals("length", ChatRelayService.standardFinishReason("max_tokens"))
+        assertEquals("tool_calls", ChatRelayService.standardFinishReason("tool_use"))
+    }
+
+    @Test
+    fun `표준값과 미지의 finish_reason 은 소문자로 그대로 통과한다`() {
+        assertEquals("stop", ChatRelayService.standardFinishReason("stop"))
+        assertEquals("content_filter", ChatRelayService.standardFinishReason("content_filter"))
+        assertNull(ChatRelayService.standardFinishReason(null))
     }
 
     @Test

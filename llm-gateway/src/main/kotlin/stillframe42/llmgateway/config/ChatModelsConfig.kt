@@ -15,6 +15,6 @@ import stillframe42.llmgateway.routing.Provider
 class ChatModelsConfig {
 
     @Bean
-    fun chatModels(anthropic: AnthropicChatModel, openai: OpenAiChatModel): Map<Provider, ChatModel> =
-        mapOf(Provider.ANTHROPIC to anthropic, Provider.OPENAI to openai)
+    fun chatModels(anthropicChatModel: AnthropicChatModel, openAiChatModel: OpenAiChatModel): Map<Provider, ChatModel> =
+        mapOf(Provider.ANTHROPIC to anthropicChatModel, Provider.OPENAI to openAiChatModel)
 }

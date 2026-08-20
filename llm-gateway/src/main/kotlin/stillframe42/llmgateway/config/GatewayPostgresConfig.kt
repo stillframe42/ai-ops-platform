@@ -13,10 +13,10 @@ import org.springframework.jdbc.core.JdbcTemplate
 class GatewayPostgresConfig {
 
     @Bean
-    fun gatewayDataSource(properties: GatewayPostgresProperties): DataSource = HikariDataSource().apply {
-        jdbcUrl = properties.url
-        username = properties.username
-        password = properties.password
+    fun gatewayDataSource(gatewayPostgresProperties: GatewayPostgresProperties): DataSource = HikariDataSource().apply {
+        jdbcUrl = gatewayPostgresProperties.url
+        username = gatewayPostgresProperties.username
+        password = gatewayPostgresProperties.password
         maximumPoolSize = 4
     }
 

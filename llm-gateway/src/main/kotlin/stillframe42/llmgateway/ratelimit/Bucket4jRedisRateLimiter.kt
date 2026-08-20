@@ -16,7 +16,7 @@ import org.slf4j.LoggerFactory
  */
 class Bucket4jRedisRateLimiter(
     private val redisClient: RedisClient,
-    private val properties: RateLimitProperties,
+    private val rateLimitProperties: RateLimitProperties,
 ) : RateLimiter {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -30,7 +30,7 @@ class Bucket4jRedisRateLimiter(
     }
 
     override fun tryConsume(service: String): RateLimitDecision = try {
-        val rpm = (properties.serviceRpm[service] ?: properties.defaultRpm ?: return RateLimitDecision(true)).toLong()
+        val rpm = (rateLimitProperties.serviceRpm[service] ?: rateLimitProperties.defaultRpm ?: return RateLimitDecision(true)).toLong()
         val configuration = BucketConfiguration.builder()
             .addLimit { it.capacity(rpm).refillGreedy(rpm, Duration.ofMinutes(1)) }
             .build()

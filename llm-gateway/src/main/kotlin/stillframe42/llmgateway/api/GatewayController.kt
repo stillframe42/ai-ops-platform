@@ -10,8 +10,8 @@ import stillframe42.llmgateway.relay.EmbeddingRelayService
 
 @RestController
 class GatewayController(
-    private val cachingChat: CachingChatService,
-    private val embeddingRelay: EmbeddingRelayService,
+    private val cachingChatService: CachingChatService,
+    private val embeddingRelayService: EmbeddingRelayService,
 ) {
 
     @PostMapping("/v1/chat/completions")
@@ -28,13 +28,19 @@ class GatewayController(
         if (request.messages.isEmpty()) {
             throw InvalidRequestException("messages 는 비어 있을 수 없습니다", param = "messages")
         }
-        val result = cachingChat.complete(request, taskType, cacheControl, clientService ?: "unknown")
+
+        val result = cachingChatService.complete(request, taskType, cacheControl, clientService ?: "unknown")
+
         val builder = ResponseEntity.ok()
             // 캐시 판정 노출 — 확인 기준 실측·클라이언트 디버깅용 (OpenAI 계약 밖 부가 헤더라 무해)
             .header("X-Gateway-Cache", result.cacheStatus.name.lowercase())
         if (result.downgraded) {
             // 예산 100% 도달로 저비용 모델 강제 전환 — 응답 model 필드와 함께 확인 수단 (Phase 4)
             builder.header("X-Gateway-Downgrade", "budget-exceeded")
+        }
+        result.fallbackTarget?.let {
+            // 주 프로바이더 장애로 폴백 발생 — 값은 교차 프로바이더명 또는 local (Phase 5)
+            builder.header("X-Gateway-Fallback", it)
         }
         return builder.body(result.response)
     }
@@ -44,6 +50,6 @@ class GatewayController(
         if (request.inputTexts().isEmpty()) {
             throw InvalidRequestException("input 은 비어 있을 수 없습니다", param = "input")
         }
-        return embeddingRelay.relay(request)
+        return embeddingRelayService.relay(request)
     }
 }

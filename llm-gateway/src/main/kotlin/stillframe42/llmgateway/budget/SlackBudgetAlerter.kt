@@ -15,14 +15,14 @@ import tools.jackson.databind.json.JsonMapper
 @Component
 class SlackBudgetAlerter(
     @Value("\${gateway.alert.slack-webhook-url}") private val webhookUrl: String,
-    builder: RestClient.Builder,
+    restClientBuilder: RestClient.Builder,
 ) : BudgetAlerter {
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    private val restClient = builder.build()
+    private val restClient = restClientBuilder.build()
 
-    private val mapper = JsonMapper.builder().build()
+    private val jsonMapper = JsonMapper.builder().build()
 
     init {
         // 기동 시점 1회 진단 로그 — "왜 경고가 안 오지"를 로그로 확인 가능하게 (URL 값은 미출력)
@@ -38,7 +38,7 @@ class SlackBudgetAlerter(
             restClient.post()
                 .uri(webhookUrl)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(mapper.writeValueAsString(mapOf("text" to message)))
+                .body(jsonMapper.writeValueAsString(mapOf("text" to message)))
                 .retrieve()
                 .toBodilessEntity()
         }.onFailure {

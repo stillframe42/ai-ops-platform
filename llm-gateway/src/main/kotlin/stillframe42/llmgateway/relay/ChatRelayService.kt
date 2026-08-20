@@ -39,13 +39,13 @@ import tools.jackson.databind.JsonNode
  */
 @Service
 class ChatRelayService(
-    private val router: ModelRouter,
+    private val modelRouter: ModelRouter,
     private val chatModels: Map<Provider, ChatModel>,
-    private val metrics: GatewayMetrics,
+    private val gatewayMetrics: GatewayMetrics,
 ) {
 
     fun relay(request: ChatCompletionRequest, taskType: String?): ChatCompletionResponse =
-        relay(request, router.resolve(taskType, request.model))
+        relay(request, modelRouter.resolve(taskType, request.model))
 
     // 라우팅 해석은 호출자(캐시 계층) 몫 — 모델별 캐시 키·필터와 중계가 같은 Route 를 공유한다 (Phase 3)
     fun relay(request: ChatCompletionRequest, route: Route): ChatCompletionResponse {
@@ -55,7 +55,7 @@ class ChatRelayService(
         val generation = checkNotNull(response.result) { "프로바이더 응답에 생성 결과가 없습니다" }
         val usage = response.metadata.usage
         val actualModel = response.metadata.model.takeIf { it.isNotBlank() } ?: route.model
-        metrics.record(route.taskType, route.provider, actualModel)
+        gatewayMetrics.record(route.taskType, route.provider, actualModel)
 
         val toolCalls = generation.output.toolCalls.orEmpty().map {
             ToolCallDto(id = it.id, function = FunctionCallDto(name = it.name, arguments = it.arguments))
@@ -72,8 +72,8 @@ class ChatRelayService(
                         content = generation.output.text.orEmpty(),
                         toolCalls = toolCalls.ifEmpty { null },
                     ),
-                    // 프로바이더 원문 그대로 (Anthropic: end_turn/tool_use) — 표준값 매핑은 폴백(Phase 5)과 함께
-                    finishReason = generation.metadata.finishReason?.lowercase(),
+                    // OpenAI 표준값으로 정규화 (Phase 5) — 폴백으로 프로바이더가 바뀌어도 클라이언트는 단일 계약만 본다
+                    finishReason = standardFinishReason(generation.metadata.finishReason),
                 ),
             ),
             usage = TokenUsage(
@@ -102,7 +102,8 @@ class ChatRelayService(
             }
             Provider.OPENAI -> {
                 val b = OpenAiChatOptions.builder().model(route.model)
-                maxTokens?.let { b.maxTokens(it) }
+                // gpt-5.6 계열은 max_tokens 를 400 으로 하드 거부 — 신형 파라미터만 보낸다 (DAY 33 실측)
+                maxTokens?.let { b.maxCompletionTokens(it) }
                 request.temperature?.let { b.temperature(it) }
                 if (callbacks.isNotEmpty()) {
                     b.toolCallbacks(callbacks)
@@ -144,6 +145,15 @@ class ChatRelayService(
     }
 
     companion object {
+        /** 프로바이더 원문 finish_reason → OpenAI 표준값 (미지 값은 소문자 원문 통과 — 정보 소실 방지) */
+        internal fun standardFinishReason(raw: String?): String? = when (val reason = raw?.lowercase()) {
+            null -> null
+            "end_turn", "stop_sequence" -> "stop"
+            "max_tokens" -> "length"
+            "tool_use" -> "tool_calls"
+            else -> reason
+        }
+
         internal fun toSpringMessages(messages: List<ChatMessage>): List<Message> = messages.map { msg ->
             when (msg.role) {
                 "system" -> SystemMessage(msg.contentText())

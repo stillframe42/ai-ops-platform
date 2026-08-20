@@ -10,24 +10,24 @@ import org.springframework.data.redis.core.StringRedisTemplate
  * 카운터 유실은 당일 통제 정확도만 낮춘다.
  */
 class RedisBudgetCounter(
-    private val redis: StringRedisTemplate,
+    private val stringRedisTemplate: StringRedisTemplate,
 ) : BudgetCounter {
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
     override fun add(scope: String, amount: Double): Double = guarded("add", 0.0) {
         val key = key(scope)
-        val total = checkNotNull(redis.opsForValue().increment(key, amount))
-        redis.expire(key, RETENTION)
+        val total = checkNotNull(stringRedisTemplate.opsForValue().increment(key, amount))
+        stringRedisTemplate.expire(key, RETENTION)
         total
     }
 
     override fun current(scope: String): Double = guarded("current", 0.0) {
-        redis.opsForValue().get(key(scope))?.toDouble() ?: 0.0
+        stringRedisTemplate.opsForValue().get(key(scope))?.toDouble() ?: 0.0
     }
 
     override fun markOnce(flag: String): Boolean = guarded("markOnce", false) {
-        redis.opsForValue().setIfAbsent(key(flag), "1", RETENTION) == true
+        stringRedisTemplate.opsForValue().setIfAbsent(key(flag), "1", RETENTION) == true
     }
 
     private fun key(scope: String) = "gw:budget:$scope"

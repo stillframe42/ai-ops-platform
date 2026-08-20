@@ -18,14 +18,14 @@ class BudgetGuardTest {
     private val alerter = RecordingAlerter()
     private val registry = SimpleMeterRegistry()
     private val guard = BudgetGuard(
-        properties = BudgetProperties(
+        budgetProperties = BudgetProperties(
             dailyLimitUsd = 10.0,
             serviceDailyLimitUsd = mapOf("agent-service" to 4.0),
             downgrade = BudgetProperties.Downgrade(provider = "anthropic", model = "claude-haiku-4-5", maxTokens = 2000),
         ),
-        counter = counter,
-        alerter = alerter,
-        metrics = GatewayMetrics(registry),
+        budgetCounter = counter,
+        budgetAlerter = alerter,
+        gatewayMetrics = GatewayMetrics(registry),
         clock = Clock.fixed(Instant.parse("2026-08-19T03:00:00Z"), ZoneOffset.UTC),
     )
 
@@ -91,10 +91,10 @@ class BudgetGuardTest {
     @Test
     fun `일 한도 미설정이면 예산 통제는 비활성이다`() {
         val disabled = BudgetGuard(
-            properties = BudgetProperties(dailyLimitUsd = null),
-            counter = counter,
-            alerter = alerter,
-            metrics = GatewayMetrics(registry),
+            budgetProperties = BudgetProperties(dailyLimitUsd = null),
+            budgetCounter = counter,
+            budgetAlerter = alerter,
+            gatewayMetrics = GatewayMetrics(registry),
             clock = Clock.systemUTC(),
         )
         disabled.settle("agent-service", 999.0)

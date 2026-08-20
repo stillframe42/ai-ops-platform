@@ -16,13 +16,13 @@ import stillframe42.llmgateway.relay.GatewayMetrics
 class BudgetConfig {
 
     @Bean
-    fun budgetCounter(redis: StringRedisTemplate): BudgetCounter = RedisBudgetCounter(redis)
+    fun budgetCounter(stringRedisTemplate: StringRedisTemplate): BudgetCounter = RedisBudgetCounter(stringRedisTemplate)
 
     @Bean
     fun budgetGuard(
-        properties: BudgetProperties,
-        counter: BudgetCounter,
-        alerter: BudgetAlerter,
-        metrics: GatewayMetrics,
-    ) = BudgetGuard(properties, counter, alerter, metrics, Clock.systemUTC())
+        budgetProperties: BudgetProperties,
+        budgetCounter: BudgetCounter,
+        budgetAlerter: BudgetAlerter,
+        gatewayMetrics: GatewayMetrics,
+    ) = BudgetGuard(budgetProperties, budgetCounter, budgetAlerter, gatewayMetrics, Clock.systemUTC())
 }

@@ -18,11 +18,11 @@ class CostRecorderTest {
     private val registry = SimpleMeterRegistry()
     private val ledger = RecordingLedger()
     private val recorder = CostRecorder(
-        calculator = CostCalculator(
+        costCalculator = CostCalculator(
             CostProperties(prices = listOf(CostProperties.ModelPrice("claude-haiku-4-5", 1.0, 5.0))),
         ),
-        ledger = ledger,
-        metrics = GatewayMetrics(registry),
+        costLedger = ledger,
+        gatewayMetrics = GatewayMetrics(registry),
     )
 
     private val route = Route(taskType = "monitoring-summary", provider = Provider.ANTHROPIC, model = "claude-haiku-4-5", maxTokens = null)
@@ -55,11 +55,11 @@ class CostRecorderTest {
     @Test
     fun `원장 비구성이어도 메트릭 기록은 동작한다`() {
         val recorderWithoutLedger = CostRecorder(
-            calculator = CostCalculator(
+            costCalculator = CostCalculator(
                 CostProperties(prices = listOf(CostProperties.ModelPrice("claude-haiku-4-5", 1.0, 5.0))),
             ),
-            ledger = null,
-            metrics = GatewayMetrics(registry),
+            costLedger = null,
+            gatewayMetrics = GatewayMetrics(registry),
         )
 
         val cost = recorderWithoutLedger.record("unknown", route, response(), CacheStatus.MISS)

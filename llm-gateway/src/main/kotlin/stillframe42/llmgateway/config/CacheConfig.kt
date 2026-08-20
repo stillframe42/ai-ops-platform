@@ -26,18 +26,18 @@ import tools.jackson.databind.ObjectMapper
 class CacheConfig {
 
     @Bean
-    fun exactMatchCacheStore(redis: StringRedisTemplate): ExactMatchCacheStore = RedisCacheStore(redis)
+    fun exactMatchCacheStore(stringRedisTemplate: StringRedisTemplate): ExactMatchCacheStore = RedisCacheStore(stringRedisTemplate)
 
     @Bean
-    fun exactResponseCache(store: ExactMatchCacheStore, properties: CacheProperties, mapper: ObjectMapper) =
-        ExactResponseCache(store, properties.exactTtl, mapper)
+    fun exactResponseCache(exactMatchCacheStore: ExactMatchCacheStore, cacheProperties: CacheProperties, objectMapper: ObjectMapper) =
+        ExactResponseCache(exactMatchCacheStore, cacheProperties.exactTtl, objectMapper)
 
     @Bean
     fun semanticResponseCache(
         vectorStores: ObjectProvider<VectorStore>,
-        properties: CacheProperties,
-        mapper: ObjectMapper,
-    ) = SemanticResponseCache(vectorStores.getIfAvailable(), properties.semantic.similarityThreshold, mapper)
+        cacheProperties: CacheProperties,
+        objectMapper: ObjectMapper,
+    ) = SemanticResponseCache(vectorStores.getIfAvailable(), cacheProperties.semantic.similarityThreshold, objectMapper)
 
     @Configuration
     @ConditionalOnProperty("gateway.postgres.url")

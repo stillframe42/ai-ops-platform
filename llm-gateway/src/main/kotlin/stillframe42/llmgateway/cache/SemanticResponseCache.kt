@@ -18,7 +18,7 @@ import tools.jackson.databind.ObjectMapper
 class SemanticResponseCache(
     private val vectorStore: VectorStore?,
     private val similarityThreshold: Double,
-    private val mapper: ObjectMapper,
+    private val objectMapper: ObjectMapper,
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -37,7 +37,7 @@ class SemanticResponseCache(
             )
         }?.firstOrNull() ?: return null
         val json = document.metadata["response"] as? String ?: return null
-        return guarded("역직렬화") { mapper.readValue(json, ChatCompletionResponse::class.java) }
+        return guarded("역직렬화") { objectMapper.readValue(json, ChatCompletionResponse::class.java) }
     }
 
     fun save(request: ChatCompletionRequest, route: Route, taskType: String?, response: ChatCompletionResponse) {
@@ -45,7 +45,7 @@ class SemanticResponseCache(
         guarded("저장") {
             val document = Document(
                 promptText(request),
-                mapOf("model" to route.model, "task" to (taskType ?: "none"), "response" to mapper.writeValueAsString(response)),
+                mapOf("model" to route.model, "task" to (taskType ?: "none"), "response" to objectMapper.writeValueAsString(response)),
             )
             // 제약 (DAY 31 실측): OpenAiEmbeddingModel 기본 MetadataMode.EMBED 는 저장 시 metadata 를
             // 임베딩 텍스트에 포함한다 — 검색은 질의 텍스트만 임베딩하므로 제외하지 않으면

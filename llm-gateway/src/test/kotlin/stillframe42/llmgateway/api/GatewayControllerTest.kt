@@ -79,6 +79,36 @@ class GatewayControllerTest {
     }
 
     @Test
+    fun `폴백 발생은 X-Gateway-Fallback 헤더로 드러난다`() {
+        val request = ChatCompletionRequest(messages = listOf(ChatMessage(role = "user", content = "ping")))
+        given(cachingChat.complete(request, null, null, "unknown"))
+            .willReturn(CachedChatResult(response(), CacheStatus.MISS, fallbackTarget = "openai"))
+
+        mockMvc.perform(
+            post("/v1/chat/completions")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"messages":[{"role":"user","content":"ping"}]}"""),
+        )
+            .andExpect(status().isOk)
+            .andExpect(header().string("X-Gateway-Fallback", "openai"))
+    }
+
+    @Test
+    fun `폴백이 없으면 X-Gateway-Fallback 헤더도 없다`() {
+        val request = ChatCompletionRequest(messages = listOf(ChatMessage(role = "user", content = "ping")))
+        given(cachingChat.complete(request, null, null, "unknown"))
+            .willReturn(CachedChatResult(response(), CacheStatus.MISS))
+
+        mockMvc.perform(
+            post("/v1/chat/completions")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""{"messages":[{"role":"user","content":"ping"}]}"""),
+        )
+            .andExpect(status().isOk)
+            .andExpect(header().doesNotExist("X-Gateway-Fallback"))
+    }
+
+    @Test
     fun `stream=true 요청은 400 - OpenAI 오류 계약`() {
         mockMvc.perform(
             post("/v1/chat/completions")

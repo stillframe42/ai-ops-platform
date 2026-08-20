@@ -34,19 +34,19 @@ class RateLimitConfig {
         ): RedisClient = RedisClient.create(RedisURI.create(host, port))
 
         @Bean
-        fun rateLimiter(rateLimitRedisClient: RedisClient, properties: RateLimitProperties): RateLimiter =
-            Bucket4jRedisRateLimiter(rateLimitRedisClient, properties)
+        fun rateLimiter(rateLimitRedisClient: RedisClient, rateLimitProperties: RateLimitProperties): RateLimiter =
+            Bucket4jRedisRateLimiter(rateLimitRedisClient, rateLimitProperties)
 
         // 비활성이면 이 Config 자체가 없어 인터셉터도 등록되지 않는다.
         // 익명 WebMvcConfigurer 빈 — 클래스로 두면 @WebMvcTest 슬라이스가 조건 무시하고 포함한다
         @Bean
         fun rateLimitWebConfigurer(
             rateLimiter: RateLimiter,
-            metrics: GatewayMetrics,
-            mapper: ObjectMapper,
+            gatewayMetrics: GatewayMetrics,
+            objectMapper: ObjectMapper,
         ): WebMvcConfigurer = object : WebMvcConfigurer {
             override fun addInterceptors(registry: InterceptorRegistry) {
-                registry.addInterceptor(RateLimitInterceptor(rateLimiter, metrics, mapper)).addPathPatterns("/v1/**")
+                registry.addInterceptor(RateLimitInterceptor(rateLimiter, gatewayMetrics, objectMapper)).addPathPatterns("/v1/**")
             }
         }
     }

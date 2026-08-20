@@ -49,6 +49,10 @@ gateway:
         output-per-mtok: 5.0
       - model-prefix: text-embedding-3-small
         input-per-mtok: 0.02
+      # 폴백·교차 검증 모델 (Phase 5 — 폴백 트래픽 비용 사각 방지, 8/20 공식가 실측)
+      - model-prefix: gpt-5.6-terra
+        input-per-mtok: 2.0
+        output-per-mtok: 12.0
   # 일별 예산 (Phase 4) — 100% 도달 = 차단 아닌 저비용 다운그레이드, 80% = Slack 경고 1회
   budget:
     daily-limit-usd: 5.0
@@ -61,6 +65,11 @@ gateway:
   # 예산 경고 발송 — 키-게이트 (미설정 = 로그 대체)
   alert:
     slack-webhook-url: ${SLACK_WEBHOOK_URL:}
+  # 프로바이더 폴백 체인 (Phase 5 ②) — Anthropic 장애 시 OpenAI 재중계 → 로컬 폴백 응답.
+  # 서킷 기준값(실패율 50%·오픈 30초)은 FallbackProperties 기본값 — 여기는 대상만 지정
+  fallback:
+    provider: openai
+    model: gpt-5.6-terra
   # rate limit 은 docker 프로파일만 활성 (default-rpm 부재 = 비활성 — 로컬은 Redis 없이 기동)
   routing:
     rules:
@@ -73,7 +82,7 @@ gateway:
       - task: root-cause-analysis
         provider: anthropic
         model: claude-sonnet-5
-      # 교차 검증 — 타 프로바이더 (현재 호출자 없음 — 모델명은 사용 시점 실측 확정)
+      # 교차 검증 — 타 프로바이더 (호출자 없음, 모델·경로는 Phase 5 폴백 실측으로 검증됨 — 단가 등록 동반)
       - task: code-review-critical
         provider: openai
         model: gpt-5.6-terra

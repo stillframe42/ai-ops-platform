@@ -27,7 +27,7 @@ class CostCalculatorTest {
     }
 
     @Test
-    fun `단가 미등록 모델은 0 으로 계상한다`() {
+    fun `단가 미등록 모델은 0 으로 기록한다`() {
         assertEquals(0.0, calculator.costOf("gpt-5.6-terra", promptTokens = 1_000, completionTokens = 1_000), 1e-9)
     }
 }

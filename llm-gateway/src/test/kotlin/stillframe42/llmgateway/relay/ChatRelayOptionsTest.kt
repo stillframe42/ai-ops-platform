@@ -74,6 +74,19 @@ class ChatRelayOptionsTest {
     }
 
     @Test
+    fun `openai 의 출력 상한은 max_completion_tokens 로 전달된다 - max_tokens 는 gpt-5_6 계열이 400 거부`() {
+        // 폴백 실측 (DAY 33): "Unsupported parameter: 'max_tokens' is not supported with this model.
+        // Use 'max_completion_tokens' instead." — OpenAI 신형 모델은 구 파라미터를 하드 거부한다
+        val openai = CapturingChatModel()
+        relayWith(CapturingChatModel(), openai)
+            .relay(request(model = null).copy(maxTokens = 500), taskType = "code-review-critical")
+
+        val options = assertIs<OpenAiChatOptions>(openai.captured.options)
+        assertEquals(500, options.maxCompletionTokens)
+        assertNull(options.maxTokens, "구 파라미터를 함께 보내면 신형 모델이 400 을 반환한다")
+    }
+
+    @Test
     fun `tools 는 정의만 담긴 ToolCallback 으로 전달된다 - passthrough`() {
         val anthropic = CapturingChatModel()
         val tools = listOf(ToolSpec(function = FunctionSpec(name = "query_prometheus", description = "PromQL 조회")))

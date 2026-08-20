@@ -9,7 +9,7 @@
 | 1 | 모델 라우팅 — `X-Task-Type` 헤더 기반 태스크별 모델 선택 | Phase 2 |
 | 2 | 응답 캐싱 — 정확 일치(Redis) + 의미 유사도(pgvector) 2단계 | Phase 3 |
 | 3 | 비용 추적 + 예산 통제 — 중앙 집계·초과 시 저비용 모델 다운그레이드 | Phase 4 |
-| 4 | 폴백 — Anthropic 장애 시 OpenAI 전환 (Resilience4j) | Phase 5 |
+| 4 | 폴백 — Anthropic 장애 시 OpenAI 전환 (Resilience4j) + 고가용성 (replica 2·PDB) | Phase 5 |
 | 5 | Rate Limiting — Bucket4j + Redis, 서비스별 한도 | Phase 4 |
 | 6 | 입출력 가드레일 + 인증 전파 — 확장 지점만 확보 | 7주차 (보안 주간) |
 
@@ -31,7 +31,7 @@
 - `model`·`max_tokens`·`temperature` 부재 시 서버 기본값 (claude-sonnet-5 / 2000)
 - `role` 은 system / user / assistant 3종
 - **스트리밍 미지원** — `stream: true` 는 400 (Phase 0 결정: 현행 클라이언트 사용 0건 실측, 배제가 아닌 유예)
-- 응답: OpenAI `chat.completion` 형태 (`choices[].message`, `usage.prompt_tokens` 등). `finish_reason` 은 프로바이더 원문 (Anthropic: `end_turn`) — 표준값 매핑은 Phase 5 폴백과 함께
+- 응답: OpenAI `chat.completion` 형태 (`choices[].message`, `usage.prompt_tokens` 등). `finish_reason` 은 OpenAI 표준값으로 정규화 (Phase 5 — `end_turn`→`stop`, `max_tokens`→`length`, `tool_use`→`tool_calls`, 미지 값은 소문자 원문 통과): 폴백으로 프로바이더가 바뀌어도 클라이언트는 단일 계약만 본다
 
 ### `POST /v1/embeddings`
 
@@ -51,6 +51,7 @@
 | `X-Client-Service` | 요청 | 비용 집계·예산·rate limit 의 서비스 차원 (부재 = `unknown`) | 4 |
 | `X-Gateway-Downgrade: budget-exceeded` | 응답 | 예산 100% 도달로 저비용 모델 강제 전환됨 (응답 `model` 필드와 함께 확인) | 4 |
 | `Retry-After` | 응답 (429) | 분당 한도 초과 시 재시도 대기 초 | 4 |
+| `X-Gateway-Fallback` | 응답 | 주 프로바이더 장애로 폴백 발생 (`openai` = 교차 프로바이더 재중계, `local` = 로컬 폴백 응답) | 5 |
 
 ## 응답 캐싱 (Phase 3) — 2단계
 
@@ -78,10 +79,17 @@
 
 ## 비용 추적 + 예산 통제 (Phase 4)
 
-- **단가 테이블 yml 외부화** (`gateway.cost.prices` — 접두 매칭으로 프로바이더의 날짜 접미 모델명 흡수): Sonnet 5 인트로 가격 종료(8월 말) 시 설정만 갱신. 미등록 모델은 0 계상
+- **단가 테이블 yml 외부화** (`gateway.cost.prices` — 접두 매칭으로 프로바이더의 날짜 접미 모델명 흡수): Sonnet 5 인트로 가격 종료(8월 말) 시 설정만 갱신. 미등록 모델은 0 기록
 - **요청별 원장**: PostgreSQL `llm_cost_ledger` (`llmgateway` DB — 의미 캐시와 공용) — 서비스/태스크/모델/일별 차원, 캐시 히트는 지출 0 + 절감액(`saved_usd`) 기록. Micrometer `gateway.cost.usd`·`gateway.cost.saved.usd` 병행 (Grafana 패널 원천)
 - **일별 예산** (`gateway.budget`, UTC 기준): 80% 도달 → Slack 경고 1회, **100% 도달 → 저비용 모델 강제 다운그레이드 (차단 없음)** — 장애 대응 파이프라인은 멈추지 않는다. 카운터는 Redis (`gw:budget:` — replica 2 전제 외부 저장), 카운터 장애 = 통제 없이 통과
-- 발생 순서: 라우팅 해석 → 예산 판정(다운그레이드) → 캐시 → 중계 → 비용 계상·정산 — 다운그레이드된 라우트가 캐시 키·모델 필터에도 쓰여 원 모델 캐시와 격리
+- 발생 순서: 라우팅 해석 → 예산 판정(다운그레이드) → 캐시 → 중계 → 비용 기록·정산 — 다운그레이드된 라우트가 캐시 키·모델 필터에도 쓰여 원 모델 캐시와 격리
+
+## 폴백 + 고가용성 (Phase 5)
+
+- **폴백 체인**: 주 중계 실패 → 교차 프로바이더 재중계 (`gateway.fallback` — Anthropic → OpenAI `gpt-5.6-terra`) → 로컬 폴백 응답 (성격을 밝힌 안내문 — 파이프라인 비정지, 예산 다운그레이드와 같은 취지). 트리거는 프로바이더 호출의 모든 예외 (5xx·타임아웃·무효 키) — 클라이언트 잘못(400 경로)만 제외
+- **서킷 브레이커**: Resilience4j 코어 (Boot 4 스타터 부재 — 직접 조립), 프로바이더 단위. 실패율 50% 초과(최소 표본 4) 시 오픈 → 주 중계를 건너뛰어 즉시 폴백, 30초 후 half-open. `resilience4j_circuitbreaker_state` 게이지 노출
+- **폴백 응답은 캐시에 저장하지 않는다** — 장애 중 생성물이 원 모델 캐시를 오염하지 않도록. 비용은 실사용 라우트(폴백 모델 단가)로 기록
+- **고가용성**: replicaCount 2 고정 + PDB (HPA 기각 — ADR-0015 추가 사항). 상태 외부화(Phase 3~4)가 전제
 
 ## Rate Limiting (Phase 4)
 
@@ -97,9 +105,10 @@ stillframe42.llmgateway
 ├── relay/      # 프로바이더 중계 — Spring AI ChatModel/EmbeddingModel 호출·형식 번역
 ├── routing/    # 태스크 유형 → 모델 라우팅 (Phase 2 — yml 외부화 정책)
 ├── cache/      # 2단계 캐싱 (Phase 3 — 정확 일치 Redis + 의미 유사도 pgvector, 제외 규칙)
-├── cost/       # 비용 계상·원장 (Phase 4 — 단가 외부화, PostgreSQL + Micrometer)
+├── cost/       # 비용 기록·원장 (Phase 4 — 단가 외부화, PostgreSQL + Micrometer)
 ├── budget/     # 일별 예산 판정·정산·경고 (Phase 4 — Redis 카운터, Slack, 다운그레이드)
-└── ratelimit/  # 서비스별 분당 한도 (Phase 4 — Bucket4j + Redis, 429 + Retry-After)
+├── ratelimit/  # 서비스별 분당 한도 (Phase 4 — Bucket4j + Redis, 429 + Retry-After)
+└── fallback/   # 프로바이더 폴백 체인 (Phase 5 — 서킷 브레이커, 교차 재중계 → 로컬 폴백)
 ```
 
 - 원칙: **상태는 전부 밖** (캐시·카운터 = Redis/PostgreSQL) — 다중 replica 가 코드 무수정으로 성립

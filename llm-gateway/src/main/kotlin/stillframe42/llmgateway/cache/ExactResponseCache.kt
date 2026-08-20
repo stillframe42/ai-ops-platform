@@ -13,9 +13,9 @@ import tools.jackson.databind.ObjectMapper
  * 저장소 장애·손상 항목은 WARN 후 미적중으로 강등 (무캐시 통과 설계 — 예외를 밖으로 내지 않는다).
  */
 class ExactResponseCache(
-    private val store: ExactMatchCacheStore,
+    private val exactMatchCacheStore: ExactMatchCacheStore,
     private val ttl: Duration,
-    private val mapper: ObjectMapper,
+    private val objectMapper: ObjectMapper,
 ) {
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -33,11 +33,11 @@ class ExactResponseCache(
     }
 
     fun find(key: String): ChatCompletionResponse? =
-        guarded("조회") { store.get(key) }
-            ?.let { guarded("역직렬화") { mapper.readValue(it, ChatCompletionResponse::class.java) } }
+        guarded("조회") { exactMatchCacheStore.get(key) }
+            ?.let { guarded("역직렬화") { objectMapper.readValue(it, ChatCompletionResponse::class.java) } }
 
     fun save(key: String, response: ChatCompletionResponse) {
-        guarded("저장") { store.put(key, mapper.writeValueAsString(response), ttl) }
+        guarded("저장") { exactMatchCacheStore.put(key, objectMapper.writeValueAsString(response), ttl) }
     }
 
     private fun <T> guarded(operation: String, block: () -> T?): T? =

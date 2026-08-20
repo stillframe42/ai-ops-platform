@@ -9,14 +9,14 @@ import org.springframework.jdbc.core.JdbcTemplate
  * 스키마 준비는 배선(CostConfig) 소관 — 이 클래스는 행 추가만 안다 (8/19 검토: 생성자 I/O 분리).
  */
 class JdbcCostLedger(
-    private val jdbc: JdbcTemplate,
+    private val jdbcTemplate: JdbcTemplate,
 ) : CostLedger {
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
     override fun append(entry: CostEntry) {
         runCatching {
-            jdbc.update(
+            jdbcTemplate.update(
                 """
                 INSERT INTO llm_cost_ledger
                     (service, task, provider, model, cache_status, prompt_tokens, completion_tokens, cost_usd, saved_usd)

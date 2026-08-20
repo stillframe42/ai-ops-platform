@@ -24,7 +24,11 @@ import stillframe42.llmgateway.api.ToolSpec
 import stillframe42.llmgateway.budget.BudgetCounter
 import stillframe42.llmgateway.budget.BudgetGuard
 import stillframe42.llmgateway.budget.BudgetProperties
+import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import stillframe42.llmgateway.cost.CostCalculator
+import stillframe42.llmgateway.fallback.FallbackProperties
+import stillframe42.llmgateway.fallback.FallbackChatRelayService
+import stillframe42.llmgateway.routing.Provider
 import stillframe42.llmgateway.cost.CostProperties
 import stillframe42.llmgateway.cost.CostRecorder
 import stillframe42.llmgateway.relay.ChatRelayService
@@ -53,16 +57,18 @@ class CachingChatServiceTest {
         temperature = temperature,
     )
 
-    /** 프로바이더 호출을 세는 스텁 — 캐시 적중이면 호출 수가 늘지 않아야 한다 */
+    /** 프로바이더 호출을 세는 스텁 — 캐시 적중이면 호출 수가 늘지 않아야 한다. failProviders 는 장애 모사 */
     private class StubRelay(
         private val result: ChatCompletionResponse,
         registry: SimpleMeterRegistry,
+        private val failProviders: Set<Provider> = emptySet(),
     ) : ChatRelayService(ModelRouter(RoutingProperties()), emptyMap(), GatewayMetrics(registry)) {
         var calls = 0
         var lastRoute: Route? = null
         override fun relay(request: ChatCompletionRequest, route: Route): ChatCompletionResponse {
             calls++
             lastRoute = route
+            if (route.provider in failProviders) throw IllegalStateException("${route.provider} 장애 모사")
             return result
         }
     }
@@ -114,19 +120,19 @@ class CachingChatServiceTest {
         budgetCounter: BudgetCounter = InMemoryBudgetCounter(),
         prices: List<CostProperties.ModelPrice> = emptyList(),
     ) = CachingChatService(
-        router = ModelRouter(RoutingProperties()),
-        relay = relay,
-        exactCache = ExactResponseCache(exactCache, Duration.ofHours(1), mapper),
-        semanticCache = SemanticResponseCache(vectorStore, 0.95, mapper),
-        budget = BudgetGuard(
-            properties = BudgetProperties(dailyLimitUsd = budgetLimitUsd),
-            counter = budgetCounter,
-            alerter = { },
-            metrics = metrics,
+        modelRouter = ModelRouter(RoutingProperties()),
+        fallbackChatRelayService = FallbackChatRelayService(relay, FallbackProperties(), CircuitBreakerRegistry.ofDefaults(), metrics),
+        exactResponseCache = ExactResponseCache(exactCache, Duration.ofHours(1), mapper),
+        semanticResponseCache = SemanticResponseCache(vectorStore, 0.95, mapper),
+        budgetGuard = BudgetGuard(
+            budgetProperties = BudgetProperties(dailyLimitUsd = budgetLimitUsd),
+            budgetCounter = budgetCounter,
+            budgetAlerter = { },
+            gatewayMetrics = metrics,
             clock = Clock.systemUTC(),
         ),
-        costRecorder = CostRecorder(CostCalculator(CostProperties(prices = prices)), ledger = null, metrics = metrics),
-        metrics = metrics,
+        costRecorder = CostRecorder(CostCalculator(CostProperties(prices = prices)), costLedger = null, gatewayMetrics = metrics),
+        gatewayMetrics = metrics,
     )
 
     @Test
@@ -325,6 +331,42 @@ class CachingChatServiceTest {
         val expected = 100 * 3.0 / 1_000_000 + 50 * 15.0 / 1_000_000
         assertEquals(expected, counter.current("total:${LocalDate.now(Clock.systemUTC())}"), 1e-12)
         assertEquals(expected, counter.current("service:agent-service:${LocalDate.now(Clock.systemUTC())}"), 1e-12)
+    }
+
+    @Test
+    fun `폴백 응답은 캐시에 저장하지 않고 결과에 폴백 대상을 표시한다`() {
+        val relay = StubRelay(response(model = "gpt-5.6-terra"), registry, failProviders = setOf(Provider.ANTHROPIC))
+        val exactCache = InMemoryExactCache()
+        val semanticStore = RecordingVectorStore()
+        val svc = service(relay, exactCache = exactCache, vectorStore = semanticStore)
+
+        val result = svc.complete(request(), taskType = null, cacheControl = null, service = "agent-service")
+
+        assertEquals("openai", result.fallbackTarget)
+        assertEquals("gpt-5.6-terra", result.response.model)
+        assertTrue(exactCache.map.isEmpty(), "장애 중 생성물이 정상 캐시를 오염하지 않아야 한다")
+        assertTrue(semanticStore.added.isEmpty())
+    }
+
+    @Test
+    fun `폴백 시 비용은 실사용 라우트의 단가로 정산된다`() {
+        val relay = StubRelay(response(model = "gpt-5.6-terra"), registry, failProviders = setOf(Provider.ANTHROPIC))
+        val counter = InMemoryBudgetCounter()
+        val svc = service(
+            relay,
+            budgetLimitUsd = 10.0,
+            budgetCounter = counter,
+            prices = listOf(
+                CostProperties.ModelPrice("claude-sonnet-5", 3.0, 15.0),
+                CostProperties.ModelPrice("gpt-5.6-terra", 2.0, 12.0),
+            ),
+        )
+
+        svc.complete(request(), taskType = null, cacheControl = null, service = "agent-service")
+
+        // 입력 100 × $2/MTok + 출력 50 × $12/MTok — 원 라우트(sonnet)가 아닌 폴백 모델 단가
+        val expected = 100 * 2.0 / 1_000_000 + 50 * 12.0 / 1_000_000
+        assertEquals(expected, counter.current("total:${LocalDate.now(Clock.systemUTC())}"), 1e-12)
     }
 
     @Test
