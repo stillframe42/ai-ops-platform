@@ -1,0 +1,13 @@
+# 자발적 중단(노드 드레인·kubectl drain) 중에도 최소 1 pod 유지 — replica 2 와 함께 무중단 전제 (Phase 5)
+# 비자발적 장애(pod kill·노드 다운)는 PDB 소관 아님 — 그쪽은 replica 2 + 클라이언트 재시도가 담당
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: llm-gateway
+  labels:
+    {{- include "llm-gateway.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.pdbMinAvailable }}
+  selector:
+    matchLabels:
+      app: llm-gateway

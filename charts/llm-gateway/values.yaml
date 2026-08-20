@@ -2,7 +2,10 @@ image:
   repository: aiops/llm-gateway
   tag: local
 
-replicas: 1
+# 고가용성 (Phase 5 ④): HPA 대신 고정 2 — 데모 트래픽 규모상 자동 스케일 실익 없음 + metrics-server 미설치 유지.
+# replica 2 전제(상태 외부화)는 Phase 4 성립 — 캐시·예산 카운터·rate limit 버킷 전부 Redis/PostgreSQL
+replicas: 2
+pdbMinAvailable: 1
 
 # 컨테이너 인지 heap — limits 기준 75% (control-plane 관례)
 javaToolOptions: "-XX:MaxRAMPercentage=75.0"
