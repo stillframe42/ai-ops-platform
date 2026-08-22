@@ -12,6 +12,7 @@
 |----------|------|
 | [`control-plane/`](control-plane/) | 관제/API/게이트웨이 — Alert 수신·인시던트 발행, MCP 운영 도구 서버, 보고서 저장·조회 API, Slack 알림·승인 카드, human-in-the-loop 승인 API·조치 실행 대행 |
 | [`agent-service/`](agent-service/) | 멀티 에이전트 — Supervisor 그래프가 모니터링(감지)/분석(원인 조사)/실행(조치 제안) 에이전트를 조율, 승인 대기(interrupt)·회복 확인 노드 포함 |
+| [`llm-gateway/`](llm-gateway/) | LLM 게이트웨이 — 모든 LLM 호출의 단일 통과점 (OpenAI 호환 API): 태스크별 모델 라우팅, 2단계 시맨틱 캐싱, 비용 집계·예산 통제(초과 시 다운그레이드), Rate Limiting, 프로바이더 폴백 체인 ([ADR-0015](docs/adr/0015-llm-gateway.md)) |
 | [`target-app/`](target-app/) | 모니터링 대상 데모 앱 — fault-injection(지연/에러율/메모리 누수) 제공 |
 | [`infra/`](infra/) | 로컬 실행 인프라 — docker-compose 단일 진입점 (Prometheus·Alertmanager·Grafana·Loki·Kafka·Langfuse·PostgreSQL) |
 
@@ -23,7 +24,8 @@ C4 다이어그램(System Context / Container / agent-service 내부)과 컨테�
 |------|------|------|
 | 관제/게이트웨이 | Kotlin + Spring Boot 4.x | control-plane, target-app |
 | 에이전트 | Python + LangGraph | uv 기반, Durable Execution ([ADR-0009](docs/adr/0009-postgres-checkpointer.md)) |
-| LLM 프로바이더 | Anthropic Claude Sonnet 5 | 설정으로 전환 가능 ([ADR-0007](docs/adr/0007-llm-provider.md)) |
+| LLM 게이트웨이 | Kotlin + Spring Boot 4.x + Spring AI 2.0 | 별도 서비스 직접 구현 — 라우팅·캐싱(히트 시 92.2% 단축 실측)·예산·폴백 ([ADR-0015](docs/adr/0015-llm-gateway.md), LiteLLM/Bifrost 비교 포함) |
+| LLM 프로바이더 | Anthropic Claude (주) + OpenAI (교차·폴백·임베딩) | 역할별 모델 차등은 게이트웨이 라우팅으로 실현 ([ADR-0007](docs/adr/0007-llm-provider.md)) |
 | 도구 노출 | MCP (Streamable HTTP) | control-plane 운영 도구 → 에이전트 ([ADR-0010](docs/adr/0010-mcp-tool-exposure.md)) |
 | 이벤트 파이프라인 | Kafka (KRaft) | Alert → 인시던트 → 분석 결과 ([ADR-0011](docs/adr/0011-kafka-trigger.md)) |
 | 메트릭 수집 | Prometheus | Alertmanager 룰 기반 웹훅 ([ADR-0003](docs/adr/0003-alertmanager-webhook.md)) |
@@ -80,6 +82,7 @@ curl -X POST http://localhost:8080/chaos/reset                        # 데모 �
 | 8080 | target-app | 데모 대상 · chaos 주입 |
 | 8081 | control-plane | 보고서·승인 API · MCP 서버 |
 | 8000 | agent-service | 인시던트 상태·히스토리 API (수동 트리거는 디버그용) |
+| 8090 | llm-gateway | LLM 중계 (OpenAI 호환) · 캐시/폴백 헤더 확인 · `/actuator/prometheus` |
 | 3002 | Grafana | 메트릭·로그 대시보드 |
 | 9091 / 9093 | Prometheus / Alertmanager | 룰·Alert 상태 확인 |
 | 3003 | Langfuse | LLM 트레이스·비용 (세션 = 인시던트) |
@@ -99,12 +102,13 @@ kind create cluster --config infra/k8s/kind-config.yaml
 docker build -t aiops/target-app:local target-app/
 docker build -t aiops/control-plane:local control-plane/
 docker build -t aiops/agent-service:local agent-service/
-kind load docker-image --name aiops aiops/control-plane:local aiops/agent-service:local aiops/target-app:local
+docker build -t aiops/llm-gateway:local llm-gateway/
+kind load docker-image --name aiops aiops/control-plane:local aiops/agent-service:local aiops/target-app:local aiops/llm-gateway:local
 
 # 3. Secret 반입 (.env 2곳 → K8s Secret, 값 미출력 — 임시 방식, 보안 주간 재검토 예정)
 ./infra/k8s/create-secrets.sh
 
-# 4. 전체 설치 — umbrella 한 번으로 앱 4종 + DB/Kafka + 모니터링·로그
+# 4. 전체 설치 — umbrella 한 번으로 앱 5종(llm-gateway 포함) + DB/Kafka/Redis + 모니터링·로그
 helm dependency build charts/aiops
 helm install aiops charts/aiops -n aiops --create-namespace -f charts/aiops/values-local.yaml
 ```
@@ -156,7 +160,7 @@ helm upgrade aiops charts/aiops -n aiops -f charts/aiops/values-local.yaml --set
 | 마일스톤 | 산출물 |
 |----------|--------|
 | K8s 운영 설계 (완료 — 5주차) | kind 3노드 + Helm umbrella 9종 차트 (빈 클러스터→전체 복원 3분 24초 실측, [ADR-0013](docs/adr/0013-k8s-migration.md) — compose 는 개발용 유지), Durable Execution × pod 강제 삭제 무유실 실측, KEDA lag 기반 스케일링 (10건 동시 주입 무유실, [ADR-0014](docs/adr/0014-autoscaling-strategy.md) — CPU 는 LLM 워크로드의 수요 신호가 아님) |
-| LLM 게이트웨이 | 모델 라우팅(비용 vs 품질), Redis 의미 유사도 캐싱, Rate Limiting/비용 추적, 모델 폴백 — control-plane 내장 vs 별도 서비스는 ADR 로 결정 |
+| LLM 게이트웨이 (완료 — 6주차) | 별도 서비스 직접 구현 ([ADR-0015](docs/adr/0015-llm-gateway.md) — LiteLLM/Bifrost 비교표 포함): 모든 LLM 호출 단일 경유 (OpenAI 호환), 태스크별 모델 라우팅, 2단계 시맨틱 캐싱 L1 Redis + L2 pgvector (히트 시 응답 92.2% 단축 실측), 비용 집계·일별 예산 (100% = 차단 아닌 다운그레이드)·Rate Limiting, 프로바이더 폴백 체인 + 서킷 (키 무효화 실측 — 교차 프로바이더 정상 응답), replica 2 + PDB, 전용 대시보드 13패널 + W3C trace 전파 |
 | AI 시스템 보안 | Prompt Injection 방어, 민감 로그 자동 마스킹, Spring Security + 에이전트 권한 설계, Zero Trust 도구 범위 제한 |
 
 **9월 — Observability + 성능 최적화**

@@ -2,7 +2,7 @@
 
 C4 모델의 Level 1(System Context)·Level 2(Container). 미결 경로는 **점선**으로 표기하는 관례였으나, 2026-08-04 기준 예약된 미결 경로가 전부 확정 전환되어 현재 점선 없음 — 새 미결 경로가 생기면 같은 관례로 표기하고 [scenarios.md 의 ADR 후보 목록](scenarios.md#미결-사항--adr-후보)에 번호를 예약한다.
 
-갱신 이력: Alertmanager([ADR-0003](adr/0003-alertmanager-webhook.md))·Loki([ADR-0004](adr/0004-loki-adoption.md)) 확정 (2026-07-14) → 3주차 마감 반영 (2026-07-28): control-plane 실체화, 도구 노출 MCP([ADR-0010](adr/0010-mcp-tool-exposure.md)), 트리거 Kafka 이벤트([ADR-0011](adr/0011-kafka-trigger.md)), 결과 저장·Slack 알림 확정 → 4주차 반영 (2026-08-04): 승인 왕복 활성(`ops.actions.pending`/`decisions`), Slack 승인 카드·Socket Mode 버튼([ADR-0006](adr/0006-slack-approval-ux.md)), 조치 실행 control-plane 대행([ADR-0005](adr/0005-action-executor.md)), 회복 확인 노드.
+갱신 이력: Alertmanager([ADR-0003](adr/0003-alertmanager-webhook.md))·Loki([ADR-0004](adr/0004-loki-adoption.md)) 확정 (2026-07-14) → 3주차 마감 반영 (2026-07-28): control-plane 실체화, 도구 노출 MCP([ADR-0010](adr/0010-mcp-tool-exposure.md)), 트리거 Kafka 이벤트([ADR-0011](adr/0011-kafka-trigger.md)), 결과 저장·Slack 알림 확정 → 4주차 반영 (2026-08-04): 승인 왕복 활성(`ops.actions.pending`/`decisions`), Slack 승인 카드·Socket Mode 버튼([ADR-0006](adr/0006-slack-approval-ux.md)), 조치 실행 control-plane 대행([ADR-0005](adr/0005-action-executor.md)), 회복 확인 노드 → 6주차 반영 (2026-08-22): llm-gateway·Redis 컨테이너 추가([ADR-0015](adr/0015-llm-gateway.md)) — 모든 LLM 호출(채팅·임베딩)이 게이트웨이 단일 경유로 전환, 프로바이더 직접 호출 경로 제거.
 
 ## Level 1 — System Context
 
@@ -42,6 +42,8 @@ flowchart TB
     subgraph platform["ai-ops-platform (docker-compose)"]
         cp["control-plane<br/>Kotlin / Spring Boot 4.x<br/>Alert 수신 · 인시던트 발행 · MCP 도구 서버<br/>보고서 저장·조회 API · Slack 알림<br/>승인 API·타임아웃 스캔·조치 실행 대행 (ADR-0005·0006)"]
         agents["agent-service<br/>Python / LangGraph<br/>모니터링 · 분석 · 실행 에이전트"]
+        gw["llm-gateway<br/>Kotlin / Spring Boot 4.x + Spring AI<br/>모든 LLM 호출 단일 경유 (OpenAI 호환, ADR-0015)<br/>태스크 라우팅 · 2단계 시맨틱 캐싱 · 비용/예산<br/>Rate Limiting · 프로바이더 폴백 + 서킷"]
+        redis["Redis<br/>L1 정확 캐시 · rate limit 버킷<br/>예산 카운터 (replica 2 전제 외부화)"]
         kafka["Kafka (KRaft 단일 브로커)<br/>ops.alerts.raw · ops.incidents · ops.analysis.results<br/>ops.actions.pending · ops.actions.decisions"]
         prom["Prometheus<br/>메트릭 수집·저장"]
         graf["Grafana<br/>대시보드"]
@@ -70,7 +72,12 @@ flowchart TB
     cp -->|"결정 발행 ops.actions.decisions<br/>approved 는 실행 결과 포함 (ADR-0005)"| kafka
 
     agents -->|"MCP 도구 호출 (Streamable HTTP · X-API-Key)<br/>배포 이력 · 유사 인시던트 · 앱 설정 (ADR-0010)"| cp
-    agents -->|"HTTPS"| llm
+    agents -->|"채팅 (OpenAI 호환 · X-Task-Type 라우팅)<br/>ADR-0015 단일 통과점"| gw
+    cp -->|"임베딩 (OpenAI 호환)<br/>유사 인시던트 검색·L2 캐시"| gw
+    gw -->|"HTTPS — Anthropic 주 · OpenAI 교차/폴백"| llm
+    gw -->|"L1 캐시 · 버킷 · 카운터"| redis
+    gw -->|"L2 의미 캐시 (pgvector) · 비용 원장<br/>(llmgateway DB)"| pg
+    prom -->|"scrape — 게이트웨이·서킷 메트릭"| gw
     cp -->|"보고서 저장 (JPA · 스키마는 Flyway 소유)"| pg
     cp -->|"Slack webhook (분석 보고 알림)<br/>승인 카드·마감·스레드 (Bot Token, ADR-0006)"| slack
     cp -->|"Socket Mode (아웃바운드 WebSocket)<br/>승인 버튼 클릭 수신 (ADR-0006)"| slack
@@ -90,7 +97,7 @@ flowchart TB
     classDef container fill:#1168bd,color:#fff,stroke:#0b4884
     classDef external fill:#999,color:#fff,stroke:#6b6b6b
     class operator person
-    class cp,agents,kafka,prom,graf,am,loki,alloy,pg,lf container
+    class cp,agents,gw,redis,kafka,prom,graf,am,loki,alloy,pg,lf container
     class target,slack,llm external
 ```
 
@@ -143,7 +150,11 @@ flowchart LR
 | control-plane → PostgreSQL | JPA (스키마 소유는 Flyway, `ddl-auto: validate`) — `incident_reports` | 확정 (2026-07-27) |
 | control-plane → Slack (알림) | incoming webhook (분석 보고 알림, 커밋 후 발송) | 확정 (2026-07-27 실전송) |
 | control-plane ↔ Slack (승인) | Slack App — 카드·마감·스레드는 chat.postMessage/update (Bot Token), 버튼 수신은 Socket Mode 아웃바운드 WebSocket (App Token) | 확정 ([ADR-0006](adr/0006-slack-approval-ux.md) — 2026-08-04 실연결·3경로 실측) |
-| agent-service → LLM API | HTTPS | 확정 — Anthropic Claude Sonnet 5 ([ADR-0007](adr/0007-llm-provider.md)) |
+| agent-service → llm-gateway | OpenAI 호환 HTTP (`/v1/chat/completions`) — X-Task-Type(라우팅)·X-Client-Service(비용/한도), 응답에 X-Gateway-Cache/Fallback/Downgrade | 확정 ([ADR-0015](adr/0015-llm-gateway.md) — 2026-08-17 전환, 프로바이더 직접 호출 경로 0) |
+| control-plane → llm-gateway | OpenAI 호환 HTTP (`/v1/embeddings`) — 유사 인시던트 검색·L2 캐시 임베딩 | 확정 ([ADR-0015](adr/0015-llm-gateway.md)) |
+| llm-gateway → LLM API | HTTPS — Anthropic(주)·OpenAI(교차 검증·폴백·임베딩), 프로바이더 장애 시 폴백 체인(교차 재중계 → 로컬 폴백 응답) + 프로바이더 단위 서킷 | 확정 ([ADR-0007](adr/0007-llm-provider.md)·[ADR-0015](adr/0015-llm-gateway.md) — 키 무효화 실측 2026-08-20) |
+| llm-gateway → Redis | L1 정확 캐시 · rate limit 버킷(Bucket4j) · 예산 카운터 — 전부 외부 저장 (replica 2 전제) | 확정 (Phase 3~4, 2026-08-18~19) |
+| llm-gateway → PostgreSQL | `llmgateway` DB — L2 의미 캐시(pgvector, 유사도 0.95) · 비용 원장(JdbcTemplate) | 확정 (Phase 3~4) |
 | Grafana → Prometheus | PromQL over HTTP | 확정 |
 | Grafana → Loki | LogQL over HTTP | 확정 ([ADR-0004](adr/0004-loki-adoption.md)) |
 | 에이전트의 관측 데이터 조회 | PromQL over HTTP — 직접 조회 | 확정 ([ADR-0002](adr/0002-observability-access-path.md)) |
@@ -153,6 +164,7 @@ flowchart LR
 | agent-service → Langfuse | OTel (HTTP) | 확정 — 자체 compose 스택 (v3, thread_id = 세션), 키 미설정 시 비활성. K8s 형상에는 미배포 (주간 한정 비활성 — 9월 Observability 재검토) |
 | 승인 왕복 (`ops.actions.pending`/`decisions`) | agent-service 가 pending 발행 + interrupt 대기 → control-plane 소비·카드 발송·결정 → decisions 발행 (approved 는 실행 결과 포함) → agent-service 소비·재개 | 확정 ([ADR-0005](adr/0005-action-executor.md) — 2026-08-01 배선, 08-04 실행 결과 포함) |
 | 조치 실행 | control-plane 대행 — 자동 실행은 CIRCUIT_BREAK(target-app `chaos/reset` HTTP)뿐, RESTART_APP 은 수동 조치 안내로 전환 (docker socket 마운트 제거) | 확정 ([ADR-0005](adr/0005-action-executor.md) 추가 사항 — 2026-08-04 실측 후 조정) |
-| 분산 추적 (OTLP → Tempo) | OTLP | 로드맵 9월 — 도입 시 Level 2 갱신 |
+| 분산 추적 — Trace Context 전파 | W3C traceparent (agent-service → llm-gateway·control-plane → 프로바이더 방향 주입) + 로그 traceId 상관 (agent-service 로그 필터·게이트웨이 ECS JSON 필드) | 확정 (6주차 Phase 6, 2026-08-22 — exporter 미장착: 스팬 전송 없음) |
+| 분산 추적 — 수집·시각화 (OTLP → Tempo) | OTLP | 로드맵 9월 — 전파는 위 행으로 선행 확정, 수집 도입 시 Level 2 갱신 |
 
-> OTLP/Tempo 는 현재 컨테이너 목록에 없다. [README 로드맵](../README.md#로드맵)의 9월(Observability) 단계에서 도입하며, 그 시점에 이 다이어그램을 갱신한다.
+> OTLP/Tempo 는 현재 컨테이너 목록에 없다. [README 로드맵](../README.md#로드맵)의 9월(Observability) 단계에서 도입하며, 그 시점에 이 다이어그램을 갱신한다. 6주차에 전파 계층(traceparent·로그 상관)이 먼저 확정되어, 9월은 exporter 장착부터 시작한다.
