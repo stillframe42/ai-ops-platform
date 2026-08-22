@@ -83,6 +83,9 @@ management:
     web:
       exposure:
         include: health,info,prometheus,metrics
+  tracing:
+    sampling:
+      probability: 1.0
 
 ops:
   mcp:

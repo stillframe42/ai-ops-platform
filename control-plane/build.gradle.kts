@@ -40,6 +40,9 @@ dependencies {
 	implementation("com.slack.api:bolt-socket-mode:1.45.3")
 	implementation("org.java-websocket:Java-WebSocket:1.6.0")
 
+	implementation("org.springframework.boot:spring-boot-micrometer-tracing-opentelemetry")
+	implementation("io.micrometer:micrometer-tracing-bridge-otel")
+
 	runtimeOnly("org.flywaydb:flyway-database-postgresql")
 	runtimeOnly("io.micrometer:micrometer-registry-prometheus")
 
