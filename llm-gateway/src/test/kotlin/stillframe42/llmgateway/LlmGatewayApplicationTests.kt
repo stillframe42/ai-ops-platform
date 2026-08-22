@@ -2,10 +2,14 @@ package stillframe42.llmgateway
 
 import java.time.Duration
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.http.client.HttpClientSettings
 import org.springframework.boot.test.context.SpringBootTest
+import stillframe42.llmgateway.budget.BudgetProperties
+import stillframe42.llmgateway.cost.CostProperties
+import stillframe42.llmgateway.routing.RoutingProperties
 
 @SpringBootTest
 class LlmGatewayApplicationTests {
@@ -23,5 +27,23 @@ class LlmGatewayApplicationTests {
 	fun `HTTP 클라이언트 공통 타임아웃이 yml 에서 바인딩된다`() {
 		assertEquals(Duration.ofSeconds(3), httpClientSettings.connectTimeout())
 		assertEquals(Duration.ofSeconds(5), httpClientSettings.readTimeout())
+	}
+
+	// 도메인 정책은 gateway.yml 분리 (8/22) — spring.config.import 가 무너지면 각 프로퍼티가
+	// 클래스 기본값(빈 목록·null 한도)으로 조용히 조립되므로, 대표 값으로 import 성립을 고정한다
+	@Autowired
+	lateinit var routingProperties: RoutingProperties
+
+	@Autowired
+	lateinit var costProperties: CostProperties
+
+	@Autowired
+	lateinit var budgetProperties: BudgetProperties
+
+	@Test
+	fun `도메인 정책이 분리 파일(gateway yml)에서 바인딩된다`() {
+		assertTrue(routingProperties.rules.any { it.task == "monitoring-summary" && it.model == "claude-haiku-4-5" })
+		assertTrue(costProperties.prices.any { it.modelPrefix == "gpt-5.6-terra" })
+		assertEquals(5.0, budgetProperties.dailyLimitUsd)
 	}
 }

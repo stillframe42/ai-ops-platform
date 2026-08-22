@@ -1,0 +1,64 @@
+# 게이트웨이 도메인 정책 (8/22 분리 — application.yml 은 프레임워크 배선만, 이 파일은 정책만).
+# application.yml 의 spring.config.import 가 가져온다 — 환경 차분(postgres·ratelimit·redis 주소)은
+# 여기가 아니라 application-docker.yml overlay 소관 (프로파일 문서가 import 문서보다 우선).
+#
+# 2단계 캐시 (Phase 3) — 정확 캐시 TTL·의미 캐시 임계값 기본값은 CacheProperties 소유.
+# 의미 캐시·비용 원장의 활성은 gateway.postgres.url 구성이 결정 (Phase 4 승격) —
+# 접속은 docker 프로파일만 지정 (부재 = 비구성, 로컬·테스트는 정확 캐시 + 메트릭만)
+
+gateway:
+  # 모델 단가 (Phase 4 ⑫ — 인트로 가격 종료 대비 외부화, 대시보드 절감 비용 패널과 단일 원천)
+  # 접두 매칭: 프로바이더 응답 모델명의 날짜 접미(claude-haiku-4-5-20251001) 흡수
+  cost:
+    prices:
+      - model-prefix: claude-sonnet-5
+        input-per-mtok: 3.0
+        output-per-mtok: 15.0
+      - model-prefix: claude-haiku-4-5
+        input-per-mtok: 1.0
+        output-per-mtok: 5.0
+      - model-prefix: text-embedding-3-small
+        input-per-mtok: 0.02
+      # 폴백·교차 검증 모델 (Phase 5 — 폴백 트래픽 비용 사각 방지, 8/20 공식가 실측)
+      - model-prefix: gpt-5.6-terra
+        input-per-mtok: 2.0
+        output-per-mtok: 12.0
+  # 일별 예산 (Phase 4) — 100% 도달 = 차단 아닌 저비용 다운그레이드, 80% = Slack 경고 1회
+  budget:
+    daily-limit-usd: 5.0
+    service-daily-limit-usd:
+      agent-service: 4.0
+    downgrade:
+      provider: anthropic
+      model: claude-haiku-4-5
+      max-tokens: 2000
+  # 예산 경고 발송 — 키-게이트 (미설정 = 로그 대체)
+  alert:
+    slack-webhook-url: ${SLACK_WEBHOOK_URL:}
+  # 프로바이더 폴백 체인 (Phase 5 ②) — Anthropic 장애 시 OpenAI 재중계 → 로컬 폴백 응답.
+  # 서킷 기준값(실패율 50%·오픈 30초)은 FallbackProperties 기본값 — 여기는 대상만 지정
+  fallback:
+    provider: openai
+    model: gpt-5.6-terra
+  # rate limit 은 docker 프로파일만 활성 (default-rpm 부재 = 비활성 — 로컬은 Redis 없이 기동)
+  # 태스크 유형 → 모델 라우팅 (Phase 2, 순서 검토 ② 실매핑 — ADR-0007 역할별 차등의 실현)
+  routing:
+    rules:
+      # 모니터링 요약 — 저비용 (관측 데이터 요약은 추론 부담 낮음)
+      - task: monitoring-summary
+        provider: anthropic
+        model: claude-haiku-4-5
+        max-tokens: 2000
+      # 근본원인 분석 — 고품질 (가설 검증·tool calling 품질이 핵심, ADR-0007)
+      - task: root-cause-analysis
+        provider: anthropic
+        model: claude-sonnet-5
+      # 교차 검증 — 타 프로바이더 (호출자 없음, 모델·경로는 Phase 5 폴백 실측으로 검증됨 — 단가 등록 동반)
+      - task: code-review-critical
+        provider: openai
+        model: gpt-5.6-terra
+    # 미등록 태스크·무헤더 무모델 요청 — 기존 동작 등가(sonnet-5), 다운그레이드는 Phase 4 예산 소관
+    default-rule:
+      task: default
+      provider: anthropic
+      model: claude-sonnet-5
