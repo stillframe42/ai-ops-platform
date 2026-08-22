@@ -1,5 +1,7 @@
 package stillframe42.llmgateway.config
 
+import io.micrometer.core.instrument.Gauge
+import io.micrometer.core.instrument.binder.MeterBinder
 import java.time.Clock
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
@@ -17,6 +19,24 @@ class BudgetConfig {
 
     @Bean
     fun budgetCounter(stringRedisTemplate: StringRedisTemplate): BudgetCounter = RedisBudgetCounter(stringRedisTemplate)
+
+    /**
+     * 일 한도 게이지 (Phase 6) — 대시보드 "예산 대비 %"의 분모를 설정과 단일 원천으로 유지
+     * (대시보드 상수 하드코딩이면 yml 변경 시 조용히 어긋난다). 한도 미설정 = 게이지 미등록 —
+     * 0 노출은 "한도 0" 오독. 게이지 대상 객체는 싱글턴 프로퍼티 빈 (약참조 GC 방지)
+     */
+    @Bean
+    fun budgetLimitMetrics(budgetProperties: BudgetProperties) = MeterBinder { registry ->
+        budgetProperties.dailyLimitUsd?.let {
+            Gauge.builder("gateway.budget.daily.limit.usd", budgetProperties) { p -> p.dailyLimitUsd ?: 0.0 }
+                .register(registry)
+        }
+        budgetProperties.serviceDailyLimitUsd.keys.forEach { service ->
+            Gauge.builder("gateway.budget.service.daily.limit.usd", budgetProperties) { p ->
+                p.serviceDailyLimitUsd[service] ?: 0.0
+            }.tag("service", service).register(registry)
+        }
+    }
 
     @Bean
     fun budgetGuard(

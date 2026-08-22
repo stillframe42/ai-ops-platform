@@ -1,6 +1,7 @@
 package stillframe42.llmgateway.relay
 
 import io.micrometer.core.instrument.MeterRegistry
+import io.micrometer.core.instrument.Timer
 import org.springframework.stereotype.Component
 import stillframe42.llmgateway.api.TokenUsage
 import stillframe42.llmgateway.cache.CacheStatus
@@ -22,6 +23,19 @@ class GatewayMetrics(
             "provider", provider.name.lowercase(),
             "model", model,
         ).increment()
+    }
+
+    /** 채팅 처리 시간 측정 시작 (Phase 6) — 종료는 캐시 판정을 아는 지점에서 latency() 로 */
+    fun startTimer(): Timer.Sample = Timer.start(meterRegistry)
+
+    /** 캐시 판정별 분리 레이턴시 (Phase 6) — histogram_quantile 의 원천이라 percentile histogram 발행 필수 */
+    fun latency(sample: Timer.Sample, status: CacheStatus) {
+        sample.stop(
+            Timer.builder("gateway.latency")
+                .tag("result", status.name.lowercase())
+                .publishPercentileHistogram()
+                .register(meterRegistry),
+        )
     }
 
     /** 캐시 판정 분포 (Phase 3) — 히트율 = (exact_hit + semantic_hit) / (전체 - bypass) */

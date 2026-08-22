@@ -150,6 +150,19 @@ class CachingChatServiceTest {
     }
 
     @Test
+    fun `레이턴시 타이머는 캐시 판정별로 분리 기록된다 - 분위수 대시보드 원천`() {
+        val relay = StubRelay(response(), registry)
+        val svc = service(relay)
+
+        svc.complete(request(), taskType = null, cacheControl = null, service = "agent-service")
+        svc.complete(request(), taskType = null, cacheControl = null, service = "agent-service")
+
+        // 버킷 발행 검증은 GatewayMetricsTest (Prometheus 노출 형식) — Simple 레지스트리는 버킷 미실체화
+        assertEquals(1, registry.get("gateway.latency").tag("result", "miss").timer().count())
+        assertEquals(1, registry.get("gateway.latency").tag("result", "exact_hit").timer().count())
+    }
+
+    @Test
     fun `정확 캐시 미스에 의미 캐시 유사 응답이 있으면 반환하고 정확 캐시로 승격한다`() {
         val relay = StubRelay(response(), registry)
         val cachedJson = mapper.writeValueAsString(response(text = "이전에 계산한 분석"))

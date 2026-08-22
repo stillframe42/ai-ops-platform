@@ -1,5 +1,6 @@
 package stillframe42.llmgateway.cache
 
+import io.micrometer.core.instrument.Timer
 import org.springframework.stereotype.Service
 import stillframe42.llmgateway.api.ChatCompletionRequest
 import stillframe42.llmgateway.api.ChatCompletionResponse
@@ -38,20 +39,22 @@ class CachingChatService(
         cacheControl: String?,
         service: String,
     ): CachedChatResult {
+        // 레이턴시는 캐시 판정별 분리 기록 (Phase 6) — 판정을 아는 finish 가 멈춘다
+        val timer = gatewayMetrics.startTimer()
         // 다운그레이드된 라우트가 캐시 키·모델 필터에도 그대로 쓰인다 — 원 모델 캐시와 격리 (DAY 31 연결 메모)
         val decision = budgetGuard.enforce(modelRouter.resolve(taskType, request.model), service)
         val route = decision.route
         if (!cacheable(request, cacheControl)) {
-            return finish(fallbackChatRelayService.relay(request, route), CacheStatus.BYPASS, service, decision)
+            return finish(fallbackChatRelayService.relay(request, route), CacheStatus.BYPASS, service, decision, timer)
         }
 
         val key = exactResponseCache.keyOf(route, request)
-        exactResponseCache.find(key)?.let { return hit(it, CacheStatus.EXACT_HIT, service, decision) }
+        exactResponseCache.find(key)?.let { return hit(it, CacheStatus.EXACT_HIT, service, decision, timer) }
 
         semanticResponseCache.findSimilar(request, route)?.let { cached ->
             // 의미 캐시 히트를 정확 캐시로 승격 — 같은 정확 요청의 다음 조회는 임베딩 없이 적중
             exactResponseCache.save(key, cached)
-            return hit(cached, CacheStatus.SEMANTIC_HIT, service, decision)
+            return hit(cached, CacheStatus.SEMANTIC_HIT, service, decision, timer)
         }
 
         val outcome = fallbackChatRelayService.relay(request, route)
@@ -59,7 +62,7 @@ class CachingChatService(
             exactResponseCache.save(key, outcome.response)
             semanticResponseCache.save(request, route, route.taskType, outcome.response)
         }
-        return finish(outcome, CacheStatus.MISS, service, decision)
+        return finish(outcome, CacheStatus.MISS, service, decision, timer)
     }
 
     private fun cacheable(request: ChatCompletionRequest, cacheControl: String?): Boolean {
@@ -75,14 +78,21 @@ class CachingChatService(
         status: CacheStatus,
         service: String,
         decision: BudgetDecision,
+        timer: Timer.Sample,
     ): CachedChatResult {
         gatewayMetrics.cacheSaved(cached.model, cached.usage)
-        return finish(cached, status, service, decision, effectiveRoute = decision.route, fallbackTarget = null)
+        return finish(cached, status, service, decision, timer, effectiveRoute = decision.route, fallbackTarget = null)
     }
 
-    private fun finish(outcome: RelayOutcome, status: CacheStatus, service: String, decision: BudgetDecision) =
+    private fun finish(
+        outcome: RelayOutcome,
+        status: CacheStatus,
+        service: String,
+        decision: BudgetDecision,
+        timer: Timer.Sample,
+    ) =
         finish(
-            outcome.response, status, service, decision,
+            outcome.response, status, service, decision, timer,
             effectiveRoute = outcome.route,
             fallbackTarget = when (outcome.fallback) {
                 FallbackStatus.NONE -> null
@@ -96,10 +106,12 @@ class CachingChatService(
         status: CacheStatus,
         service: String,
         decision: BudgetDecision,
+        timer: Timer.Sample,
         effectiveRoute: Route,
         fallbackTarget: String?,
     ): CachedChatResult {
         gatewayMetrics.cache(status, decision.route.taskType)
+        gatewayMetrics.latency(timer, status)
         val cost = costRecorder.record(service, effectiveRoute, response, status)
         budgetGuard.settle(service, cost)
         return CachedChatResult(response, status, decision.downgraded, fallbackTarget)

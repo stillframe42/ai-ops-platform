@@ -1,5 +1,7 @@
 package stillframe42.llmgateway.budget
 
+import io.micrometer.core.instrument.Gauge
+import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.MediaType
@@ -16,6 +18,7 @@ import tools.jackson.databind.json.JsonMapper
 class SlackBudgetAlerter(
     @Value("\${gateway.alert.slack-webhook-url}") private val webhookUrl: String,
     restClientBuilder: RestClient.Builder,
+    meterRegistry: MeterRegistry,
 ) : BudgetAlerter {
 
     private val logger = LoggerFactory.getLogger(javaClass)
@@ -27,6 +30,9 @@ class SlackBudgetAlerter(
     init {
         // 기동 시점 1회 진단 로그 — "왜 경고가 안 오지"를 로그로 확인 가능하게 (URL 값은 미출력)
         logger.info("예산 Slack 경고 {}", if (webhookUrl.isBlank()) "비활성 — SLACK_WEBHOOK_URL 미설정" else "활성")
+        // 같은 사실의 대시보드 판 (Phase 6) — 대상 객체는 이 빈 (게이지는 약참조라 지역값 클로저는 GC 후 NaN)
+        Gauge.builder("gateway.alert.slack.enabled", this) { if (it.webhookUrl.isBlank()) 0.0 else 1.0 }
+            .register(meterRegistry)
     }
 
     override fun alert(message: String) {
