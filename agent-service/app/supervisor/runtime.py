@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from opentelemetry import trace
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.types import Command
 from psycopg.rows import dict_row
@@ -31,6 +32,9 @@ from app.supervisor.state import (
 )
 
 logger = logging.getLogger(__name__)
+
+# 인시던트 루트 스팬용 (Phase 6) — SDK 미구성이면 no-op provider 라 스팬 오버헤드 0
+_tracer = trace.get_tracer("agent-service")
 
 # 시나리오별 인시던트 프리셋 (Alert Rule 이름은 infra/prometheus/rules 기준)
 INCIDENT_PRESETS: dict[str, tuple[str, str]] = {
@@ -106,9 +110,13 @@ class GraphRuntime:
         return config
 
     async def start(self, incident: IncidentInfo) -> None:
-        await self.graph.ainvoke(
-            {"incident": incident, "messages": []}, config=self._config(incident.id)
-        )
+        # 인시던트 루트 스팬 (Phase 6) — 이 실행의 모든 게이트웨이 호출이 같은 traceId 로 전파된다
+        # (langfuse_session_id=incident id 규약의 trace 판). 승인 대기로 끊긴 재개는 새 trace —
+        # 실행 구간 간 스팬 연결은 9월 심화 소관
+        with _tracer.start_as_current_span("incident.run", attributes={"incident.id": incident.id}):
+            await self.graph.ainvoke(
+                {"incident": incident, "messages": []}, config=self._config(incident.id)
+            )
 
     async def resume(self, incident_id: str) -> None:
         """입력 None + 동일 thread_id — 마지막 체크포인트의 미완 노드부터 이어간다.
@@ -116,7 +124,8 @@ class GraphRuntime:
         승인 대기(interrupt) 상태에서 호출되면 approval 노드가 재실행되며 다시 interrupt
         로 멈춘다 — 결정 없는 재개는 대기를 갱신할 뿐이다 (반복 알림 재전달 경로).
         """
-        await self.graph.ainvoke(None, config=self._config(incident_id))
+        with _tracer.start_as_current_span("incident.resume", attributes={"incident.id": incident_id}):
+            await self.graph.ainvoke(None, config=self._config(incident_id))
 
     async def resume_with_decision(self, incident_id: str, decision: dict) -> None:
         """승인 대기 중인 그래프를 결정으로 재개한다 — interrupt 지점이 이 값을 돌려받는다.
@@ -124,7 +133,8 @@ class GraphRuntime:
         결정 페이로드 검증은 두 겹: 소비 측(DecisionEventProcessor)이 status 를 걸러 넣고,
         approval 노드가 다시 정규화한다 (알 수 없는 값은 안전 측 거부).
         """
-        await self.graph.ainvoke(Command(resume=decision), config=self._config(incident_id))
+        with _tracer.start_as_current_span("incident.resume", attributes={"incident.id": incident_id}):
+            await self.graph.ainvoke(Command(resume=decision), config=self._config(incident_id))
 
     def start_background(self, incident: IncidentInfo) -> None:
         self._spawn(incident.id, self.start(incident))
@@ -176,7 +186,7 @@ class GraphRuntime:
             },
             # 노드 실패 기록 (DAY 13) — error_handler 가 남긴 NodeFailure 를 dict 로 직렬화
             "errors": [failure.model_dump() for failure in values.get("errors") or []],
-            # error_handler 밖에서 죽은 미완 태스크의 중단 원인 (예: 핸들러 없는 노드)
+            # error_handler 밖에서 중단된 미완 태스크의 원인 (예: 핸들러 없는 노드)
             "pending_errors": [
                 {"node": task.name, "error": repr(task.error)}
                 for task in snapshot.tasks
@@ -253,8 +263,8 @@ async def open_runtime(settings: Settings):
     """앱 수명 동안 체크포인터 연결을 열고 그래프를 조립한다. setup() 은 멱등 — 매 기동 호출.
 
     단일 커넥션(from_conn_string)이 아닌 커넥션 풀을 쓴다 — DAY 12 실측에서 postgres
-    재기동 시 단일 커넥션이 영구히 죽어 전 API 가 500 이 됐다. check 로 대여 시점에
-    죽은 커넥션을 걸러내 재연결하므로 DB 재기동에서 자동 복구된다 (DAY 13).
+    재기동 시 단일 커넥션이 영구 불능이 되어 전 API 가 500 이 됐다. check 로 대여 시점에
+    불능 커넥션을 걸러내 재연결하므로 DB 재기동에서 자동 복구된다 (DAY 13).
     """
     if not settings.checkpoint_db_url:
         raise ValueError(

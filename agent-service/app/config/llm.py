@@ -19,4 +19,7 @@ def create_llm(settings: Settings, task_type: str | None = None) -> BaseChatMode
         api_key=settings.llm_api_key,
         base_url=settings.llm_base_url,
         default_headers=headers,
+        # 게이트웨이 판정 헤더(X-Gateway-Cache/Fallback/Downgrade)를 response_metadata 로 흡수 (Phase 6) —
+        # Langfuse 재활성 시(9월) 핸들러가 그대로 수집한다. 헤더는 평범한 dict 라 체크포인트 직렬화 안전
+        include_response_headers=True,
     )
