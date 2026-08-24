@@ -18,7 +18,7 @@ import tools.jackson.databind.json.JsonMapper
  * - firing 만 인시던트화: alertname → scenario 역매핑 (agent-service INCIDENT_PRESETS 정합),
  *   매핑 없는 alert 는 raw 보존만 하고 건너뛴다
  * - 반복 발화는 IncidentRegistry 병합 — ops.incidents 는 "새 인시던트" 스트림으로 유지
- * - resolved 는 활성 해제만 — 해소 이벤트 발행은 소비처가 생길 때(4주차 조치 연동) 재검토
+ * - resolved 는 활성 해제만 — 해소 이벤트 발행은 소비처가 생길 때 재검토
  */
 @Service
 class AlertIngestService(

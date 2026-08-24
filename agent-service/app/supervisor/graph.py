@@ -68,7 +68,7 @@ def retry_on_transient(exc: Exception) -> bool:
         )
     if isinstance(exc, httpx.HTTPStatusError):
         return exc.response.status_code >= 500  # 서버 측 오류만 — 4xx 는 요청 자체의 문제
-    # LLM 게이트웨이 호출 실패는 openai SDK 예외로 전파된다 (httpx 계열 아님 — Phase 5 실측).
+    # LLM 게이트웨이 호출 실패는 openai SDK 예외로 전파된다 (httpx 계열 아님 — 실측).
     # 연결 실패(순단·pod 교체)와 5xx·429(Retry-After) 만 — 4xx 는 요청 자체의 문제
     if isinstance(exc, openai.APIConnectionError):
         return True
@@ -174,7 +174,7 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
     builder = StateGraph(AIOpsState)
 
     builder.add_node("supervisor", supervisor_node)
-    # 에이전트 노드 실패는 error_handler 가 상태에 기록 — 전체 실행을 죽이지 않는다 (DAY 13).
+    # 에이전트 노드 실패는 error_handler 가 상태에 기록 — 전체 실행을 중단시키지 않는다 (DAY 13).
     # 타임아웃 초과도 같은 경로 (NodeTimeoutError → record_node_failure)
     for name, node in ((MONITOR, monitor_node), (ANALYSIS, analysis_node), (ACTION, action_node)):
         builder.add_node(

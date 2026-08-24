@@ -1,4 +1,4 @@
-# 게이트웨이 지표 스크레이프 — Phase 6 대시보드(요청/모델 분포/캐시 히트율/비용)의 수집 경로
+# 게이트웨이 지표 스크레이프 — 대시보드(요청/모델 분포/캐시 히트율/비용)의 수집 경로
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:

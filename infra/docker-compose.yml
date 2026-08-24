@@ -51,7 +51,7 @@ services:
     container_name: agent-service
     environment:
       # 컨테이너 내부 네트워크 기준 URL — 로컬 개발 기본값(localhost:9091 등)을 덮어쓴다 (ADR-0002)
-      # 모든 LLM 호출은 llm-gateway 경유 (6주차, ADR-0015) — 모델 선택은 게이트웨이 라우팅 소관
+      # 모든 LLM 호출은 llm-gateway 경유 (ADR-0015) — 모델 선택은 게이트웨이 라우팅 소관
       LLM_BASE_URL: http://llm-gateway:8090/v1
       PROMETHEUS_URL: http://prometheus:9090
       LOKI_URL: http://loki:3100
@@ -76,17 +76,17 @@ services:
     logging: *default-logging
 
   llm-gateway:
-    # 용도: 모든 LLM 호출의 단일 관문 (6주차, ADR-0015) — 라우팅·캐싱·비용·폴백·한도.
+    # 용도: 모든 LLM 호출의 단일 관문 (ADR-0015) — 라우팅·캐싱·비용·폴백·한도.
     # 프로바이더 실키는 이 서비스만 보유 — 클라이언트(agent-service·control-plane)는 키 없이 경유
     build: ../llm-gateway
     container_name: llm-gateway
     environment:
       # 채팅(Anthropic) 키 — agent-service .env 재사용 (env_file), 임베딩(OpenAI) 키는 infra/.env pass-through
       OPENAI_API_KEY:
-      # 게이트웨이 DB(llmgateway — 의미 캐시·비용 원장 공용, Phase 4) 접속 — postgres 와 같은 크리덴셜 원천
+      # 게이트웨이 DB(llmgateway — 의미 캐시·비용 원장 공용) 접속 — postgres 와 같은 크리덴셜 원천
       POSTGRES_USER: ${POSTGRES_USER:-aiops}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-aiops}
-      # 예산 임계 경고 (Phase 4) — control-plane 과 같은 원천(infra/.env) 공유, 미설정 = 로그 대체
+      # 예산 임계 경고 — control-plane 과 같은 원천(infra/.env) 공유, 미설정 = 로그 대체
       SLACK_WEBHOOK_URL:
     env_file:
       - ../agent-service/.env
@@ -98,8 +98,8 @@ services:
         condition: service_healthy
 
   redis:
-    # 용도: llm-gateway 정확 일치 캐시 (6주차 Phase 3) + 예산 카운터·rate limit 버킷 (Phase 4).
-    # 공식 이미지 (bitnami 기각 선례) — 의미 캐시는 pgvector 라 검색 모듈 불요 (Phase 0 ⑦).
+    # 용도: llm-gateway 정확 일치 캐시 + 예산 카운터·rate limit 버킷.
+    # 공식 이미지 (bitnami 기각 선례) — 의미 캐시는 pgvector 라 검색 모듈 불요.
     # 캐시 전용 무영속 — 소실 시 재계산으로 수렴, LRU 퇴출은 오류 아닌 캐시 미스
     image: redis:8.2-alpine
     container_name: redis
@@ -128,7 +128,7 @@ services:
       SLACK_APP_TOKEN:
       SLACK_APPROVAL_CHANNEL:
       # 승인 타임아웃 정책 (DAY 23, ADR-0006) — 기본값(30m/60m/60s)은 application.yml 소유,
-      # Phase 4 류의 단축값 검증은 셸 env 로 덮어쓴다 (예: APPROVAL_REMIND_AFTER=1m docker compose up -d control-plane)
+      # 단축값 검증은 셸 env 로 덮어쓴다 (예: APPROVAL_REMIND_AFTER=1m docker compose up -d control-plane)
       APPROVAL_REMIND_AFTER:
       APPROVAL_EXPIRE_AFTER:
       APPROVAL_SWEEP_INTERVAL:

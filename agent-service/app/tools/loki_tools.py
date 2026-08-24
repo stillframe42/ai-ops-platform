@@ -1,6 +1,6 @@
 """Loki 로그 조회 도구 — 직접 조회 (ADR-0002), base URL 은 settings.loki_url.
 
-ADR-0004 의 "2단계: 에이전트 LogQL 도구" 확정 구현. 필터는 1주차 실측 검증분:
+ADR-0004 의 "2단계: 에이전트 LogQL 도구" 확정 구현. 필터는 실측 검증분:
 {service="target-app"} | json | log_level="ERROR"
 """
 

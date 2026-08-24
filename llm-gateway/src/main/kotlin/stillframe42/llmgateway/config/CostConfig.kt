@@ -11,7 +11,7 @@ import stillframe42.llmgateway.cost.CostRecorder
 import stillframe42.llmgateway.cost.JdbcCostLedger
 import stillframe42.llmgateway.relay.GatewayMetrics
 
-/** 비용 집계 배선 (Phase 4) — 원장은 게이트웨이 DB 구성 시에만, 메트릭 기록은 항상 */
+/** 비용 집계 배선 — 원장은 게이트웨이 DB 구성 시에만, 메트릭 기록은 항상 */
 @Configuration
 class CostConfig {
 

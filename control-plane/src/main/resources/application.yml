@@ -50,7 +50,7 @@ spring:
       server:
         name: ops-control-plane
         version: 0.0.1
-        # Streamable HTTP 고정 — SSE 는 Spring AI 2.0.0 부터 deprecated (3주차 plan 결정)
+        # Streamable HTTP 고정 — SSE 는 Spring AI 2.0.0 부터 deprecated
         protocol: STREAMABLE
 
     openai:
@@ -61,8 +61,8 @@ spring:
       # /v1 포함 필수 — 공식 SDK 는 base-url 에 /embeddings 만 덧붙인다 (DAY 31 실측 404)
       base-url: http://localhost:8090/v1
       embedding:
-        # 한국어 시드 본문 임베딩 품질 사유로 선택 (Phase 0 결정, 2026-07-23).
-        # flat 키 필수 — embedding.options.* 는 Spring AI 2.0 에서 deprecated 미바인딩 (6주차 DAY 30 실측:
+        # 한국어 시드 본문 임베딩 품질 사유로 선택 (2026-07-23 결정).
+        # flat 키 필수 — embedding.options.* 는 Spring AI 2.0 에서 deprecated 미바인딩 (DAY 30 실측:
         # 그동안 라이브러리 기본 ada-002 로 임베딩되던 잠복 버그 — 교정 시 vector_store 재적재 필요)
         model: text-embedding-3-small
     # OpenAI 는 임베딩 전용 — 채팅 모델 자동구성 비활성 (LLM 은 agent-service 의 Anthropic)
@@ -104,7 +104,7 @@ ops:
     approval-channel: ${SLACK_APPROVAL_CHANNEL:}
   approval:
     # 승인 타임아웃 정책 (ADR-0006): remind-after 경과 시 재알림 1회 → expire-after 경과 시
-    # expired 전이 = 조치 미실행 종결. 설정인 이유: Phase 4 3경로 검증이 단축값으로 실측 (30분 실대기 회피)
+    # expired 전이 = 조치 미실행 종결. 설정인 이유: 3경로 검증을 단축값으로 실측하기 위함 (30분 실대기 회피)
     remind-after: ${APPROVAL_REMIND_AFTER:30m}
     expire-after: ${APPROVAL_EXPIRE_AFTER:60m}
     sweep-interval: ${APPROVAL_SWEEP_INTERVAL:60s}

@@ -8,8 +8,7 @@ import stillframe42.llmgateway.cache.CacheStatus
 import stillframe42.llmgateway.routing.Provider
 
 /**
- * 게이트웨이 자체 관측 — Phase 2 확인 기준("태스크별 상이 모델 호출")의 확인 수단
- * (Phase 0 결정 ⑥: Langfuse 주간 비활성 — Micrometer 대체)
+ * 게이트웨이 자체 관측 — "태스크별 상이 모델 호출"의 확인 수단 (Langfuse 비활성 — Micrometer 대체)
  */
 @Component
 class GatewayMetrics(
@@ -25,10 +24,10 @@ class GatewayMetrics(
         ).increment()
     }
 
-    /** 채팅 처리 시간 측정 시작 (Phase 6) — 종료는 캐시 판정을 아는 지점에서 latency() 로 */
+    /** 채팅 처리 시간 측정 시작 — 종료는 캐시 판정을 아는 지점에서 latency() 로 */
     fun startTimer(): Timer.Sample = Timer.start(meterRegistry)
 
-    /** 캐시 판정별 분리 레이턴시 (Phase 6) — histogram_quantile 의 원천이라 percentile histogram 발행 필수 */
+    /** 캐시 판정별 분리 레이턴시 — histogram_quantile 의 원천이라 percentile histogram 발행 필수 */
     fun latency(sample: Timer.Sample, status: CacheStatus) {
         sample.stop(
             Timer.builder("gateway.latency")
@@ -38,7 +37,7 @@ class GatewayMetrics(
         )
     }
 
-    /** 캐시 판정 분포 (Phase 3) — 히트율 = (exact_hit + semantic_hit) / (전체 - bypass) */
+    /** 캐시 판정 분포 — 히트율 = (exact_hit + semantic_hit) / (전체 - bypass) */
     fun cache(status: CacheStatus, taskType: String?) {
         meterRegistry.counter(
             "gateway.cache.requests",
@@ -47,7 +46,7 @@ class GatewayMetrics(
         ).increment()
     }
 
-    /** 캐시 적중으로 아낀 토큰 — 절감 비용 추정 패널의 원천 (단가 환산은 Phase 4 외부화와 연동) */
+    /** 캐시 적중으로 아낀 토큰 — 절감 비용 추정 패널의 원천 (단가 환산은 gateway.cost 외부화 테이블과 연동) */
     fun cacheSaved(model: String, usage: TokenUsage) {
         meterRegistry.counter("gateway.cache.saved.tokens", "model", model, "kind", "prompt")
             .increment(usage.promptTokens.toDouble())
@@ -55,7 +54,7 @@ class GatewayMetrics(
             .increment(usage.completionTokens.toDouble())
     }
 
-    /** 실지출 USD (Phase 4) — 단가는 gateway.cost 외부화 테이블 단일 원천 */
+    /** 실지출 USD — 단가는 gateway.cost 외부화 테이블 단일 원천 */
     fun costUsd(service: String, task: String?, model: String, amount: Double) {
         meterRegistry.counter(
             "gateway.cost.usd",
@@ -75,17 +74,17 @@ class GatewayMetrics(
         ).increment(amount)
     }
 
-    /** 예산 100% 도달로 저비용 모델 강제 전환된 요청 수 (Phase 4 — 차단 대신 다운그레이드) */
+    /** 예산 100% 도달로 저비용 모델 강제 전환된 요청 수 (차단 대신 다운그레이드) */
     fun budgetDowngrade(service: String, fromModel: String) {
         meterRegistry.counter("gateway.budget.downgrades", "service", service, "from", fromModel).increment()
     }
 
-    /** 주 프로바이더 장애로 폴백한 요청 수 (Phase 5) — target: 교차 프로바이더명 또는 local */
+    /** 주 프로바이더 장애로 폴백한 요청 수 — target: 교차 프로바이더명 또는 local */
     fun fallback(from: Provider, target: String) {
         meterRegistry.counter("gateway.fallback", "from", from.name.lowercase(), "target", target).increment()
     }
 
-    /** 분당 한도 초과로 429 반환한 요청 수 (Phase 4 Rate Limiting) */
+    /** 분당 한도 초과로 429 반환한 요청 수 */
     fun rateLimited(service: String) {
         meterRegistry.counter("gateway.ratelimit.rejected", "service", service).increment()
     }

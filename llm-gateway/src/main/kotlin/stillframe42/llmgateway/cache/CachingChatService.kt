@@ -15,11 +15,11 @@ import stillframe42.llmgateway.routing.ModelRouter
 import stillframe42.llmgateway.routing.Route
 
 /**
- * 2단계 시맨틱 캐싱 오케스트레이션 (weekly-plan Phase 3) — 정확 일치 → 의미 유사도 → 중계.
+ * 2단계 시맨틱 캐싱 오케스트레이션 — 정확 일치 → 의미 유사도 → 중계.
  * 저장소 상호작용·직렬화는 ExactResponseCache/SemanticResponseCache 소관 — 여기는 순서·판정·메트릭만.
  * 제외 규칙: tool calling 요청(정의·이력 모두 — 상태 의존)과 X-Cache-Control: no-cache 는 우회.
- * Phase 4: 라우팅 해석 직후 예산 판정(한도 초과 = 저비용 다운그레이드), 응답 후 비용 기록·정산.
- * Phase 5: 중계는 폴백 체인 경유 — 폴백 응답은 캐시에 저장하지 않고(장애 중 생성물이 원 모델
+ * 라우팅 해석 직후 예산 판정(한도 초과 = 저비용 다운그레이드), 응답 후 비용 기록·정산.
+ * 중계는 폴백 체인 경유 — 폴백 응답은 캐시에 저장하지 않고(장애 중 생성물이 원 모델
  * 키·의미 캐시 필터 아래 들어가 정상 캐시를 오염), 비용은 실사용 라우트로 기록한다.
  */
 @Service
@@ -39,7 +39,7 @@ class CachingChatService(
         cacheControl: String?,
         service: String,
     ): CachedChatResult {
-        // 레이턴시는 캐시 판정별 분리 기록 (Phase 6) — 판정을 아는 finish 가 멈춘다
+        // 레이턴시는 캐시 판정별 분리 기록 — 판정을 아는 finish 가 멈춘다
         val timer = gatewayMetrics.startTimer()
         // 다운그레이드된 라우트가 캐시 키·모델 필터에도 그대로 쓰인다 — 원 모델 캐시와 격리 (DAY 31 연결 메모)
         val decision = budgetGuard.enforce(modelRouter.resolve(taskType, request.model), service)

@@ -1,7 +1,7 @@
 package stillframe42.llmgateway.budget
 
 /**
- * 예산 누계 카운터 포트 — 외부 저장 필수 (순서 검토 ⑤: replica 2 전제, in-memory 금지).
+ * 예산 누계 카운터 포트 — 외부 저장 필수 (replica 2 전제, in-memory 금지).
  * 구현은 저장소 장애 시 0·false 를 돌려 통제 없이 통과시킨다 (캐시 fail-open 관례).
  */
 interface BudgetCounter {

@@ -1,4 +1,4 @@
-# target-app Alert Rule (infra/prometheus/rules 원본의 K8s 판 — Phase 2 이관분의 차트 편입).
+# target-app Alert Rule (infra/prometheus/rules 원본의 K8s 판).
 # heap 임계 75% (8/10 이월 검토 결정 — S3 실측 "85% 발화 후 46초 OOM" 리드타임 근거).
 # annotations 의 {{`{{ ... }}`}} 는 Prometheus 템플릿 — Helm 렌더링을 지나도록 raw 이스케이프
 apiVersion: monitoring.coreos.com/v1

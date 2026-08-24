@@ -13,7 +13,7 @@ import stillframe42.controlplane.approval.service.ActionApprovalService
 import stillframe42.controlplane.approval.service.DecisionPublishFailedException
 
 /**
- * 승인 API (DAY 22, ADR-0005) — curl/테스트 경로. Slack 버튼(Phase 3)도 같은 서비스
+ * 승인 API (DAY 22, ADR-0005) — curl/테스트 경로. Slack 버튼도 같은 서비스
  * decide 로 수렴한다 — 이 컨트롤러는 입력 채널 어댑터일 뿐 (ADR-0006).
  */
 @RestController

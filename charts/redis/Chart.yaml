@@ -1,6 +1,6 @@
-# Redis 자체 차트 (6주차 Phase 3) — L1 캐시 + Phase 4 rate limit 버킷 (상태 외부화 원칙 ⑤).
-# 공식 redis 이미지 — L2 를 pgvector 로 결정(Phase 0 ⑦)해 검색 모듈이 불필요, bitnami 기각 선례(5주차) 유지.
-# 캐시 전용이라 무영속(PVC 없음) — 소실 시 재계산으로 수렴. Phase 4 예산 카운터는 PostgreSQL 예정이라 무관
+# Redis 자체 차트 — L1 캐시 + rate limit 버킷 (상태 외부화 원칙).
+# 공식 redis 이미지 — L2 는 pgvector 라 검색 모듈이 불필요, bitnami 기각 선례 유지.
+# 캐시 전용이라 무영속(PVC 없음) — 소실 시 재계산으로 수렴. 예산 카운터·rate limit 버킷도 이 Redis 를 쓴다 (소실 시 fail-open 허용)
 apiVersion: v2
 name: redis
 description: LLM 게이트웨이 캐시·한도 저장소 — L1 정확 일치 캐시 + rate limit 버킷

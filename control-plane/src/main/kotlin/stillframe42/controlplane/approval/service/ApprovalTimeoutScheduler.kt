@@ -17,7 +17,7 @@ import stillframe42.controlplane.approval.repository.ActionApprovalRepository
  * 경과 시 expired 전이 = 조치 미실행 종결 (자동 승인 아님 — 오래된 관측 기반 조치의 실행이
  * 더 위험하다는 결정). 만료는 decide 경로 재사용이라 decisions 발행·agent 재개까지 동일.
  *
- * 값이 설정인 이유: Phase 4 의 3경로 검증이 단축값으로 실측해야 한다 (30분 실대기 회피).
+ * 값이 설정인 이유: 3경로 검증을 단축값으로 실측하기 위함 (30분 실대기 회피).
  * 만료 전이는 Slack 과 무관하게 진행 — 재알림·회신만 카드 좌표가 있을 때 나간다.
  */
 @Component

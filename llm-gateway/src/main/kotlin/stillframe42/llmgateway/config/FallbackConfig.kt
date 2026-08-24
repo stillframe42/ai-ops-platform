@@ -12,7 +12,7 @@ import stillframe42.llmgateway.fallback.FallbackChatRelayService
 import stillframe42.llmgateway.relay.ChatRelayService
 import stillframe42.llmgateway.relay.GatewayMetrics
 
-/** 폴백 체인 배선 (Phase 5) — 스타터 부재(Boot 4)로 서킷 브레이커를 코어 API 로 직접 조립 */
+/** 폴백 체인 배선 — 스타터 부재(Boot 4)로 서킷 브레이커를 코어 API 로 직접 조립 */
 @Configuration
 class FallbackConfig {
 
@@ -28,7 +28,7 @@ class FallbackConfig {
                 .ignoreExceptions(IllegalArgumentException::class.java)
                 .build(),
         )
-        // resilience4j_circuitbreaker_state 게이지 노출 — 대시보드 서킷 상태 패널 원천 (Phase 6)
+        // resilience4j_circuitbreaker_state 게이지 노출 — 대시보드 서킷 상태 패널 원천
         TaggedCircuitBreakerMetrics.ofCircuitBreakerRegistry(registry).bindTo(meterRegistry)
         return registry
     }

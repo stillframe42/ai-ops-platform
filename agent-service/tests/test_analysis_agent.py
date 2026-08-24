@@ -110,7 +110,7 @@ def test_analysis_node_sets_recursion_limit(monkeypatch):
 
     asyncio.run(analysis_agent.analysis_node(_state()))
 
-    # ReAct 무한 루프 방지 — 최대 스텝 제한 (5월 패턴)
+    # ReAct 무한 루프 방지 — 최대 스텝 제한 (직전 프로젝트 검증 패턴)
     assert stub.captured_config["recursion_limit"] == analysis_agent.ANALYSIS_RECURSION_LIMIT
 
 

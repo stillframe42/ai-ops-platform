@@ -15,7 +15,7 @@ import stillframe42.llmgateway.routing.Provider
 import stillframe42.llmgateway.routing.Route
 
 /**
- * 프로바이더 폴백 체인 (weekly-plan Phase 5 ②) — 주 중계 → 교차 프로바이더 재중계 → 로컬 폴백 응답.
+ * 프로바이더 폴백 체인 — 주 중계 → 교차 프로바이더 재중계 → 로컬 폴백 응답.
  * 서킷은 프로바이더 단위 — 오픈이면 주 중계를 건너뛰어 장애 프로바이더로의 대기 시간을 없앤다.
  * 폴백 트리거는 프로바이더 호출의 모든 예외 (5xx·타임아웃·무효 키) — 게이트웨이 검증을 통과한
  * 요청의 실패는 프로바이더 측 사정. 단 IllegalArgumentException 은 클라이언트 잘못이라

@@ -20,8 +20,8 @@ class JpaAuditingConfig {
     fun auditingDateTimeProvider(): DateTimeProvider = DateTimeProvider { Optional.of(Instant.now()) }
 
     /**
-     * 현재 쓰기 주체는 결과 컨슈머(시스템 프로세스)뿐 — 'system' 고정.
-     * 4주차 human-in-the-loop 승인에서 실제 주체(승인자)를 돌려주도록 교체된다 (ADR-0006 연결).
+     * 감사 쓰기 주체는 시스템 프로세스뿐 — 'system' 고정.
+     * 승인자 등 실제 주체는 도메인 컬럼(decided_by)이 별도 기록한다 (ADR-0006).
      */
     @Bean
     fun auditorProvider(): AuditorAware<String> = AuditorAware { Optional.of(SYSTEM_AUDITOR) }

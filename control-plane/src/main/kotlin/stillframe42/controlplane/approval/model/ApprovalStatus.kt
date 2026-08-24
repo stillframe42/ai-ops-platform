@@ -10,6 +10,6 @@ object ApprovalStatus {
     const val REJECTED = "rejected"
     const val EXPIRED = "expired"
 
-    /** pending 에서 전이 가능한 종결 상태 — decide 경로의 입력 검증 근거 (expired 는 타임아웃 전이, Phase 3) */
+    /** pending 에서 전이 가능한 종결 상태 — decide 경로의 입력 검증 근거 (expired 는 타임아웃 전이) */
     val DECIDED = setOf(APPROVED, REJECTED, EXPIRED)
 }

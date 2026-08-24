@@ -1,5 +1,5 @@
-# PostgreSQL 자체 차트 (5주차 Phase 2 — Phase 0 결정: bitnami 기각, pgvector 이미지 재사용)
-# compose 의 postgres 서비스 형상 승계 (docker-compose.yml 주석 포함) — Phase 5 umbrella dependencies 편입 예정
+# PostgreSQL 자체 차트 (bitnami 기각, pgvector 이미지 재사용)
+# compose 의 postgres 서비스 형상 승계 (docker-compose.yml 주석 포함) — umbrella(aiops) dependencies 에 편입
 apiVersion: v2
 name: postgres
 description: LangGraph checkpoint 저장소 + control-plane 벡터 검색 (pgvector) — ADR-0009

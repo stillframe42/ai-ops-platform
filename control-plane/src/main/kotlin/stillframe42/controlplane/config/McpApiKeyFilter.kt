@@ -11,10 +11,10 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.web.filter.OncePerRequestFilter
 
 /**
- * /mcp 전용 API Key 인증 필터 (DAY 16) — OAuth 2.1(8월 보안 주간) 전까지의 기본 인증.
+ * /mcp 전용 API Key 인증 필터 (DAY 16) — OAuth 2.1 전환 전까지의 임시 인증.
  *
  * MCP Streamable HTTP 는 왕복마다 무상태 HTTP 요청이므로 "요청마다 헤더 검사"로 충분하다
- * (세션 상태에 인증을 얹을 필요가 없다 — DAY 15 실측 노트).
+ * (세션 상태 기반 인증 불필요 — DAY 15 실측 노트).
  */
 class McpApiKeyFilter(apiKey: String) : OncePerRequestFilter() {
 

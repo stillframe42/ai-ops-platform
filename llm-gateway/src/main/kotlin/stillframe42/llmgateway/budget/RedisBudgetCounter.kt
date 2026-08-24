@@ -5,7 +5,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.data.redis.core.StringRedisTemplate
 
 /**
- * 예산 누계의 Redis 구현 (순서 검토 ⑤ — replica 2 전제 외부 저장).
+ * 예산 누계의 Redis 구현 — replica 2 전제 외부 저장.
  * 저장소 장애 = 0·false 반환으로 통제 없이 통과 (캐시 fail-open 관례) — 영구 기록은 원장(PostgreSQL) 소관이라
  * 카운터 유실은 당일 통제 정확도만 낮춘다.
  */

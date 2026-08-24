@@ -1,7 +1,7 @@
 """GraphRuntime 체크포인터 계약 테스트 — InMemorySaver 로 재개·상태 조회를 검증한다.
 
 핵심 단언: 중단(노드 예외) 후 재개하면 완료된 노드는 재실행되지 않는다 (Durable Execution).
-실 PostgreSQL 은 실측(Phase 4)에서 — 체크포인터 인터페이스가 같아 계약은 여기서 고정한다.
+실 PostgreSQL 은 별도 실측에서 — 체크포인터 인터페이스가 같아 계약은 여기서 고정한다.
 """
 
 import asyncio
@@ -165,7 +165,7 @@ def test_get_state_exposes_recorded_errors(stubs: SimpleNamespace) -> None:
 
 
 def test_get_state_surfaces_pending_task_error() -> None:
-    """error_handler 가 없는 노드가 죽으면 중단 원인이 pending_errors 로 노출된다."""
+    """error_handler 가 없는 노드가 실패하면 중단 원인이 pending_errors 로 노출된다."""
     from langgraph.graph import START, StateGraph
 
     from app.supervisor.state import AIOpsState

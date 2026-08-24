@@ -1,4 +1,4 @@
-# target-app Alert Rules — 임계값 스펙은 docs/scenarios.md (Phase 0 임계값 정합 결정)
+# target-app Alert Rules — 임계값 스펙은 docs/scenarios.md
 # 수정 후 반영: curl -X POST http://localhost:9091/-/reload
 
 groups:

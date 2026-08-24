@@ -1,4 +1,4 @@
-"""OTel 트레이스 전파 (Phase 6, DAY 34 서두 결정 ②) — exporter 미장착: 수집 백엔드는 9월.
+"""OTel 트레이스 전파 (DAY 34) — exporter 미장착: 수집 백엔드는 추후 장착.
 
 범위는 전파와 상관까지다: httpx 계측이 나가는 요청(openai SDK 의 게이트웨이 호출 포함)에
 W3C traceparent 를 주입하고, 인시던트 루트 스팬(runtime 몫)이 실행 1건의 호출 전부를 같은
@@ -29,4 +29,4 @@ def setup_tracing() -> None:
     from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
     HTTPXClientInstrumentor().instrument()
-    logger.info("OTel 트레이스 전파 활성 — exporter 미장착 (수집 백엔드는 9월)")
+    logger.info("OTel 트레이스 전파 활성 — exporter 미장착 (수집 백엔드는 추후 장착)")

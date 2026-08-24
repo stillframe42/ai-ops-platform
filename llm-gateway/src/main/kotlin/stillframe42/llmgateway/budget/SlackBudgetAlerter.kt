@@ -10,7 +10,7 @@ import org.springframework.web.client.RestClient
 import tools.jackson.databind.json.JsonMapper
 
 /**
- * 예산 임계 경고의 Slack Incoming Webhook 구현 (Phase 4) — URL 미설정이면 조용한 비활성,
+ * 예산 임계 경고의 Slack Incoming Webhook 구현 — URL 미설정이면 조용한 비활성,
  * 발송 실패는 로그만 (control-plane SlackNotifier 관례 승계 — 알림 실패가 요청 처리에 무해).
  * 타임아웃은 Boot 중앙 설정(spring.http.clients.*) — 주입 빌더가 반영한다 (8/19 검토: 사용처별 조립 중복 제거).
  */
@@ -30,7 +30,7 @@ class SlackBudgetAlerter(
     init {
         // 기동 시점 1회 진단 로그 — "왜 경고가 안 오지"를 로그로 확인 가능하게 (URL 값은 미출력)
         logger.info("예산 Slack 경고 {}", if (webhookUrl.isBlank()) "비활성 — SLACK_WEBHOOK_URL 미설정" else "활성")
-        // 같은 사실의 대시보드 판 (Phase 6) — 대상 객체는 이 빈 (게이지는 약참조라 지역값 클로저는 GC 후 NaN)
+        // 같은 사실의 대시보드 판 — 대상 객체는 이 빈 (게이지는 약참조라 지역값 클로저는 GC 후 NaN)
         Gauge.builder("gateway.alert.slack.enabled", this) { if (it.webhookUrl.isBlank()) 0.0 else 1.0 }
             .register(meterRegistry)
     }

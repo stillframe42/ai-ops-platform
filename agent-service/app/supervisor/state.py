@@ -49,7 +49,7 @@ class AnalysisResult(BaseModel):
 
 
 class ActionPlan(BaseModel):
-    """실행 에이전트 소유 — 조치 계획. 실제 실행은 4주차 human-in-the-loop 승인 이후 (ADR-0005).
+    """실행 에이전트 소유 — 조치 계획. 실제 실행은 human-in-the-loop 승인 이후 (ADR-0005).
 
     scenarios.md 조치 제안서 스펙: 제안 조치 / 근거 / 예상 효과 / 리스크 (승인 기한은 승인 흐름 몫).
     """
@@ -97,7 +97,7 @@ class RecoveryResult(BaseModel):
 
 
 class NodeFailure(BaseModel):
-    """노드 실패 기록 — 실패가 전체 실행을 죽이지 않고 상태에 남는다 (DAY 13 복원력).
+    """노드 실패 기록 — 실패가 전체 실행을 중단시키지 않고 상태에 남는다 (DAY 13 복원력).
 
     supervisor 는 이 기록을 '해당 단계 시도됨'으로 판정해 실패 노드에 재진입하지 않는다.
     """

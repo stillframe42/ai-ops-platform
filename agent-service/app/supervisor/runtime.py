@@ -33,7 +33,7 @@ from app.supervisor.state import (
 
 logger = logging.getLogger(__name__)
 
-# 인시던트 루트 스팬용 (Phase 6) — SDK 미구성이면 no-op provider 라 스팬 오버헤드 0
+# 인시던트 루트 스팬용 — SDK 미구성이면 no-op provider 라 스팬 오버헤드 0
 _tracer = trace.get_tracer("agent-service")
 
 # 시나리오별 인시던트 프리셋 (Alert Rule 이름은 infra/prometheus/rules 기준)
@@ -110,9 +110,9 @@ class GraphRuntime:
         return config
 
     async def start(self, incident: IncidentInfo) -> None:
-        # 인시던트 루트 스팬 (Phase 6) — 이 실행의 모든 게이트웨이 호출이 같은 traceId 로 전파된다
+        # 인시던트 루트 스팬 — 이 실행의 모든 게이트웨이 호출이 같은 traceId 로 전파된다
         # (langfuse_session_id=incident id 규약의 trace 판). 승인 대기로 끊긴 재개는 새 trace —
-        # 실행 구간 간 스팬 연결은 9월 심화 소관
+        # 실행 구간 간 스팬 연결은 추후 심화 소관
         with _tracer.start_as_current_span("incident.run", attributes={"incident.id": incident.id}):
             await self.graph.ainvoke(
                 {"incident": incident, "messages": []}, config=self._config(incident.id)

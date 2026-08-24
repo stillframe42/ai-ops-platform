@@ -21,7 +21,7 @@ from app.tools.prometheus_tools import compare_with_baseline
 
 logger = logging.getLogger(__name__)
 
-# ReAct 무한 루프 방지 — LLM+tool 왕복 1회당 스텝 2 이므로 도구 호출 약 7회 상한 (5월 패턴)
+# ReAct 무한 루프 방지 — LLM+tool 왕복 1회당 스텝 2 이므로 도구 호출 약 7회 상한 (직전 프로젝트 검증 패턴)
 ANALYSIS_RECURSION_LIMIT = 16
 
 ANALYSIS_SYSTEM_PROMPT = """\

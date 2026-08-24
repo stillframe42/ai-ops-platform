@@ -135,7 +135,7 @@
     {
       "id": 5,
       "type": "timeseries",
-      "title": "태스크·모델별 요청 (5분 창) — Phase 2 라우팅 실측",
+      "title": "태스크·모델별 요청 (5분 창) — 라우팅 실측",
       "gridPos": {
         "h": 6,
         "w": 12,
@@ -272,7 +272,7 @@
       "id": 9,
       "type": "timeseries",
       "title": "레이턴시 분위수 (5분 창) — 캐시 히트 vs 미스 분리",
-      "description": "gateway_latency 히스토그램 (Phase 6) — miss 는 프로바이더 왕복 포함, hit 은 캐시 반환. bypass 는 표본이 달라 제외",
+      "description": "gateway_latency 히스토그램 — miss 는 프로바이더 왕복 포함, hit 은 캐시 반환. bypass 는 표본이 달라 제외",
       "gridPos": {
         "h": 6,
         "w": 12,
@@ -375,7 +375,7 @@
       "id": 11,
       "type": "stat",
       "title": "예산 Slack 경고 채널",
-      "description": "0 = SLACK_WEBHOOK_URL 미설정 (경고는 로그 대체) — \"왜 경고가 안 오지\"의 대시보드 판 (Phase 4 예약분)",
+      "description": "0 = SLACK_WEBHOOK_URL 미설정 (경고는 로그 대체) — \"왜 경고가 안 오지\"의 대시보드 판",
       "gridPos": {
         "h": 6,
         "w": 6,
@@ -419,7 +419,7 @@
       "id": 12,
       "type": "timeseries",
       "title": "폴백 발생 (5분 창)",
-      "description": "주 프로바이더 장애로 교차 재중계(target=openai)·로컬 폴백(target=local)한 요청 수 (Phase 5 체인)",
+      "description": "주 프로바이더 장애로 교차 재중계(target=openai)·로컬 폴백(target=local)한 요청 수 (폴백 체인)",
       "gridPos": {
         "h": 6,
         "w": 12,

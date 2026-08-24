@@ -10,8 +10,8 @@ existingSecret: agent-service-secrets
 postgresSecret: postgres-secrets
 
 # K8s 서비스 주소 (compose environment 덮어쓰기의 대응물 — 코드 기본값은 로컬 개발 기준).
-# namespace 단일화(8/13 Phase 5 결정 ①)로 전부 같은 ns 평이름 — 관측 스택 이름은
-# umbrella 의 fullnameOverride 동결값 (Phase 5 결정 ②)
+# namespace 단일화(aiops)로 전부 같은 ns 평이름 — 관측 스택 이름은
+# umbrella 의 fullnameOverride 동결값
 env:
   llmBaseUrl: http://llm-gateway:8090/v1
   prometheusUrl: http://monitoring-kube-prometheus-prometheus:9090
@@ -22,11 +22,11 @@ env:
 # graceful shutdown 여유 — 체크포인터 재개와 조합 (진행 중 그래프는 재기동 후 체크포인트에서 재개)
 terminationGracePeriodSeconds: 60
 
-# Kafka lag 기반 오토스케일링 (Phase 6, ADR-0014) — KEDA CRD 전제라 기본 비활성
+# Kafka lag 기반 오토스케일링 (ADR-0014) — KEDA CRD 전제라 기본 비활성
 keda:
   enabled: false
   minReplicas: 1        # decisions 컨슈머 상주 필요 — scale-to-zero 불가
-  maxReplicas: 3        # = ops.incidents 파티션 수 (⑦)
+  maxReplicas: 3        # = ops.incidents 파티션 수
   lagThreshold: 5       # 파티션당 lag 임계 — 초과분만큼 replica 산정
   pollingInterval: 15   # lag 확인 주기(초) — 기본 30, 데모 반응성으로 단축
   cooldownPeriod: 120   # 무부하 지속 시 스케일인까지(초) — 기본 300, 실험 관찰용 단축

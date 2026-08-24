@@ -1,4 +1,4 @@
-"""복원력 테스트 — 노드 실패가 전체 실행을 죽이지 않고 상태에 기록된다 (DAY 13).
+"""복원력 테스트 — 노드 실패가 전체 실행을 중단시키지 않고 상태에 기록된다 (DAY 13).
 
 에이전트 노드 실패 → error_handler 가 NodeFailure 를 errors 에 축적하고 supervisor 로 복귀.
 supervisor 는 실패한 노드를 '시도됨'으로 판정해 재진입하지 않는다 — 부분 보고서 경로:
@@ -332,7 +332,7 @@ def _gateway_request() -> httpx.Request:
 
 def test_retry_classifier_accepts_gateway_connection_error():
     """게이트웨이 순단(pod 교체·재기동)은 openai SDK 예외로 전파된다 — httpx 계열이 아니라
-    별도 분기 필요 (Phase 5 실측: SDK 내장 재시도 2회 소진 후 APIConnectionError)."""
+    별도 분기 필요 (실측: SDK 내장 재시도 2회 소진 후 APIConnectionError)."""
     exc = openai.APIConnectionError(request=_gateway_request())
     assert supervisor_graph.retry_on_transient(exc) is True
 

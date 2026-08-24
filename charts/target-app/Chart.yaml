@@ -1,4 +1,4 @@
-# target-app 앱 차트 (5주차 Phase 3) — 모니터링 대상 데모 앱 (chaos API 포함)
+# target-app 앱 차트 — 모니터링 대상 데모 앱 (chaos API 포함)
 apiVersion: v2
 name: target-app
 description: 모니터링 대상 데모 앱 — fault-injection(chaos) API 제공

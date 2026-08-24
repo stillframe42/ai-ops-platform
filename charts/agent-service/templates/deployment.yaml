@@ -15,7 +15,7 @@ spec:
         # app 라벨 = Alloy 의 service 라벨 원천 (LogQL 진입점 계약)
         app: agent-service
     spec:
-      # SIGTERM 후 체크포인트 기록·컨슈머 정리 여유 (Phase 6 스케일인 보호와 조합)
+      # SIGTERM 후 체크포인트 기록·컨슈머 정리 여유 (KEDA 스케일인 보호와 조합)
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       containers:
         - name: agent-service
@@ -24,7 +24,7 @@ spec:
             - containerPort: 8000
               name: http
           env:
-            # 모든 LLM 호출은 llm-gateway 경유 (6주차, ADR-0015) — 모델 선택은 게이트웨이 라우팅 소관
+            # 모든 LLM 호출은 llm-gateway 경유 (ADR-0015) — 모델 선택은 게이트웨이 라우팅 소관
             - name: LLM_BASE_URL
               value: {{ .Values.env.llmBaseUrl | quote }}
             - name: PROMETHEUS_URL
@@ -51,7 +51,7 @@ spec:
             - name: CHECKPOINT_DB_URL
               value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/aiops"
           envFrom:
-            # ANTHROPIC_API_KEY·MCP_API_KEY — LANGFUSE 미반입 = 트레이싱 비활성 (Phase 0 결정)
+            # ANTHROPIC_API_KEY·MCP_API_KEY — LANGFUSE 미반입 = 트레이싱 비활성
             - secretRef:
                 name: {{ .Values.existingSecret }}
           readinessProbe:

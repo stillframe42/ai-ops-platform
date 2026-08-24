@@ -7,7 +7,7 @@ import stillframe42.llmgateway.routing.Provider
 import stillframe42.llmgateway.routing.Route
 
 /**
- * 일별 예산 판정·정산 (Phase 4) — 요청 전 enforce(한도 초과 시 다운그레이드),
+ * 일별 예산 판정·정산 — 요청 전 enforce(한도 초과 시 다운그레이드),
  * 응답 후 settle(실지출 가산 + 80%/100% 임계 경고 1회씩).
  * 일자 구분은 UTC — 프로바이더 청구 기준과 정합.
  */

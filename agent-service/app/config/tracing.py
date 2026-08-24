@@ -1,6 +1,6 @@
 """Langfuse 트레이싱 — 키-게이트 방식 (키 없으면 완전 비활성, DAY 14).
 
-인스턴스는 직전 프로젝트 스택의 Langfuse v3 재활용 (Phase 0 결정 + 2026-07-21 v2→v3
+인스턴스는 직전 프로젝트 스택의 Langfuse v3 재활용 (2026-07-21 v2→v3
 업그레이드). 세션 연결 규약: langfuse_session_id = thread_id = incident id — 인시던트
 1건의 전체 LLM 호출·비용이 Langfuse 세션 하나로 묶인다.
 """

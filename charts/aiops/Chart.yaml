@@ -1,6 +1,6 @@
-# AI Ops Platform umbrella 차트 (5주차 Phase 5) — 진입점 하나로 전체 스택 (ADR-0001 include 병합의 K8s 판, ADR-0013)
+# AI Ops Platform umbrella 차트 — 진입점 하나로 전체 스택 (ADR-0001 include 병합의 K8s 판, ADR-0013)
 # 설치: helm dependency update charts/aiops && helm install aiops charts/aiops -n aiops --create-namespace -f charts/aiops/values-local.yaml
-# namespace 는 aiops 단일 (tasks_20260813 Phase 5 결정 ① — 릴리스·주소 체계 단순화)
+# namespace 는 aiops 단일 — 릴리스·주소 체계 단순화
 apiVersion: v2
 name: aiops
 description: 멀티 에이전트 AIOps 플랫폼 전체 스택 — 앱 4종 + DB/Kafka + 모니터링·로그
@@ -33,7 +33,7 @@ dependencies:
   - name: llm-gateway
     version: 0.1.0
     repository: "file://../llm-gateway"
-  # 외부 차트 3종 — Phase 2 설치 실측 버전으로 고정 (재현성)
+  # 외부 차트 3종 — 설치 실측 버전으로 고정 (재현성)
   - name: kube-prometheus-stack
     version: 88.2.0
     repository: "https://prometheus-community.github.io/helm-charts"

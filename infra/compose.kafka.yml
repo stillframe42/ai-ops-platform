@@ -11,7 +11,7 @@ x-logging: &default-logging
 
 services:
   kafka:
-    # KRaft 단일 브로커 학습 구성 (복제 없음 — 고가용성은 로드맵 8월 k8s 주간).
+    # KRaft 단일 브로커 학습 구성 (복제 없음 — 고가용성은 범위 밖).
     # 듀얼 리스너: 컨테이너 내부는 kafka:9092, 호스트(로컬 개발·console-consumer)는 localhost:9094
     image: apache/kafka:4.3.1
     container_name: kafka
@@ -28,7 +28,7 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      # 토픽은 kafka-init 가 명세대로 명시 생성 — 오타 토픽 증식 방지 (tasks_20260725 토픽 설계)
+      # 토픽은 kafka-init 가 명세대로 명시 생성 — 오타 토픽 증식 방지 (DAY 17 토픽 설계)
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     volumes:
       - kafka-data:/var/lib/kafka/data
@@ -44,8 +44,8 @@ services:
     logging: *default-logging
 
   kafka-init:
-    # 용도: 토픽 5종 1회성 생성 (파티션·보존 명세는 tasks_20260725 토픽 설계 표 기준).
-    # ops.analysis.results 는 DAY 19, ops.actions.pending·decisions 는 4주차 승인 왕복 (ADR-0005)
+    # 용도: 토픽 5종 1회성 생성 (파티션·보존 명세는 DAY 17 토픽 설계 표 기준).
+    # ops.analysis.results 는 DAY 19, ops.actions.pending·decisions 는 승인 왕복 (ADR-0005)
     image: apache/kafka:4.3.1
     container_name: kafka-init
     depends_on:

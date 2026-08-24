@@ -20,7 +20,7 @@ from app.supervisor.runtime import build_incident, open_runtime
 
 # uvicorn 이 이 모듈을 import 하는 시점에 실행 — lifespan 보다 앞서야 기동 로그부터 잡힌다
 configure_logging()
-# 트레이스 전파는 Langfuse 핸들러 생성(lifespan, 같은 OTel 기반)보다 앞서 전역 provider 를 잡는다 (Phase 6)
+# 트레이스 전파는 Langfuse 핸들러 생성(lifespan, 같은 OTel 기반)보다 앞서 전역 provider 를 잡는다
 setup_tracing()
 
 

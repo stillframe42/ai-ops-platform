@@ -7,16 +7,16 @@ logging:
 spring:
   data:
     redis:
-      # 정확 일치 캐시 (Phase 3) — 클러스터·compose 공통 서비스명
+      # 정확 일치 캐시 — 클러스터·compose 공통 서비스명
       host: redis
 
 gateway:
-  # 게이트웨이 전용 DB (init-job 이 생성) — 의미 캐시(pgvector)·비용 원장 공용 (Phase 4 승격)
+  # 게이트웨이 전용 DB (init-job 이 생성) — 의미 캐시(pgvector)·비용 원장 공용
   postgres:
     url: jdbc:postgresql://postgres:5432/llmgateway
     username: ${POSTGRES_USER}
     password: ${POSTGRES_PASSWORD}
-  # 서비스별 분당 한도 (Phase 4) — 초과 시 429 + Retry-After, 버킷은 Redis (replica 2 전제)
+  # 서비스별 분당 한도 — 초과 시 429 + Retry-After, 버킷은 Redis (replica 2 전제)
   ratelimit:
     default-rpm: 30
     service-rpm:

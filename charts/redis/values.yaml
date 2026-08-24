@@ -1,6 +1,6 @@
 # 기본값 소유는 이 파일 하나 — 환경 차이값만 상위(umbrella values)에서 덮어쓴다
 image:
-  # 공식 이미지 (bitnami 기각 선례 — Phase 0 ⑦ 로 검색 모듈 불요, 표준 이미지로 충분)
+  # 공식 이미지 (bitnami 기각 선례 — L2 는 pgvector 라 검색 모듈 불요, 표준 이미지로 충분)
   repository: redis
   tag: 8.2-alpine
 

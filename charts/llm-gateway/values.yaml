@@ -2,8 +2,8 @@ image:
   repository: aiops/llm-gateway
   tag: local
 
-# 고가용성 (Phase 5 ④): HPA 대신 고정 2 — 데모 트래픽 규모상 자동 스케일 실익 없음 + metrics-server 미설치 유지.
-# replica 2 전제(상태 외부화)는 Phase 4 성립 — 캐시·예산 카운터·rate limit 버킷 전부 Redis/PostgreSQL
+# 고가용성: HPA 대신 고정 2 — 데모 트래픽 규모상 자동 스케일 실익 없음 + metrics-server 미설치 유지.
+# replica 2 전제(상태 외부화) — 캐시·예산 카운터·rate limit 버킷 전부 Redis/PostgreSQL
 replicas: 2
 pdbMinAvailable: 1
 
@@ -13,7 +13,7 @@ javaToolOptions: "-XX:MaxRAMPercentage=75.0"
 # ANTHROPIC(채팅)·OPENAI(임베딩) — 차트 밖 Secret (infra/k8s/create-secrets.sh)
 existingSecret: llm-gateway-secrets
 
-# L2 캐시(pgvector) 접속 크리덴셜 — postgres 차트와 같은 Secret 공유 (Phase 3)
+# L2 캐시(pgvector) 접속 크리덴셜 — postgres 차트와 같은 Secret 공유
 postgresSecret: postgres-secrets
 
 resources:

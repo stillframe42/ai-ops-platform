@@ -33,7 +33,7 @@ def test_get_app_logs_builds_logql_and_window(monkeypatch):
     _install(monkeypatch, handler)
     loki_tools.get_app_logs.invoke({"minutes": 30, "level": "ERROR"})
 
-    # 1주차 검증 필터 그대로: json 파서 + 평탄화된 log_level 필드
+    # 실측 검증 필터 그대로: json 파서 + 평탄화된 log_level 필드
     assert captured["query"] == '{service="target-app"} | json | log_level="ERROR"'
     # 창 크기 30분 (Loki 는 나노초 타임스탬프)
     window_ns = int(captured["end"]) - int(captured["start"])

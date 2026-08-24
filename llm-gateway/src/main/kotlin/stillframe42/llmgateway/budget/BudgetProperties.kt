@@ -3,7 +3,7 @@ package stillframe42.llmgateway.budget
 import org.springframework.boot.context.properties.ConfigurationProperties
 
 /**
- * 일별 예산 통제 (weekly-plan Phase 4) — daily-limit-usd 부재 = 비활성 (키-게이트 관례).
+ * 일별 예산 통제 — daily-limit-usd 부재 = 비활성 (키-게이트 관례).
  * 100% 도달은 차단이 아니라 저비용 모델 강제 다운그레이드 — 장애 대응 파이프라인을 멈추지 않는다.
  */
 @ConfigurationProperties("gateway.budget")

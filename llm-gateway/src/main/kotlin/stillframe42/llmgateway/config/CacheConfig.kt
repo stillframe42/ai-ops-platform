@@ -17,7 +17,7 @@ import stillframe42.llmgateway.cache.SemanticResponseCache
 import tools.jackson.databind.ObjectMapper
 
 /**
- * 2단계 캐시 배선 (Phase 3).
+ * 2단계 캐시 배선.
  * 의미 캐시는 게이트웨이 DB(gateway.postgres.url)가 구성될 때만 활성 — 기본 프로파일(로컬·테스트)은
  * DataSource 없이 기동하고 정확 일치 캐시만으로 동작한다 (키-게이트 관례의 캐시판).
  * 스캔이 못 하는 조립만 Config 에 — 값 파라미터는 CacheProperties 에서 골라 넣는 코드가 필요.

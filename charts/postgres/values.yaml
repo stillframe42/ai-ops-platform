@@ -10,7 +10,7 @@ existingSecret: postgres-secrets
 extraDatabases:
   - langfuse
   - controlplane
-  # llm-gateway L2 캐시 (6주차 Phase 3) — control-plane 의 vector_store 와 소유·임베딩 공간 분리
+  # llm-gateway L2 캐시 — control-plane 의 vector_store 와 소유·임베딩 공간 분리
   - llmgateway
 
 storage: 2Gi

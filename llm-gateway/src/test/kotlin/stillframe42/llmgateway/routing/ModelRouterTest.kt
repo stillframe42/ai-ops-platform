@@ -43,7 +43,7 @@ class ModelRouterTest {
     }
 
     @Test
-    fun `헤더 없으면 body model 존중 - Phase 1 동작 유지`() {
+    fun `헤더 없으면 body model 존중`() {
         val route = router.resolve(null, requestedModel = "claude-haiku-4-5")
         assertEquals(Provider.ANTHROPIC, route.provider)
         assertEquals("claude-haiku-4-5", route.model)

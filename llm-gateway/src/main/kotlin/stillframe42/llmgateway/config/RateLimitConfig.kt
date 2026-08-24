@@ -16,7 +16,7 @@ import stillframe42.llmgateway.relay.GatewayMetrics
 import tools.jackson.databind.ObjectMapper
 
 /**
- * Rate Limiting 배선 (Phase 4) — default-rpm 구성 시에만 활성 (키-게이트 관례).
+ * Rate Limiting 배선 — default-rpm 구성 시에만 활성 (키-게이트 관례).
  * Bucket4j 의 Lettuce 통합은 바이트 코덱 원시 연결을 요구해 Spring 의 RedisTemplate 연결을
  * 재사용하지 못한다 — 접속 정보만 공유하는 전용 RedisClient 를 둔다.
  */

@@ -10,9 +10,9 @@ import tools.jackson.databind.json.JsonMapper
 
 /**
  * Slack Incoming Webhook 알림 (DAY 19) — URL 미설정이면 조용한 비활성 (Langfuse 키-게이트 관례).
- * 메시지 포맷은 weekly-plan 스펙: P-등급·원인 가설·confidence·근거 3줄·제안 조치·상세 링크 —
- * 4주차 human-in-the-loop 승인 요청 포맷의 초안이기도 하다 (ADR-0006 연결 메모).
- * 타임아웃은 Boot 중앙 설정(spring.http.clients.*) — 주입 빌더가 반영한다 (8/19 중복 제거).
+ * 메시지 포맷: P-등급·원인 가설·confidence·근거 3줄·제안 조치·상세 링크 —
+ * human-in-the-loop 승인 요청 포맷의 원형이기도 하다 (ADR-0006).
+ * 타임아웃은 Boot 중앙 설정(spring.http.clients.*) — 주입 빌더가 반영한다.
  */
 @Component
 class SlackNotifier(

@@ -10,9 +10,9 @@ import kotlin.math.ceil
 import org.slf4j.LoggerFactory
 
 /**
- * 분산 토큰 버킷 (Bucket4j + Redis) — replica 2 전제로 버킷 상태를 Redis 에 둔다 (순서 검토 ⑤).
+ * 분산 토큰 버킷 (Bucket4j + Redis) — replica 2 전제로 버킷 상태를 Redis 에 둔다.
  * 연결은 최초 판정 시점에 지연 수립, 장애 = 통과 (fail-open — 한도 통제보다 가용성 우선,
- * 강제 차단 요건은 보안 주간 fail-closed 재검토와 결합).
+ * 강제 차단 요건이 생기면 fail-closed 로 재검토).
  */
 class Bucket4jRedisRateLimiter(
     private val redisClient: RedisClient,

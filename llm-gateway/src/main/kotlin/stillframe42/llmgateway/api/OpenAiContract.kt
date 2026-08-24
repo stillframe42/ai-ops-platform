@@ -8,7 +8,7 @@ import tools.jackson.databind.annotation.JsonNaming
 
 /**
  * OpenAI 호환 표면 계약 (ADR-0015) — 클라이언트는 base-url 전환만으로 접속한다.
- * 스트리밍 미지원 (Phase 0 결정 — 유예): stream=true 요청은 400.
+ * 스트리밍 미지원 (유예): stream=true 요청은 400.
  * 도구는 passthrough — 게이트웨이는 정의를 중계하고 tool_calls 를 반환할 뿐, 실행 주체는 클라이언트.
  */
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy::class)

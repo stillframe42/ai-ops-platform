@@ -10,7 +10,7 @@ import stillframe42.llmgateway.api.EmbeddingsResponse
 
 /**
  * OpenAI 형식 임베딩 요청을 EmbeddingModel(OpenAI — yml 선택)로 중계한다.
- * 경유 결정 근거: control-plane 의 유일한 LLM 호출이 임베딩 (Phase 0 결정 ⑨)
+ * 경유 결정 근거: control-plane 의 유일한 LLM 호출이 임베딩
  */
 @Service
 class EmbeddingRelayService(

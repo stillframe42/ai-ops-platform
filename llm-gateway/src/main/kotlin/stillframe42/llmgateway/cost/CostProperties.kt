@@ -3,7 +3,7 @@ package stillframe42.llmgateway.cost
 import org.springframework.boot.context.properties.ConfigurationProperties
 
 /**
- * 모델 단가 테이블 (weekly-plan Phase 4, 순서 검토 ⑫ — Sonnet 5 인트로 가격 8월 말 종료 대비 yml 외부화).
+ * 모델 단가 테이블 — Sonnet 5 인트로 가격 종료(2026-08-31) 대비 yml 외부화 (ADR-0007).
  * 대시보드 절감 비용 패널의 표준가 상수를 대체하는 단일 원천.
  */
 @ConfigurationProperties("gateway.cost")

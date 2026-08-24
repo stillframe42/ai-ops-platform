@@ -6,7 +6,7 @@ image:
 storage: 2Gi
 
 # 토픽 명세 (DAY 17 토픽 설계 결정값 유지 — compose kafka-init 승계).
-# ops.incidents 3파티션 = Phase 6 KEDA max replica 근거 (순서 검토 ⑦)
+# ops.incidents 3파티션 = KEDA max replica 근거 (ADR-0014)
 topics:
   - name: ops.alerts.raw
     partitions: 1

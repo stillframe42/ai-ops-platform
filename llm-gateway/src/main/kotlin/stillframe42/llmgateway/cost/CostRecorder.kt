@@ -6,7 +6,7 @@ import stillframe42.llmgateway.relay.GatewayMetrics
 import stillframe42.llmgateway.routing.Route
 
 /**
- * 요청별 비용 기록 (weekly-plan Phase 4 ⑩ — CostTrackingAdvisor 개념 재구현).
+ * 요청별 비용 기록 — CostTrackingAdvisor 개념 재구현.
  * 캐시 히트 = 지출 0·절감액 기록, 미스·우회 = 실비용 기록. 반환값은 예산 카운터 가산분.
  * costLedger 는 원장 비구성(로컬·테스트 — DB 없음)일 때 null (키-게이트 관례).
  */

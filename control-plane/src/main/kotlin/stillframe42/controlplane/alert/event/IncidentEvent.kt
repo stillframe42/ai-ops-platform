@@ -20,7 +20,7 @@ enum class IncidentStatus(val wire: String) {
 
 /**
  * ops.incidents 발행 페이로드 (DAY 17) — Python 컨슈머(DAY 19)와의 계약을 타입으로 고정한다.
- * 필드 추가·오타·누락이 컴파일 단계에서 걸리고, 와이어 형태(snake_case·순서)는 toWire 한 곳이 소유.
+ * 필드 추가·오타·누락이 컴파일 단계에서 검출되고, 와이어 형태(snake_case·순서)는 toWire 한 곳이 소유.
  */
 data class IncidentEvent(
     val incidentId: String,

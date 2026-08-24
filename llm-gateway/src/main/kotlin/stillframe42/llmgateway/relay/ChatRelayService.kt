@@ -47,7 +47,7 @@ class ChatRelayService(
     fun relay(request: ChatCompletionRequest, taskType: String?): ChatCompletionResponse =
         relay(request, modelRouter.resolve(taskType, request.model))
 
-    // 라우팅 해석은 호출자(캐시 계층) 몫 — 모델별 캐시 키·필터와 중계가 같은 Route 를 공유한다 (Phase 3)
+    // 라우팅 해석은 호출자(캐시 계층) 몫 — 모델별 캐시 키·필터와 중계가 같은 Route 를 공유한다
     fun relay(request: ChatCompletionRequest, route: Route): ChatCompletionResponse {
         val chatModel = requireNotNull(chatModels[route.provider]) { "미구성 프로바이더: ${route.provider}" }
         val prompt = Prompt(toSpringMessages(request.messages), toOptions(route, request))
@@ -72,7 +72,7 @@ class ChatRelayService(
                         content = generation.output.text.orEmpty(),
                         toolCalls = toolCalls.ifEmpty { null },
                     ),
-                    // OpenAI 표준값으로 정규화 (Phase 5) — 폴백으로 프로바이더가 바뀌어도 클라이언트는 단일 계약만 본다
+                    // OpenAI 표준값으로 정규화 — 폴백으로 프로바이더가 바뀌어도 클라이언트는 단일 계약만 본다
                     finishReason = standardFinishReason(generation.metadata.finishReason),
                 ),
             ),

@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # LLM — 모든 호출은 llm-gateway 경유 (6주차, ADR-0015).
+    # LLM — 모든 호출은 llm-gateway 경유 (ADR-0015).
     # llm_client 는 와이어 프로토콜(게이트웨이의 OpenAI 호환 표면 = langchain ChatOpenAI)이지 모델의
     # 프로바이더가 아니다 — 모델 선택은 게이트웨이 라우팅(X-Task-Type) 소관.
     # llm_default_model 은 게이트웨이 별칭 (실모델명 아님 — "default" = 게이트웨이 default 규칙):

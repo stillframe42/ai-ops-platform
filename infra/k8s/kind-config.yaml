@@ -1,5 +1,5 @@
-# kind 로컬 클러스터 (5주차 DAY 27 — plans/202608-2w/weekly-plan.md Phase 1)
-# control-plane 1 + worker 2 — 스케줄링 실험용 (Phase 6 KEDA 스케일아웃 시 노드 분산 관찰).
+# kind 로컬 클러스터 (DAY 27)
+# control-plane 1 + worker 2 — 스케줄링 실험용 (KEDA 스케일아웃 시 노드 분산 관찰).
 # 생성: kind create cluster --config infra/k8s/kind-config.yaml
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4

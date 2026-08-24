@@ -12,7 +12,7 @@ spec:
   template:
     metadata:
       labels:
-        # app 라벨 = Alloy 의 service 라벨 원천 (LogQL 진입점 계약 — Phase 2 메모)
+        # app 라벨 = Alloy 의 service 라벨 원천 (LogQL 진입점 계약)
         app: target-app
     spec:
       containers:
