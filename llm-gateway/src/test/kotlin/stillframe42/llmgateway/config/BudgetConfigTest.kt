@@ -24,7 +24,7 @@ class BudgetConfigTest {
     }
 
     @Test
-    fun `한도 미설정이면 게이지도 없다 - 0 노출은 "한도 0" 오독을 만든다`() {
+    fun `한도 미설정이면 게이지도 없다 - 0 노출은 한도 0 오독을 만든다`() {
         BudgetConfig().budgetLimitMetrics(BudgetProperties()).bindTo(registry)
 
         assertNull(registry.find("gateway.budget.daily.limit.usd").gauge())
