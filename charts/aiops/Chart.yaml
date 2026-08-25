@@ -3,12 +3,12 @@
 # namespace 는 aiops 단일 — 릴리스·주소 체계 단순화
 apiVersion: v2
 name: aiops
-description: 멀티 에이전트 AIOps 플랫폼 전체 스택 — 앱 4종 + DB/Kafka + 모니터링·로그
+description: 멀티 에이전트 AIOps 플랫폼 전체 스택 — 앱 6종 + DB/Kafka/Redis + 모니터링·로그
 type: application
 version: 0.1.0
 
 dependencies:
-  # 자작 차트 8종 (로컬 경로 — 리소스명이 하드코딩이라 릴리스명 무관 = 주소 계약 유지)
+  # 자작 차트 9종 (로컬 경로 — 리소스명이 하드코딩이라 릴리스명 무관 = 주소 계약 유지)
   - name: postgres
     version: 0.1.0
     repository: "file://../postgres"
@@ -33,6 +33,9 @@ dependencies:
   - name: llm-gateway
     version: 0.1.0
     repository: "file://../llm-gateway"
+  - name: auth-server
+    version: 0.1.0
+    repository: "file://../auth-server"
   # 외부 차트 3종 — 설치 실측 버전으로 고정 (재현성)
   - name: kube-prometheus-stack
     version: 88.2.0

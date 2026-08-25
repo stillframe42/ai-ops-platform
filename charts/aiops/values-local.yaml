@@ -1,5 +1,5 @@
 # 로컬(kind) 환경값 — 기본값과 같더라도 재현 절차의 명시 고정 대상만 적는다.
-# 이미지 3종은 kind load 로 반입한 태그 (레지스트리 없음 — :local = imagePullPolicy IfNotPresent 전제)
+# 앱 이미지는 kind load 로 반입한 태그 (레지스트리 없음 — :local = imagePullPolicy IfNotPresent 전제)
 control-plane:
   image:
     repository: aiops/control-plane
@@ -16,3 +16,9 @@ target-app:
   image:
     repository: aiops/target-app
     tag: local
+
+auth-server:
+  image:
+    repository: aiops/auth-server
+    tag: local
+  replicas: 1

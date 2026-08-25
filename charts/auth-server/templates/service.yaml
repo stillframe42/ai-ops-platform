@@ -1,0 +1,14 @@
+# Service 명 = issuer 호스트 (http://auth-server:8091) — 리소스 서버 issuer-uri 와 토큰 iss 가 이 이름으로 일치
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-server
+  labels:
+    {{- include "auth-server.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: auth-server
+  ports:
+    - port: 8091
+      targetPort: http
+      name: http

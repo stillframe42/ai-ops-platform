@@ -1,0 +1,14 @@
+# 발급 지표 스크레이프 (http_server_requests — /oauth2/token 호출량·상태)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: auth-server
+  labels:
+    {{- include "auth-server.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: auth-server
+  endpoints:
+    - port: http
+      path: /actuator/prometheus

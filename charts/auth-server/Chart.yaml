@@ -1,0 +1,7 @@
+# auth-server 앱 차트 — 서비스 간 OAuth 2.1 토큰 발급 (ADR-0016)
+apiVersion: v2
+name: auth-server
+description: 인가 서버 — Client Credentials 토큰 발급, 리소스 서버(control-plane·llm-gateway)의 issuer (ADR-0016)
+type: application
+version: 0.1.0
+appVersion: "local"

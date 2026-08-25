@@ -1,0 +1,22 @@
+image:
+  repository: aiops/auth-server
+  tag: local
+
+# replica 1 고정 — 서명 키(JWK)를 기동 시 생성하므로 replica 간 키가 다르다. 2 이상은 고정 키 Secret 반입이 전제 (ADR-0016)
+replicas: 1
+
+# 컨테이너 인지 heap — limits 기준 75% (control-plane 관례)
+javaToolOptions: "-XX:MaxRAMPercentage=75.0"
+
+# 토큰 iss — 리소스 서버의 issuer-uri 와 문자 단위 일치 (클러스터 내 Service 주소)
+issuer: http://auth-server:8091
+
+# 클라이언트 시크릿 3종 (AUTH_CLIENT_SECRET_*) — 차트 밖 Secret (infra/k8s/create-secrets.sh), 미반입 = 기동 실패 (인증 항상 필수)
+existingSecret: auth-server-secrets
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
