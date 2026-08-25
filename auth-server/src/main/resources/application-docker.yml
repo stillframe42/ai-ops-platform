@@ -1,0 +1,5 @@
+# Loki 적재용 JSON 구조화 로그 — 로컬 개발(기본 프로파일)은 사람이 읽는 plain 포맷 유지 (control-plane 관례)
+logging:
+  structured:
+    format:
+      console: ecs

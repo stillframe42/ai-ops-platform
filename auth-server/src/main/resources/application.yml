@@ -1,0 +1,52 @@
+spring:
+  application:
+    name: auth-server
+  security:
+    oauth2:
+      authorizationserver:
+        # 토큰의 iss — 리소스 서버(control-plane·llm-gateway)의 issuer-uri 와 문자 단위로 일치해야 한다
+        issuer: ${AUTH_ISSUER:http://localhost:8091}
+        # 클라이언트 등록은 인메모리 — 2~3개 고정·동적 등록 없음 (ADR-0016). 시크릿은 env 필수:
+        # 기본값을 두지 않아 미설정 = 기동 실패 (인증 항상 필수 결정 — 조용한 무인증 상태를 두지 않는다)
+        client:
+          agent-service:
+            registration:
+              client-id: agent-service
+              client-secret: "{noop}${AUTH_CLIENT_SECRET_AGENT_SERVICE}"
+              client-authentication-methods: [client_secret_basic]
+              authorization-grant-types: [client_credentials]
+              # 승인(ops:approve) 은 구조적으로 미보유 — 에이전트는 승인할 수 없다 (LLM06)
+              scopes: [ops:read, llm:invoke]
+            token:
+              access-token-time-to-live: 15m
+          control-plane:
+            registration:
+              client-id: control-plane
+              client-secret: "{noop}${AUTH_CLIENT_SECRET_CONTROL_PLANE}"
+              client-authentication-methods: [client_secret_basic]
+              authorization-grant-types: [client_credentials]
+              scopes: [llm:invoke]
+            token:
+              access-token-time-to-live: 15m
+          ops-admin:
+            registration:
+              client-id: ops-admin
+              client-secret: "{noop}${AUTH_CLIENT_SECRET_OPS_ADMIN}"
+              client-authentication-methods: [client_secret_basic]
+              authorization-grant-types: [client_credentials]
+              scopes: [ops:approve, ops:read]
+            token:
+              access-token-time-to-live: 15m
+
+server:
+  port: 8091
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
