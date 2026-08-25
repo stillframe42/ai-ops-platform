@@ -13,6 +13,7 @@
 | [`control-plane/`](control-plane/) | 관제/API/게이트웨이 — Alert 수신·인시던트 발행, MCP 운영 도구 서버, 보고서 저장·조회 API, Slack 알림·승인 카드, human-in-the-loop 승인 API·조치 실행 대행 |
 | [`agent-service/`](agent-service/) | 멀티 에이전트 — Supervisor 그래프가 모니터링(감지)/분석(원인 조사)/실행(조치 제안) 에이전트를 조율, 승인 대기(interrupt)·회복 확인 노드 포함 |
 | [`llm-gateway/`](llm-gateway/) | LLM 게이트웨이 — 모든 LLM 호출의 단일 통과점 (OpenAI 호환 API): 태스크별 모델 라우팅, 2단계 시맨틱 캐싱, 비용 집계·예산 통제(초과 시 다운그레이드), Rate Limiting, 프로바이더 폴백 체인 ([ADR-0015](docs/adr/0015-llm-gateway.md)) |
+| [`auth-server/`](auth-server/) | 인가 서버 — 서비스 간 OAuth 2.1 토큰 발급 (Client Credentials, 스코프 `ops:read`/`ops:approve`/`llm:invoke`), control-plane·llm-gateway 의 issuer ([ADR-0016](docs/adr/0016-mcp-authentication.md)) |
 | [`target-app/`](target-app/) | 모니터링 대상 데모 앱 — fault-injection(지연/에러율/메모리 누수) 제공 |
 | [`infra/`](infra/) | 로컬 실행 인프라 — docker-compose 단일 진입점 (Prometheus·Alertmanager·Grafana·Loki·Kafka·Langfuse·PostgreSQL) |
 
@@ -83,6 +84,7 @@ curl -X POST http://localhost:8080/chaos/reset                        # 데모 �
 | 8081 | control-plane | 보고서·승인 API · MCP 서버 |
 | 8000 | agent-service | 인시던트 상태·히스토리 API (수동 트리거는 디버그용) |
 | 8090 | llm-gateway | LLM 중계 (OpenAI 호환) · 캐시/폴백 헤더 확인 · `/actuator/prometheus` |
+| 8091 | auth-server | 토큰 발급 `POST /oauth2/token` · JWKS `/oauth2/jwks` |
 | 3002 | Grafana | 메트릭·로그 대시보드 |
 | 9091 / 9093 | Prometheus / Alertmanager | 룰·Alert 상태 확인 |
 | 3003 | Langfuse | LLM 트레이스·비용 (세션 = 인시던트) |
@@ -103,12 +105,13 @@ docker build -t aiops/target-app:local target-app/
 docker build -t aiops/control-plane:local control-plane/
 docker build -t aiops/agent-service:local agent-service/
 docker build -t aiops/llm-gateway:local llm-gateway/
-kind load docker-image --name aiops aiops/control-plane:local aiops/agent-service:local aiops/target-app:local aiops/llm-gateway:local
+docker build -t aiops/auth-server:local auth-server/
+kind load docker-image --name aiops aiops/control-plane:local aiops/agent-service:local aiops/target-app:local aiops/llm-gateway:local aiops/auth-server:local
 
 # 3. Secret 반입 (.env 2곳 → K8s Secret, 값 미출력 — 임시 방식, 보안 주간 재검토 예정)
 ./infra/k8s/create-secrets.sh
 
-# 4. 전체 설치 — umbrella 한 번으로 앱 5종(llm-gateway 포함) + DB/Kafka/Redis + 모니터링·로그
+# 4. 전체 설치 — umbrella 한 번으로 앱 6종(llm-gateway·auth-server 포함) + DB/Kafka/Redis + 모니터링·로그
 helm dependency build charts/aiops
 helm install aiops charts/aiops -n aiops --create-namespace -f charts/aiops/values-local.yaml
 ```
