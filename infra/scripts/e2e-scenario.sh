@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # E2E 시나리오 반복 드라이버 (DAY 20) — 주입→발화→Slack 도착 시각을 기계 기록하고,
-# reset 후 정착 대기(Alert 해소 + 최장 rate 창 5m 경과)까지 한 사이클로 절차화 (2주차 이월).
+# reset 후 정착 대기(Alert 해소 + 최장 rate 창 5m 경과)까지 한 사이클로 절차화.
 #
 # 사용: e2e-scenario.sh <latency|error-rate|memory-leak>   # 1사이클 (주입→기록→reset→정착)
 #       e2e-scenario.sh settle                              # 정착 대기만 (수동 개입 후 복구용)
