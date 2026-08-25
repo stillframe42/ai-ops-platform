@@ -75,6 +75,20 @@ services:
         condition: service_healthy
     logging: *default-logging
 
+  auth-server:
+    # 용도: 서비스 간 OAuth 2.1 토큰 발급 (Client Credentials, ADR-0016) — 리소스 서버(control-plane·llm-gateway)의 issuer.
+    # 인증 항상 필수 결정에 따라 로컬(compose)도 이 서비스를 전제한다. 시크릿 3종은 infra/.env pass-through, 미설정 = 기동 실패
+    build: ../auth-server
+    container_name: auth-server
+    environment:
+      # 토큰 iss = 컨테이너 네트워크 주소 — 리소스 서버 issuer-uri 와 문자 단위 일치
+      AUTH_ISSUER: http://auth-server:8091
+      AUTH_CLIENT_SECRET_AGENT_SERVICE:
+      AUTH_CLIENT_SECRET_CONTROL_PLANE:
+      AUTH_CLIENT_SECRET_OPS_ADMIN:
+    ports:
+      - "8091:8091"
+
   llm-gateway:
     # 용도: 모든 LLM 호출의 단일 관문 (ADR-0015) — 라우팅·캐싱·비용·폴백·한도.
     # 프로바이더 실키는 이 서비스만 보유 — 클라이언트(agent-service·control-plane)는 키 없이 경유

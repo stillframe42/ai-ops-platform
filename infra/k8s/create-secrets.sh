@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# 임시 Secret 반입 (5주차 DAY 27, weekly-plan Phase 1 ⑩) — .env 2곳에서 시크릿 키만 골라
+# 임시 Secret 반입 (DAY 27) — .env 2곳에서 시크릿 키만 골라
 # K8s Secret 을 생성한다. 값은 stdout 에 출력하지 않는다.
-# 임시 방식: 8월 보안 주간에 Secret 관리 체계(외부 Secret 저장소 등)를 재검토한다.
+# 임시 방식: Secret 관리 체계(외부 Secret 저장소 등)는 보안 주간 이월 항목으로 재검토한다.
 #
 # 원천 (git 미추적):
 #   infra/.env          — OPENAI/MCP_API_KEY/SLACK 3종+웹훅 (+LANGFUSE 2종은 주간 한정 비활성으로 미반입)
@@ -55,11 +55,16 @@ args_from "$AGENT_ENV" ANTHROPIC_API_KEY
 args_from "$INFRA_ENV" MCP_API_KEY   # control-plane 과 같은 원천 공유 (compose 관례 승계)
 make_secret agent-service-secrets
 
-# llm-gateway (6주차 Phase 1) — 채팅(ANTHROPIC)·임베딩/교차(OPENAI), 원천은 기존 2곳 공유
-# SLACK_WEBHOOK_URL (Phase 4) — 예산 임계 경고, control-plane 과 같은 원천 공유
+# llm-gateway — 채팅(ANTHROPIC)·임베딩/교차(OPENAI), 원천은 기존 2곳 공유
+# SLACK_WEBHOOK_URL — 예산 임계 경고, control-plane 과 같은 원천 공유
 LITERALS=()
 args_from "$AGENT_ENV" ANTHROPIC_API_KEY
 args_from "$INFRA_ENV" OPENAI_API_KEY SLACK_WEBHOOK_URL
 make_secret llm-gateway-secrets
+
+# auth-server (ADR-0016) — 클라이언트 시크릿 3종. 인증 항상 필수라 빈 값이면 pod 가 기동 실패로 드러난다
+LITERALS=()
+args_from "$INFRA_ENV" AUTH_CLIENT_SECRET_AGENT_SERVICE AUTH_CLIENT_SECRET_CONTROL_PLANE AUTH_CLIENT_SECRET_OPS_ADMIN
+make_secret auth-server-secrets
 
 echo "완료 — 확인: kubectl -n $NS get secrets"
