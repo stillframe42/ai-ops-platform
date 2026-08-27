@@ -35,3 +35,6 @@ notes/
 
 # === Helm (umbrella 의존성 수집물 — helm dependency build 로 재생성) ===
 charts/aiops/charts/
+
+# === Alertmanager 웹훅 공유 시크릿 파일 (compose 관측 스택 마운트) ===
+infra/alertmanager/webhook-secret

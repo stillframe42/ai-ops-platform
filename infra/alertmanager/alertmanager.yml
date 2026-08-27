@@ -12,3 +12,7 @@ receivers:
     webhook_configs:
       - url: http://control-plane:8080/webhook/alertmanager
         send_resolved: true
+        # 공유 시크릿 bearer (ADR-0016) — control-plane 의 ALERTMANAGER_WEBHOOK_SECRET 과 같은 값 (파일 마운트, compose.monitoring 참고)
+        http_config:
+          authorization:
+            credentials_file: /etc/alertmanager/webhook-secret

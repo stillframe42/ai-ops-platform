@@ -29,6 +29,9 @@ services:
     container_name: alertmanager
     volumes:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      # 웹훅 공유 시크릿 (ADR-0016) — Alertmanager 는 설정에서 env 를 못 읽어 파일로 전달.
+      # git 미추적: infra/.env 의 ALERTMANAGER_WEBHOOK_SECRET 값을 `printf '%s' "$값" > infra/alertmanager/webhook-secret` 로 생성
+      - ./alertmanager/webhook-secret:/etc/alertmanager/webhook-secret:ro
     ports:
       - "9093:9093"
     logging: *default-logging

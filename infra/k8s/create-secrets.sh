@@ -4,7 +4,7 @@
 # 임시 방식: Secret 관리 체계(외부 Secret 저장소 등)는 보안 주간 이월 항목으로 재검토한다.
 #
 # 원천 (git 미추적):
-#   infra/.env          — OPENAI/MCP_API_KEY/SLACK 3종+웹훅 (+LANGFUSE 2종은 주간 한정 비활성으로 미반입)
+#   infra/.env          — OPENAI/SLACK 3종+웹훅/AUTH_CLIENT_SECRET 3종/ALERTMANAGER_WEBHOOK_SECRET (+LANGFUSE 2종은 미반입)
 #   agent-service/.env  — ANTHROPIC_API_KEY (필수)
 # POSTGRES_USER/PASSWORD 는 compose 와 같은 규칙: .env 또는 셸 env 미설정 시 로컬 데모 기본값(aiops)
 set -euo pipefail
@@ -47,13 +47,21 @@ LITERALS=("--from-literal=POSTGRES_USER=$PG_USER" "--from-literal=POSTGRES_PASSW
 make_secret postgres-secrets
 
 LITERALS=("--from-literal=POSTGRES_USER=$PG_USER" "--from-literal=POSTGRES_PASSWORD=$PG_PASS")
-args_from "$INFRA_ENV" OPENAI_API_KEY MCP_API_KEY SLACK_WEBHOOK_URL SLACK_BOT_TOKEN SLACK_APP_TOKEN SLACK_APPROVAL_CHANNEL
+args_from "$INFRA_ENV" OPENAI_API_KEY SLACK_WEBHOOK_URL SLACK_BOT_TOKEN SLACK_APP_TOKEN SLACK_APPROVAL_CHANNEL
+# 웹훅 공유 시크릿 (ADR-0016) — 인증 항상 필수라 빈 값이면 control-plane 이 기동 실패로 드러난다
+args_from "$INFRA_ENV" ALERTMANAGER_WEBHOOK_SECRET
 make_secret control-plane-secrets
 
 LITERALS=()
 args_from "$AGENT_ENV" ANTHROPIC_API_KEY
-args_from "$INFRA_ENV" MCP_API_KEY   # control-plane 과 같은 원천 공유 (compose 관례 승계)
+# MCP 인증 클라이언트 시크릿 (ADR-0016) — auth-server 등록값과 같은 원천, 앱이 읽는 키 이름으로 반입
+v="$(getv "$INFRA_ENV" AUTH_CLIENT_SECRET_AGENT_SERVICE)"; [ -n "$v" ] && LITERALS+=("--from-literal=AUTH_CLIENT_SECRET=$v")
 make_secret agent-service-secrets
+
+# Alertmanager 가 마운트하는 웹훅 시크릿 파일 (kube-prometheus-stack alertmanagerSpec.secrets) — control-plane 과 같은 값
+LITERALS=()
+args_from "$INFRA_ENV" ALERTMANAGER_WEBHOOK_SECRET
+make_secret alertmanager-webhook-secret
 
 # llm-gateway — 채팅(ANTHROPIC)·임베딩/교차(OPENAI), 원천은 기존 2곳 공유
 # SLACK_WEBHOOK_URL — 예산 임계 경고, control-plane 과 같은 원천 공유
