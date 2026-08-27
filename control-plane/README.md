@@ -8,9 +8,12 @@
   - `getDeploymentHistory(app)` — 최근 배포 이력 (시드)
   - `searchSimilarIncidents(symptom)` — 과거 유사 인시던트 벡터 검색 (pgvector + OpenAI 임베딩)
   - `getAppConfig(app)` — 앱 런타임 설정 정보 (시드)
-- **/mcp API Key 인증** (DAY 16) — `X-API-Key` 헤더, 키는 env `MCP_API_KEY`
-  (미설정 시 인증 생략 — 로컬 개발 편의. OAuth 2.1 전환은 8월 보안 주간).
-  MCP Inspector 로 호출할 때는 `--header "X-API-Key: <키>"` 필요
+- **OAuth2 리소스 서버** (2026-08-26, ADR-0016) — auth-server 발급 JWT 를 issuer JWKS 로 검증 (`aud` 에
+  `control-plane` 필수), 스코프 인가: `/mcp` = `ops:read` / `GET /api/incidents/**` = `ops:read` /
+  `POST /api/incidents/{id}/approve|reject` = `ops:approve` / `POST /webhook/alertmanager` = 공유 시크릿 bearer
+  (`ALERTMANAGER_WEBHOOK_SECRET`, 필수) / actuator probe·스크레이프 permitAll. issuer 는 env `AUTH_ISSUER_URI`
+  (기본 `http://localhost:8091`, docker 프로파일은 `http://auth-server:8091`). 무인증 상태는 없다 —
+  MCP Inspector 등 수동 호출은 auth-server 에서 토큰을 발급받아 `--header "Authorization: Bearer <토큰>"`
 - **MCP 도구 호출 계측** (DAY 17) — `mcp_tool_calls_seconds_*{tool, outcome}` (Spring AI 2.0.0 에
   내장 관측이 없어 명시적 계측 — `McpToolMetrics`, outcome: success/degraded/failure). Grafana
   `MCP 도구 호출` 대시보드, 전체 도구 일람은 `docs/tools-catalog.md`
@@ -51,7 +54,7 @@
 
 ```bash
 ./gradlew test          # 단위 테스트 (실 DB·임베딩 API 무의존)
-./gradlew bootRun       # 로컬 실행 — postgres(5433)의 controlplane DB 와 OPENAI_API_KEY 필요
+./gradlew bootRun       # 로컬 실행 — postgres(5433)의 controlplane DB·auth-server(8091)·ALERTMANAGER_WEBHOOK_SECRET 필요 (OPENAI_API_KEY 는 선택)
 ```
 
 컨테이너 실행은 `infra/docker-compose.yml` (전체 스택 단일 진입점). 필요한 환경 변수는 compose 의 control-plane 서비스 주석 참고.

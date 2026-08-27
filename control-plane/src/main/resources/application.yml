@@ -2,6 +2,16 @@ spring:
   application:
     name: control-plane
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # 토큰 발급자 (ADR-0016) — auth-server 의 issuer 와 문자 단위 일치, 검증 키는 issuer 의 JWKS 에서 조회.
+          # 기본값은 호스트 실행 기준 — docker 프로파일이 컨테이너 주소로 덮어쓴다. 잘못된 값은 401 로 닫힌다 (무인증 상태 없음)
+          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8091}
+          # aud 검사 — llm-gateway 용 토큰이 여기서 통하지 않게 (단일 토큰 다중 aud 의 리소스별 검사)
+          audiences: control-plane
+
   # 주입 RestClient.Builder 공통 타임아웃 (8/19 — SlackNotifier·TargetAppActionExecutor 의
   # 사용처별 requestFactory 조립 중복 제거. Boot 4 현행 키는 clients 복수형)
   http:
@@ -88,10 +98,10 @@ management:
       probability: 1.0
 
 ops:
-  mcp:
-    # /mcp API Key 인증 (DAY 16) — 빈 값이면 필터 미등록(인증 생략, 로컬 개발 편의).
-    # 키는 infra/.env 의 MCP_API_KEY 를 compose 가 주입 (git 미추적, 값 미출력)
-    api-key: ${MCP_API_KEY:}
+  webhook:
+    # Alertmanager 웹훅 공유 시크릿 (ADR-0016 — Alertmanager 는 OAuth 클라이언트가 아니라 bearer 정적 대조).
+    # 기본값 없음: 미설정 = 기동 실패 (인증 항상 필수). 값은 infra/.env 의 ALERTMANAGER_WEBHOOK_SECRET (git 미추적, 값 미출력)
+    shared-secret: ${ALERTMANAGER_WEBHOOK_SECRET}
   slack:
     # Incoming Webhook URL (DAY 19) — 빈 값이면 알림 비활성 (Langfuse 키-게이트 관례).
     # URL 자체가 시크릿 — infra/.env 의 SLACK_WEBHOOK_URL 을 compose 가 주입 (git 미추적, 값 미출력)

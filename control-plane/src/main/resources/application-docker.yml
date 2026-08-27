@@ -13,6 +13,13 @@ spring:
     # compose 내부 리스너 — 환경 차이값은 프로파일 소유 (datasource 선례, 2026-08-07 compose env 정리로 이관)
     bootstrap-servers: kafka:9092
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # 컨테이너 네트워크 기준 issuer — auth-server 의 AUTH_ISSUER 와 같은 값 (K8s Service 명 = compose 컨테이너명)
+          issuer-uri: http://auth-server:8091
+
   ai:
     openai:
       # 임베딩의 llm-gateway 경유 주소 — 컨테이너 내부 네트워크 기준 (K8s Service 명 = compose 컨테이너명 계약)
