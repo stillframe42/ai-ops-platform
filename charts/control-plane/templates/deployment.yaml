@@ -27,7 +27,8 @@ spec:
             - name: JAVA_TOOL_OPTIONS
               value: {{ .Values.javaToolOptions | quote }}
           envFrom:
-            # OPENAI·MCP_API_KEY·SLACK 4종·POSTGRES 2종 — 미반입 키는 키-게이트 비활성 (pass-through 승계)
+            # OPENAI·SLACK 4종·POSTGRES 2종 — 미반입 키는 키-게이트 비활성 (pass-through 승계).
+            # ALERTMANAGER_WEBHOOK_SECRET 은 필수 (ADR-0016 — 미반입 시 기동 실패). JWT issuer 는 docker 프로파일 소유
             - secretRef:
                 name: {{ .Values.existingSecret }}
           readinessProbe:

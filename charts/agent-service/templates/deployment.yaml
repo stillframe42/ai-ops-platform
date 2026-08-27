@@ -34,6 +34,9 @@ spec:
             # control-plane 발견 실패 시 로컬 도구 강등(부분 진행)이 설계 경로 — 기동 의존 없음 (compose 승계)
             - name: MCP_SERVER_URL
               value: {{ .Values.env.mcpServerUrl | quote }}
+            # MCP 인증 토큰 발급 (ADR-0016) — 시크릿(AUTH_CLIENT_SECRET)은 existingSecret 경유
+            - name: AUTH_TOKEN_URL
+              value: {{ .Values.env.authTokenUrl | quote }}
             # 접속 실패는 컨슈머 백오프가 흡수 (compose 승계 — 기동 의존 없음)
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: {{ .Values.env.kafkaBootstrapServers | quote }}
@@ -51,7 +54,7 @@ spec:
             - name: CHECKPOINT_DB_URL
               value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/aiops"
           envFrom:
-            # ANTHROPIC_API_KEY·MCP_API_KEY — LANGFUSE 미반입 = 트레이싱 비활성
+            # ANTHROPIC_API_KEY·AUTH_CLIENT_SECRET — LANGFUSE 미반입 = 트레이싱 비활성
             - secretRef:
                 name: {{ .Values.existingSecret }}
           readinessProbe:

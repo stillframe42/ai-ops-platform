@@ -42,7 +42,15 @@ kube-prometheus-stack:
           webhook_configs:
             - url: http://control-plane:8080/webhook/alertmanager
               send_resolved: true
+              # 공유 시크릿 bearer (ADR-0016) — alertmanagerSpec.secrets 로 마운트된 파일 (/etc/alertmanager/secrets/<이름>/<키>)
+              http_config:
+                authorization:
+                  credentials_file: /etc/alertmanager/secrets/alertmanager-webhook-secret/ALERTMANAGER_WEBHOOK_SECRET
         - name: "null"
+    alertmanagerSpec:
+      # 웹훅 시크릿 Secret 마운트 (infra/k8s/create-secrets.sh 가 생성) — 값이 values 에 실리지 않는다
+      secrets:
+        - alertmanager-webhook-secret
 
   prometheus:
     prometheusSpec:
