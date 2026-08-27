@@ -46,9 +46,11 @@ C4 다이어그램(System Context / Container / agent-service 내부)과 컨테�
 |------|------|-----------|
 | `agent-service/.env` | `ANTHROPIC_API_KEY` | **필수** — 분석 LLM 호출 |
 | `infra/.env` | `SLACK_WEBHOOK_URL` / `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` / `SLACK_APPROVAL_CHANNEL` | 선택 — 없으면 Slack 알림·승인 카드만 조용히 비활성 (승인 API 는 항상 유효) |
-| `infra/.env` | `OPENAI_API_KEY` (임베딩 전용) / `MCP_API_KEY` | 선택 — 없으면 유사 인시던트 검색 / MCP 인증만 비활성 |
+| `infra/.env` | `OPENAI_API_KEY` (임베딩 전용) | 선택 — 없으면 유사 인시던트 검색만 비활성 |
+| `infra/.env` | `AUTH_CLIENT_SECRET_AGENT_SERVICE` / `AUTH_CLIENT_SECRET_CONTROL_PLANE` / `AUTH_CLIENT_SECRET_OPS_ADMIN` | **필수** — auth-server 클라이언트 시크릿 (ADR-0016), agent-service 는 첫 값을 `AUTH_CLIENT_SECRET` 으로 받는다 |
+| `infra/.env` | `ALERTMANAGER_WEBHOOK_SECRET` | **필수** — control-plane 웹훅 공유 시크릿. compose 관측 스택은 `infra/alertmanager/webhook-secret` 파일로도 같은 값 필요 |
 
-미설정 항목은 기능 단위로 조용히 비활성되는 키-게이트 관례라, 최소 `ANTHROPIC_API_KEY` 하나로 시작할 수 있다.
+선택 항목은 기능 단위로 조용히 비활성되는 키-게이트 관례. 인증 관련 키는 예외로 **항상 필수** — 미설정이면 해당 서비스가 기동하지 않는다 (조용한 무인증 상태를 두지 않는 결정, ADR-0016).
 
 ### 2. 기동
 

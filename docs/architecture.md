@@ -71,7 +71,7 @@ flowchart TB
     kafka -->|"결과·승인 요청 소비 (@KafkaListener)<br/>upsert 멱등 · pending 저장·카드 발송"| cp
     cp -->|"결정 발행 ops.actions.decisions<br/>approved 는 실행 결과 포함 (ADR-0005)"| kafka
 
-    agents -->|"MCP 도구 호출 (Streamable HTTP · X-API-Key)<br/>배포 이력 · 유사 인시던트 · 앱 설정 (ADR-0010)"| cp
+    agents -->|"MCP 도구 호출 (Streamable HTTP · OAuth2 bearer ops:read)<br/>배포 이력 · 유사 인시던트 · 앱 설정 (ADR-0010·0016)"| cp
     agents -->|"채팅 (OpenAI 호환 · X-Task-Type 라우팅)<br/>ADR-0015 단일 통과점"| gw
     cp -->|"임베딩 (OpenAI 호환)<br/>유사 인시던트 검색·L2 캐시"| gw
     gw -->|"HTTPS — Anthropic 주 · OpenAI 교차/폴백"| llm
@@ -141,8 +141,8 @@ flowchart LR
 | 구간 | 프로토콜 | 상태 |
 |------|----------|------|
 | Prometheus → target-app / control-plane | HTTP scrape (`/actuator/prometheus`) | 확정 — control-plane 은 MCP 도구 메트릭 (2026-07-24) |
-| agent-service → control-plane (도구) | MCP Streamable HTTP (`/mcp`, X-API-Key) | 확정 ([ADR-0010](adr/0010-mcp-tool-exposure.md)) — REST 직접 호출 대체, 수동 트리거 REST 는 디버그용 잔존 |
-| Prometheus → Alertmanager → control-plane | 알림 룰 + alert webhook (`/webhook/alertmanager`) | 확정 ([ADR-0003](adr/0003-alertmanager-webhook.md) 완결 2026-07-25) |
+| agent-service → control-plane (도구) | MCP Streamable HTTP (`/mcp`, OAuth2 Client Credentials bearer — 스코프 `ops:read`) | 확정 ([ADR-0010](adr/0010-mcp-tool-exposure.md)·[ADR-0016](adr/0016-mcp-authentication.md)) — REST 직접 호출 대체, 수동 트리거 REST 는 디버그용 잔존 |
+| Prometheus → Alertmanager → control-plane | 알림 룰 + alert webhook (`/webhook/alertmanager`, 공유 시크릿 bearer) | 확정 ([ADR-0003](adr/0003-alertmanager-webhook.md) 완결 2026-07-25, 인증은 ADR-0016) |
 | control-plane → Kafka | 프로듀서 — `ops.alerts.raw`(원본 보존)·`ops.incidents`(정규화·멱등, key=incident_id) | 확정 ([ADR-0011](adr/0011-kafka-trigger.md)) |
 | Kafka → agent-service | aiokafka 컨슈머 (수동 커밋, 배치 처리 후 commit) → 그래프 자동 트리거 | 확정 ([ADR-0011](adr/0011-kafka-trigger.md)) |
 | agent-service → Kafka | 분석 결과 발행 — `ops.analysis.results` (key=incident_id, at-least-once) | 확정 ([ADR-0011](adr/0011-kafka-trigger.md)) |

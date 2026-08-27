@@ -42,7 +42,9 @@ sequenceDiagram
 | 리소스 서버 | `GET /oauth2/jwks` | issuer-uri 설정이 이 주소를 찾아간다. 클라이언트는 호출할 일이 없다 |
 | 운영자 | `POST /oauth2/token` (curl, `ops-admin`) | 승인 API 호출 전에 손으로 발급 |
 
-클라이언트 쪽 구현 자리: agent-service 는 `httpx.Auth` 구현체를 MCP 연결·openai SDK 에 주입, control-plane 은 게이트웨이용 RestClient 인터셉터 (리소스 서버 전환과 함께 구현).
+클라이언트 쪽 구현: agent-service 는 `app/tools/oauth_client.py` 의 `httpx.Auth` 구현체를 MCP 연결에 주입 (2026-08-26 — 캐시·만료 60초 전 재발급·401 시 1회 재시도), control-plane 의 게이트웨이용 RestClient 인터셉터는 llm-gateway 리소스 서버 전환과 함께 구현.
+
+**`scope` 는 반드시 명시한다** — 생략하면 인가 서버는 빈 스코프로 발급하고(`scope`·`aud` 클레임 없음), 리소스 서버가 `aud` 검사에서 401 을 낸다 (2026-08-26 클러스터 실측). 요청 스코프는 등록 스코프의 부분집합이어야 한다.
 
 ### 손으로 발급해 보기
 
@@ -52,5 +54,6 @@ curl -s -u agent-service:$AUTH_CLIENT_SECRET_AGENT_SERVICE \
   http://localhost:8091/oauth2/token
 # → {"access_token":"eyJ...","scope":"llm:invoke ops:read","token_type":"Bearer","expires_in":899}
 # 권한 밖 스코프(예: agent-service 가 ops:approve) → {"error":"invalid_scope"}, 잘못된 시크릿 → 401
+# scope 생략 → 200 이지만 scope·aud 없는 토큰 — 리소스 서버에서 401 (aud 불일치)
 # 공개키: GET /oauth2/jwks
 ```

@@ -70,7 +70,7 @@ flowchart LR
 
 | # | 경로 | 현재 상태 | 예정 방어 |
 |---|------|----------|----------|
-| ⑦ | 승인 API `POST /api/incidents/{id}/approve\|reject` | **무인증** — curl 로 누구나 승인 | `ops:approve` 스코프 (agent-service 토큰은 구조적으로 미보유) |
+| ⑦ | 승인 API `POST /api/incidents/{id}/approve\|reject` | ~~무인증~~ → **`ops:approve` 스코프 적용 (2026-08-26)** — agent-service 토큰 403 실측 | `ops:approve` 스코프 (agent-service 토큰은 구조적으로 미보유) |
 | ⑧ | 게이트웨이 `X-Client-Service` 헤더 | 자기 신고 — 예산·rate limit 차원 위조 가능 | JWT `client_id` 로 대체 (`llm:invoke`) |
 
 ## 3. 보호 대상 — 최종 행동
@@ -100,7 +100,7 @@ flowchart LR
 - 공급망 (LLM03) — 의존성 버전 고정 관례로 대체
 - 학습 데이터 오염 (LLM04 원형) — 학습 없음, RAG 오염(③)으로 축소 해석
 - 사용자 인증 — 사람 로그인 없음 (승인자는 Slack Socket Mode)
-- 네트워크 경계 (NetworkPolicy·서비스 메시) — 미도입
+- 네트워크 경계 (NetworkPolicy·서비스 메시) — 미도입. 클러스터 내부는 HTTP 평문이라 bearer(공유 시크릿·JWT·토큰 요청의 Basic)를 볼 수 있는 위치의 공격자는 재사용 가능 (RFC 6750 은 TLS 전제) — 인증 계층이 막는 범위 밖, 보강 순서는 NetworkPolicy(수신 제한) → 시크릿 회전 → mTLS
 
 ## 6. 레드팀 케이스 인덱스 (초안 — baseline 실행 시 확정)
 

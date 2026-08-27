@@ -56,8 +56,8 @@ Python 에이전트를 `langchain-mcp-adapters` 0.3.0 (`MultiServerMCPClient`, S
   ① 발견(tools/list) 실패: 로컬 도구만으로 강등해 부분 진행 + 캐시 미보존으로 다음 실행에서 재발견 (실측: 그래프 오류 기록 없이 완주).
   ② 호출(tools/call) 실패: 전송 오류가 `ExceptionGroup(ConnectError)` 로 전파 → DAY 13 경로(NodeFailure 기록 → 부분 보고서) 동작 확인.
   단, ExceptionGroup 래핑 때문에 transient 재시도가 걸리지 않는 결함을 발견해 판정 로직에 그룹 해체를 추가했다.
-- **인증**: `/mcp` 전용 API Key 헤더 필터 (`X-API-Key`, 키 미설정 시 인증 생략) — 무상태 왕복이라
-  "요청마다 헤더 검사"로 충분. OAuth 2.1 전환은 8월 보안 주간.
+- **인증**: 도입 시점(DAY 16)은 `/mcp` 전용 API Key 헤더 필터 (`X-API-Key`, 키 미설정 시 인증 생략) — 무상태 왕복이라
+  "요청마다 헤더 검사"로 충분. **2026-08-26 OAuth2 리소스 서버로 대체** — bearer JWT(스코프 `ops:read`)·인증 항상 필수 ([ADR-0016](0016-mcp-authentication.md)).
 - **토큰 비용 실측 (DAY 17 실험, count_tokens 기준)**: 도구 스키마는 LLM 호출마다 프롬프트에 반복
   포함된다 — 기준선(도구 0종) 1,129 토큰, 현재 5종 2,441 (+1,312), 15종 전체 노출 3,711 (+2,582).
   15종 시나리오에서 관련 도구만 선별(7종)하면 호출당 968 토큰 절감 — ReAct 루프 왕복 수만큼 배가되므로

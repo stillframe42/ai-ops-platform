@@ -22,13 +22,17 @@
 | `get_app_logs` | analysis | Loki | 읽기 전용 | 〃 |
 | `compare_with_baseline` | analysis | Prometheus | 읽기 전용 | 〃 |
 
-### MCP 도구 (control-plane, `@McpTool` — Streamable HTTP + `X-API-Key`)
+### MCP 도구 (control-plane, `@McpTool` — Streamable HTTP + OAuth2 bearer, ADR-0016)
 
-| 도구 | 사용 에이전트 | 대상 | 권한 수준 | 실패 처리 |
-|------|--------------|------|----------|----------|
-| `getDeploymentHistory` | analysis | 시드 (실 연동 범위 밖) | 읽기 전용 | 모르는 앱 → 빈 배열 |
-| `searchSimilarIncidents` | analysis | pgvector (controlplane DB) | 읽기 전용 | error 필드 JSON + isError:false 강등 (DAY 13 관례) |
-| `getAppConfig` | analysis | 시드 | 읽기 전용 | 모르는 앱 → error 필드 JSON |
+| 도구 | 사용 에이전트 | 대상 | 권한 수준 | 요구 스코프 | 실패 처리 |
+|------|--------------|------|----------|------------|----------|
+| `getDeploymentHistory` | analysis | 시드 (실 연동 범위 밖) | 읽기 전용 | `ops:read` | 모르는 앱 → 빈 배열 |
+| `searchSimilarIncidents` | analysis | pgvector (controlplane DB) | 읽기 전용 | `ops:read` | error 필드 JSON + isError:false 강등 (DAY 13 관례) |
+| `getAppConfig` | analysis | 시드 | 읽기 전용 | `ops:read` | 모르는 앱 → error 필드 JSON |
+
+- 스코프는 `/mcp` 경로 단위로 검사한다 (`SecurityConfig`) — 조회 도구 3종이 전부 읽기 전용이라 도구별 차등이 없다.
+  조치 경로는 MCP 도구가 아니라 승인 API(`POST /api/incidents/{id}/approve|reject`, `ops:approve`) — agent-service 토큰에는
+  이 스코프가 없어 403 (구조적 승인 불가, ADR-0005 추가 사항)
 
 - MCP 도구 3종은 전부 `readOnlyHint=true / destructiveHint=false / idempotentHint=true / openWorldHint=false` 로 광고 (기본값이 destructiveHint=true 라 명시 필요 — DAY 15 실측)
 - 연결 실패의 두 층: 발견(tools/list) 실패 → 로컬 도구만으로 강등 완주, 호출(tools/call) 실패 → NodeFailure → 부분 보고서 (DAY 16 실측)
@@ -44,8 +48,8 @@
 
 | 수준 | 정의 | 현재 해당 | 8월 설계 방향 |
 |------|------|----------|--------------|
-| 읽기 전용 | 상태를 바꾸지 않는 조회 | 전체 8종 | API Key 수준으로 충분 |
-| 조치 실행 | 대상 시스템 상태 변경 | 없음 (4주차부터) | OAuth 2.1 스코프 + 승인 흐름 필수, destructiveHint 광고 정합 |
+| 읽기 전용 | 상태를 바꾸지 않는 조회 | 전체 8종 | `ops:read` (2026-08-26 적용 — ADR-0016) |
+| 조치 실행 | 대상 시스템 상태 변경 | 없음 (MCP 도구로는 두지 않는다) | 승인 API `ops:approve` + human-in-the-loop 승인 — 에이전트 토큰 미보유 |
 
 ## 관측 (DAY 17)
 
