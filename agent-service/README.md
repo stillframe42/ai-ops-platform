@@ -56,7 +56,13 @@ resume(Durable Execution)이 흡수한다. 수동 트리거 `POST /incidents/tri
 추가되면 다음 발견 시점에 자동 반영된다. 관련 환경 변수 (`.env`, git 미추적):
 
 - `MCP_SERVER_URL` — 기본 `http://localhost:8081/mcp` (호스트 실행), compose 는 내부 주소로 덮어씀
-- `MCP_API_KEY` — `/mcp` 인증 키 (control-plane 과 동일 값, 미설정 시 헤더 생략)
+- `AUTH_TOKEN_URL` — auth-server 토큰 엔드포인트, 기본 `http://localhost:8091/oauth2/token` (compose 는 내부 주소로 덮어씀)
+- `AUTH_CLIENT_ID` — 기본 `agent-service` (auth-server 등록명)
+- `AUTH_CLIENT_SECRET` — **필수** (기본값 없음, 미설정 = 기동 실패). infra/.env 의 `AUTH_CLIENT_SECRET_AGENT_SERVICE` 와 같은 값
+
+`/mcp` 호출은 OAuth2 Client Credentials bearer 토큰(스코프 `ops:read`, ADR-0016) — `app/tools/oauth_client.py` 의
+`httpx.Auth` 가 발급·캐시·만료 60초 전 재발급·401 시 1회 재시도를 요청 시점에 처리한다. 승인 권한(`ops:approve`)은
+이 클라이언트에 등록돼 있지 않아 에이전트 토큰으로는 승인 API 가 403 이다.
 
 MCP 서버 다운 시: 도구 발견 실패는 로컬 도구만으로 강등해 부분 진행하고 다음 실행에서
 재발견, 호출 실패는 DAY 13 복원력 경로(NodeFailure 기록 → 부분 보고서)로 이어진다.

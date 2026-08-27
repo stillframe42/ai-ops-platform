@@ -13,20 +13,19 @@ from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from app.config.settings import Settings
+from app.tools.oauth_client import ClientCredentialsAuth
 
 # control-plane 의 spring.ai.mcp.server.name 과 일치 — 관측·로그 대조용 식별자
 MCP_SERVER_NAME = "ops-control-plane"
 
-# API Key 헤더 이름 — control-plane 의 McpApiKeyFilter 와 계약
-API_KEY_HEADER = "X-API-Key"
-
 
 def build_mcp_connections(settings: Settings) -> dict:
-    """Streamable HTTP 연결 구성. 키 미설정이면 헤더 자체를 생략한다 — 서버 필터도
-    키 미설정이면 인증을 생략하므로 로컬 개발에서 양쪽 무설정으로 동작한다 (키-게이트 관례)."""
-    connection: dict = {"transport": "streamable_http", "url": settings.mcp_server_url}
-    if settings.mcp_api_key:
-        connection["headers"] = {API_KEY_HEADER: settings.mcp_api_key}
+    """Streamable HTTP 연결 구성 — bearer 토큰은 httpx.Auth 가 요청마다 붙인다 (ADR-0016).
+    연결마다 새 Auth 객체이므로 토큰 캐시 수명 = 이 연결 구성의 수명 (분석 에이전트 캐시와 같다)."""
+    auth = ClientCredentialsAuth(
+        settings.auth_token_url, settings.auth_client_id, settings.auth_client_secret, settings.auth_scope
+    )
+    connection: dict = {"transport": "streamable_http", "url": settings.mcp_server_url, "auth": auth}
     return {MCP_SERVER_NAME: connection}
 
 

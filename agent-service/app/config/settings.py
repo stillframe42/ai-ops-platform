@@ -25,7 +25,16 @@ class Settings(BaseSettings):
     # MCP 도구 서버 — control-plane Streamable HTTP (DAY 16, ADR-0010)
     # 기본값은 호스트 실행 기준 (control-plane 호스트 포트 8081) — compose 는 env 로 덮어쓴다
     mcp_server_url: str = "http://localhost:8081/mcp"
-    mcp_api_key: str | None = None
+
+    # OAuth2 Client Credentials (ADR-0016) — control-plane MCP 호출의 bearer 토큰을 auth-server 에서 발급받는다.
+    # 시크릿은 기본값 없음: 미설정 = 기동 실패 (인증 항상 필수 — 조용한 무인증 상태를 두지 않는다).
+    # 기본 주소는 호스트 실행 기준 (compose/K8s 는 env 로 auth-server 컨테이너 주소를 덮어쓴다)
+    auth_token_url: str = "http://localhost:8091/oauth2/token"
+    auth_client_id: str = "agent-service"
+    auth_client_secret: str
+    # 요청 스코프 — 명시하지 않으면 인가 서버는 빈 스코프로 발급하고 aud 도 비어 리소스 서버가 401 을 낸다 (8/26 실측).
+    # 등록 스코프의 부분집합이어야 한다 (초과 요청 = invalid_scope)
+    auth_scope: str = "ops:read llm:invoke"
 
     # Kafka 인시던트 컨슈머 (DAY 18, ADR-0011) — 기본값은 호스트 실행 기준 (compose 는 kafka:9092 로 덮어쓴다).
     # 빈 문자열이면 컨슈머 비활성 (키-게이트 관례) — 수동 트리거만으로 동작
