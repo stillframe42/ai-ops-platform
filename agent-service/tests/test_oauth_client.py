@@ -140,3 +140,29 @@ async def test_token_issue_failure_raises():
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler), auth=_auth()) as client:
         with pytest.raises(httpx.HTTPStatusError, match="invalid_client"):
             await client.post(RESOURCE_URL)
+
+
+def test_sync_flow_issues_and_retries_once_on_401():
+    """동기 경로(라우터 invoke) — 비동기와 같은 규칙: 최초 발급·캐시, 401 시 재발급 후 1회 재시도."""
+    servers = FakeServers(reject_tokens={"tok-1"})
+    auth = _auth()
+    with httpx.Client(transport=httpx.MockTransport(servers.handler), auth=auth) as client:
+        r1 = client.post(RESOURCE_URL, json={})
+        r2 = client.post(RESOURCE_URL, json={})
+
+    assert r1.status_code == 200 and r2.status_code == 200
+    assert servers.issued == 2
+    assert servers.bearers == ["Bearer tok-1", "Bearer tok-2", "Bearer tok-2"]
+
+
+def test_shared_auth_is_one_object_per_registration():
+    """MCP 연결과 게이트웨이 클라이언트가 같은 토큰 캐시를 쓴다 — 설정이 같으면 같은 객체."""
+    from app.config.settings import Settings
+    from app.tools.oauth_client import shared_auth
+
+    s1 = Settings(_env_file=None, auth_client_secret="x")
+    s2 = Settings(_env_file=None, auth_client_secret="x")
+    other = Settings(_env_file=None, auth_client_secret="x", auth_scope="ops:read")
+
+    assert shared_auth(s1) is shared_auth(s2)
+    assert shared_auth(other) is not shared_auth(s1)

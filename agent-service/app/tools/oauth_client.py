@@ -1,4 +1,4 @@
-"""Client Credentials 토큰 처리 (ADR-0016) — httpx.Auth 구현으로 MCP 연결에 주입한다.
+"""Client Credentials 토큰 처리 (ADR-0016) — httpx.Auth 구현으로 MCP 연결과 게이트웨이 클라이언트에 주입한다.
 
 토큰은 프로세스 안에 캐시하고 만료 60초 전에 재발급한다. Client Credentials 에는 refresh token 이
 없으므로(RFC 6749 §4.4.3) 갱신 = 재발급이다. 승인 대기로 수 시간 중단된 그래프가 재개될 때
@@ -12,9 +12,11 @@ import base64
 import logging
 import time
 from urllib.parse import urlencode
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 
 import httpx
+
+from app.config.settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +62,9 @@ class ClientCredentialsAuth(httpx.Auth):
                 request=response.request,
                 response=response,
             )
-        payload = response.json()
+        self._store(response.json())
+
+    def _store(self, payload: dict) -> None:
         self._access_token = payload["access_token"]
         self._expires_at = time.monotonic() + float(payload.get("expires_in", 0))
         logger.info("액세스 토큰 발급 — client_id=%s expires_in=%ss", self._client_id, payload.get("expires_in"))
@@ -77,6 +81,38 @@ class ClientCredentialsAuth(httpx.Auth):
             request.headers["Authorization"] = f"Bearer {self._access_token}"
             yield request
 
-    def sync_auth_flow(self, request: httpx.Request):
-        # MCP 클라이언트는 비동기 전용 — 동기 경로는 지원하지 않는다
-        raise NotImplementedError("ClientCredentialsAuth 는 async 전용")
+    def _issue_sync(self, response: httpx.Response) -> None:
+        response.read()
+        if response.status_code != 200:
+            raise httpx.HTTPStatusError(
+                f"토큰 발급 실패 {response.status_code}: {response.text}",
+                request=response.request,
+                response=response,
+            )
+        self._store(response.json())
+
+    def sync_auth_flow(self, request: httpx.Request) -> Generator[httpx.Request, httpx.Response, None]:
+        # 동기 경로 = 라우터의 LLM 호출(invoke) — 규칙은 비동기와 동일
+        if self._is_expiring(time.monotonic()):
+            self._issue_sync((yield self._token_request()))
+        request.headers["Authorization"] = f"Bearer {self._access_token}"
+        response = yield request
+        if response.status_code == 401:
+            self._access_token = None
+            self._issue_sync((yield self._token_request()))
+            request.headers["Authorization"] = f"Bearer {self._access_token}"
+            yield request
+
+
+_shared: dict[tuple[str, str, str], ClientCredentialsAuth] = {}
+
+
+def shared_auth(settings: Settings) -> ClientCredentialsAuth:
+    """프로세스 공유 Auth — MCP 연결과 게이트웨이 클라이언트가 같은 토큰 캐시를 쓴다 (토큰 1개 = aud 2개).
+    같은 (token url·client id·scope) 조합이면 같은 객체를 돌려준다."""
+    key = (settings.auth_token_url, settings.auth_client_id, settings.auth_scope)
+    if key not in _shared:
+        _shared[key] = ClientCredentialsAuth(
+            settings.auth_token_url, settings.auth_client_id, settings.auth_client_secret, settings.auth_scope
+        )
+    return _shared[key]

@@ -13,7 +13,7 @@ from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from app.config.settings import Settings
-from app.tools.oauth_client import ClientCredentialsAuth
+from app.tools.oauth_client import shared_auth
 
 # control-plane 의 spring.ai.mcp.server.name 과 일치 — 관측·로그 대조용 식별자
 MCP_SERVER_NAME = "ops-control-plane"
@@ -21,11 +21,8 @@ MCP_SERVER_NAME = "ops-control-plane"
 
 def build_mcp_connections(settings: Settings) -> dict:
     """Streamable HTTP 연결 구성 — bearer 토큰은 httpx.Auth 가 요청마다 붙인다 (ADR-0016).
-    연결마다 새 Auth 객체이므로 토큰 캐시 수명 = 이 연결 구성의 수명 (분석 에이전트 캐시와 같다)."""
-    auth = ClientCredentialsAuth(
-        settings.auth_token_url, settings.auth_client_id, settings.auth_client_secret, settings.auth_scope
-    )
-    connection: dict = {"transport": "streamable_http", "url": settings.mcp_server_url, "auth": auth}
+    Auth 는 프로세스 공유 — 게이트웨이 클라이언트와 같은 토큰을 재사용한다 (발급 1회로 aud 2개)."""
+    connection: dict = {"transport": "streamable_http", "url": settings.mcp_server_url, "auth": shared_auth(settings)}
     return {MCP_SERVER_NAME: connection}
 
 

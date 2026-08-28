@@ -60,9 +60,12 @@ resume(Durable Execution)이 흡수한다. 수동 트리거 `POST /incidents/tri
 - `AUTH_CLIENT_ID` — 기본 `agent-service` (auth-server 등록명)
 - `AUTH_CLIENT_SECRET` — **필수** (기본값 없음, 미설정 = 기동 실패). infra/.env 의 `AUTH_CLIENT_SECRET_AGENT_SERVICE` 와 같은 값
 
-`/mcp` 호출은 OAuth2 Client Credentials bearer 토큰(스코프 `ops:read`, ADR-0016) — `app/tools/oauth_client.py` 의
-`httpx.Auth` 가 발급·캐시·만료 60초 전 재발급·401 시 1회 재시도를 요청 시점에 처리한다. 승인 권한(`ops:approve`)은
-이 클라이언트에 등록돼 있지 않아 에이전트 토큰으로는 승인 API 가 403 이다.
+`/mcp` 호출과 llm-gateway 호출은 같은 OAuth2 Client Credentials bearer 토큰(스코프 `ops:read llm:invoke`, aud 2개, ADR-0016) —
+`app/tools/oauth_client.py` 의 `httpx.Auth` 가 발급·캐시·만료 60초 전 재발급·401 시 1회 재시도를 요청 시점에 처리한다
+(프로세스 공유 1개 — `shared_auth`). 게이트웨이 쪽은 openai SDK 의 `api_key` 가 정적이라 `ChatOpenAI` 에 이 Auth 를 단
+httpx 클라이언트(`http_client`·`http_async_client`)를 주입해 SDK 가 넣은 bearer 를 덮어쓴다 — 서비스 식별(비용·한도)은
+토큰 `client_id` 가 대신하므로 `X-Client-Service` 헤더는 보내지 않는다. 승인 권한(`ops:approve`)은 이 클라이언트에
+등록돼 있지 않아 에이전트 토큰으로는 승인 API 가 403 이다.
 
 MCP 서버 다운 시: 도구 발견 실패는 로컬 도구만으로 강등해 부분 진행하고 다음 실행에서
 재발견, 호출 실패는 DAY 13 복원력 경로(NodeFailure 기록 → 부분 보고서)로 이어진다.
