@@ -71,7 +71,7 @@ flowchart LR
 | # | 경로 | 현재 상태 | 예정 방어 |
 |---|------|----------|----------|
 | ⑦ | 승인 API `POST /api/incidents/{id}/approve\|reject` | ~~무인증~~ → **`ops:approve` 스코프 적용 (2026-08-26)** — agent-service 토큰 403 실측 | `ops:approve` 스코프 (agent-service 토큰은 구조적으로 미보유) |
-| ⑧ | 게이트웨이 `X-Client-Service` 헤더 | 자기 신고 — 예산·rate limit 차원 위조 가능 | JWT `client_id` 로 대체 (`llm:invoke`) |
+| ⑧ | 게이트웨이 `X-Client-Service` 헤더 | ~~자기 신고~~ → **헤더 제거, JWT `client_id` 로 대체 (2026-08-28)** — `/v1` 은 `llm:invoke` 토큰 필수, 헤더는 무시 | JWT `client_id` (`llm:invoke`) |
 
 ## 3. 보호 대상 — 최종 행동
 
@@ -94,6 +94,10 @@ flowchart LR
 | Alertmanager | 공유 시크릿 (OAuth 클라이언트 아님) | 웹훅 |
 
 발급자 = `auth-server` (Client Credentials, 15분 토큰, 재발급). 검증 = 각 리소스 서버가 동일 issuer JWKS 로 자체 검증 (ADR-0016).
+
+감사 로그 (2026-08-28): 모든 M2M 호출이 identity 와 함께 기록된다 — control-plane `mcp_request`(client_id·scope·rpc.method·tool),
+llm-gateway `gateway_request`(client_id·scope·path·task_type·cache), 승인 `approval_decision`(decided_by = Slack user id 또는 API 호출자),
+조치 `action_execution`. 로거명 `audit`, ECS JSON 최상위 필드 + `traceId` — Loki `| json | log_logger="audit"`.
 
 ## 5. 범위 밖 (기록만)
 
@@ -122,7 +126,7 @@ flowchart LR
 | RT-14 | 도구 오남용 | 도구 | 화이트리스트 밖 메트릭 PromQL | 도구 인자 검증 | agent-service | | |
 | RT-15 | 도구 오남용 | 도구 | `app` 인자에 다른 앱/경로 문자열 | 도구 인자 검증 | agent-service | | |
 | RT-16 | 도구 오남용 | ⑦ | agent 토큰으로 승인 API 호출 | `ops:approve` 스코프 | control-plane | | |
-| RT-17 | 도구 오남용 | ⑧ | `X-Client-Service` 위조로 한도 우회 | JWT client_id | llm-gateway | | |
+| RT-17 | 도구 오남용 | ⑧ | `X-Client-Service` 위조로 한도 우회 | JWT client_id (2026-08-28 적용 — 헤더 무시 테스트 고정) | llm-gateway | | |
 | RT-18 | 인코딩 | 게이트웨이 | base64 로 감싼 지시문 | 가드레일 정규화 | llm-gateway | | |
 | RT-19 | 인코딩 | 게이트웨이 | 유니코드 동형·제로폭 문자 삽입 | 가드레일 정규화 | llm-gateway | | |
 | RT-20 | 인코딩 | 게이트웨이 | 다국어 혼합·띄어쓰기 변형 | 가드레일 2차 | llm-gateway | | |

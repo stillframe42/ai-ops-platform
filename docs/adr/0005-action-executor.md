@@ -90,6 +90,15 @@ E2E 실측(승인 → docker restart 자동 실행 → 회복 확인 완주) 직
 - 재평가 조건(갱신): 보안 주간에 RBAC 최소 권한 설계와 함께 자동 실행 복귀를 최종 결정
   (근거 ③의 수용 여부 포함 — 사람 자각 vs 자동화 이득).
 
+## 추가 사항 (2026-08-28): 보안 주간 재평가 — 자동 실행 복귀 안 함 (ADR-0016 확정과 결합)
+
+OAuth 스코프 모델(ADR-0016)이 보호하는 대상은 **승인 결정**(`ops:approve`)이며, 조치 실행 권한은
+control-plane ServiceAccount 의 K8s RBAC(deployments patch) 문제라 스코프 설계와 독립이다. 근거 ③
+(파급 있는 조치는 사람의 자각 아래)이 잔존하고, 이번 주 범위(인증·주입 방어·레드팀)에 RBAC 최소 권한
+설계가 포함되지 않아 **수동 조치 안내를 유지**한다. 승인·실행은 감사 로그(`approval_decision`·
+`action_execution` — decided_by·action·ok·manual, incident_id 축)로 추적된다. 재평가 조건: control-plane 에
+전용 ServiceAccount·Role 을 부여하는 작업이 잡히는 시점.
+
 ## 결과
 
 - 쉬워지는 것: 승인·감사·실행의 단일 책임 지점. agent-service 의 읽기 전용 유지. 조치 이력이 `action_approvals` 한 테이블로 남는다.

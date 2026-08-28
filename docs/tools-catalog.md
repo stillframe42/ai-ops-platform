@@ -33,6 +33,8 @@
 - 스코프는 `/mcp` 경로 단위로 검사한다 (`SecurityConfig`) — 조회 도구 3종이 전부 읽기 전용이라 도구별 차등이 없다.
   조치 경로는 MCP 도구가 아니라 승인 API(`POST /api/incidents/{id}/approve|reject`, `ops:approve`) — agent-service 토큰에는
   이 스코프가 없어 403 (구조적 승인 불가, ADR-0005 추가 사항)
+- llm-gateway `/v1/*` 는 `llm:invoke` (agent-service·control-plane 양쪽 보유) — 도구가 아니라 LLM 호출 경로지만 같은 토큰·같은 검증 규칙.
+  모든 MCP 요청·게이트웨이 요청은 감사 로그(`audit` 로거, client_id·scope·도구명)에 남는다 (2026-08-28)
 
 - MCP 도구 3종은 전부 `readOnlyHint=true / destructiveHint=false / idempotentHint=true / openWorldHint=false` 로 광고 (기본값이 destructiveHint=true 라 명시 필요 — DAY 15 실측)
 - 연결 실패의 두 층: 발견(tools/list) 실패 → 로컬 도구만으로 강등 완주, 호출(tools/call) 실패 → NodeFailure → 부분 보고서 (DAY 16 실측)

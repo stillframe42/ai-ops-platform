@@ -150,8 +150,8 @@ flowchart LR
 | control-plane → PostgreSQL | JPA (스키마 소유는 Flyway, `ddl-auto: validate`) — `incident_reports` | 확정 (2026-07-27) |
 | control-plane → Slack (알림) | incoming webhook (분석 보고 알림, 커밋 후 발송) | 확정 (2026-07-27 실전송) |
 | control-plane ↔ Slack (승인) | Slack App — 카드·마감·스레드는 chat.postMessage/update (Bot Token), 버튼 수신은 Socket Mode 아웃바운드 WebSocket (App Token) | 확정 ([ADR-0006](adr/0006-slack-approval-ux.md) — 2026-08-04 실연결·3경로 실측) |
-| agent-service → llm-gateway | OpenAI 호환 HTTP (`/v1/chat/completions`) — X-Task-Type(라우팅)·X-Client-Service(비용/한도), 응답에 X-Gateway-Cache/Fallback/Downgrade | 확정 ([ADR-0015](adr/0015-llm-gateway.md) — 2026-08-17 전환, 프로바이더 직접 호출 경로 0) |
-| control-plane → llm-gateway | OpenAI 호환 HTTP (`/v1/embeddings`) — 유사 인시던트 검색·L2 캐시 임베딩 | 확정 ([ADR-0015](adr/0015-llm-gateway.md)) |
+| agent-service → llm-gateway | OpenAI 호환 HTTP (`/v1/chat/completions`) + OAuth2 bearer(`llm:invoke`) — X-Task-Type(라우팅), 비용/한도 차원은 JWT client_id, 응답에 X-Gateway-Cache/Fallback/Downgrade | 확정 ([ADR-0015](adr/0015-llm-gateway.md) — 2026-08-17 전환, 프로바이더 직접 호출 경로 0 · [ADR-0016](adr/0016-mcp-authentication.md) 2026-08-28 토큰 전환) |
+| control-plane → llm-gateway | OpenAI 호환 HTTP (`/v1/embeddings`) + OAuth2 bearer(`llm:invoke`, OkHttp 인터셉터) — 유사 인시던트 검색 임베딩 | 확정 ([ADR-0015](adr/0015-llm-gateway.md) · [ADR-0016](adr/0016-mcp-authentication.md)) |
 | llm-gateway → LLM API | HTTPS — Anthropic(주)·OpenAI(교차 검증·폴백·임베딩), 프로바이더 장애 시 폴백 체인(교차 재중계 → 로컬 폴백 응답) + 프로바이더 단위 서킷 | 확정 ([ADR-0007](adr/0007-llm-provider.md)·[ADR-0015](adr/0015-llm-gateway.md) — 키 무효화 실측 2026-08-20) |
 | llm-gateway → Redis | L1 정확 캐시 · rate limit 버킷(Bucket4j) · 예산 카운터 — 전부 외부 저장 (replica 2 전제) | 확정 (Phase 3~4, 2026-08-18~19) |
 | llm-gateway → PostgreSQL | `llmgateway` DB — L2 의미 캐시(pgvector, 유사도 0.95) · 비용 원장(JdbcTemplate) | 확정 (Phase 3~4) |

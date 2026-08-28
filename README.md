@@ -110,7 +110,7 @@ docker build -t aiops/llm-gateway:local llm-gateway/
 docker build -t aiops/auth-server:local auth-server/
 kind load docker-image --name aiops aiops/control-plane:local aiops/agent-service:local aiops/target-app:local aiops/llm-gateway:local aiops/auth-server:local
 
-# 3. Secret 반입 (.env 2곳 → K8s Secret, 값 미출력 — 임시 방식, 보안 주간 재검토 예정)
+# 3. Secret 반입 (.env 2곳 → K8s Secret, 값 미출력 — 확정 방식: Secret 직접 생성 + values 미기록, ADR-0016)
 ./infra/k8s/create-secrets.sh
 
 # 4. 전체 설치 — umbrella 한 번으로 앱 6종(llm-gateway·auth-server 포함) + DB/Kafka/Redis + 모니터링·로그
