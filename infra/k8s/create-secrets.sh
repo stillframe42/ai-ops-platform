@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# 임시 Secret 반입 (DAY 27) — .env 2곳에서 시크릿 키만 골라
-# K8s Secret 을 생성한다. 값은 stdout 에 출력하지 않는다.
-# 임시 방식: Secret 관리 체계(외부 Secret 저장소 등)는 보안 주간 이월 항목으로 재검토한다.
+# Secret 반입 (DAY 27 신설, 2026-08-28 확정) — .env 2곳에서 시크릿 키만 골라 K8s Secret 을 생성한다.
+# 값은 stdout 에 출력하지 않는다. 확정 방식 (ADR-0016 Secret 관리): K8s Secret 직접 생성 + 차트 values 미기록 +
+# compose 는 .env pass-through. 외부 Secret 매니저(External Secrets 등)는 단일 kind 클러스터 규모에서 범위 밖으로 판단.
 #
 # 원천 (git 미추적):
 #   infra/.env          — OPENAI/SLACK 3종+웹훅/AUTH_CLIENT_SECRET 3종/ALERTMANAGER_WEBHOOK_SECRET (+LANGFUSE 2종은 미반입)
@@ -47,9 +47,11 @@ LITERALS=("--from-literal=POSTGRES_USER=$PG_USER" "--from-literal=POSTGRES_PASSW
 make_secret postgres-secrets
 
 LITERALS=("--from-literal=POSTGRES_USER=$PG_USER" "--from-literal=POSTGRES_PASSWORD=$PG_PASS")
-args_from "$INFRA_ENV" OPENAI_API_KEY SLACK_WEBHOOK_URL SLACK_BOT_TOKEN SLACK_APP_TOKEN SLACK_APPROVAL_CHANNEL
-# 웹훅 공유 시크릿 (ADR-0016) — 인증 항상 필수라 빈 값이면 control-plane 이 기동 실패로 드러난다
+args_from "$INFRA_ENV" SLACK_WEBHOOK_URL SLACK_BOT_TOKEN SLACK_APP_TOKEN SLACK_APPROVAL_CHANNEL
+# 웹훅 공유 시크릿 + 게이트웨이 호출용 클라이언트 시크릿 (ADR-0016) — 인증 항상 필수라 빈 값이면 control-plane 이 기동 실패로 드러난다.
+# OPENAI_API_KEY 는 더 이상 반입하지 않는다 — 임베딩은 게이트웨이 경유 + OAuth 토큰
 args_from "$INFRA_ENV" ALERTMANAGER_WEBHOOK_SECRET
+v="$(getv "$INFRA_ENV" AUTH_CLIENT_SECRET_CONTROL_PLANE)"; [ -n "$v" ] && LITERALS+=("--from-literal=AUTH_CLIENT_SECRET=$v")
 make_secret control-plane-secrets
 
 LITERALS=()

@@ -27,8 +27,8 @@ spec:
             - name: JAVA_TOOL_OPTIONS
               value: {{ .Values.javaToolOptions | quote }}
           envFrom:
-            # OPENAI·SLACK 4종·POSTGRES 2종 — 미반입 키는 키-게이트 비활성 (pass-through 승계).
-            # ALERTMANAGER_WEBHOOK_SECRET 은 필수 (ADR-0016 — 미반입 시 기동 실패). JWT issuer 는 docker 프로파일 소유
+            # SLACK 4종·POSTGRES 2종 — 미반입 키는 키-게이트 비활성 (pass-through 승계).
+            # ALERTMANAGER_WEBHOOK_SECRET·AUTH_CLIENT_SECRET 은 필수 (ADR-0016 — 미반입 시 기동 실패). JWT issuer·토큰 URL 은 docker 프로파일 소유
             - secretRef:
                 name: {{ .Values.existingSecret }}
           readinessProbe:

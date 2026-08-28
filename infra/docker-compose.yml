@@ -93,7 +93,8 @@ services:
 
   llm-gateway:
     # 용도: 모든 LLM 호출의 단일 관문 (ADR-0015) — 라우팅·캐싱·비용·폴백·한도.
-    # 프로바이더 실키는 이 서비스만 보유 — 클라이언트(agent-service·control-plane)는 키 없이 경유
+    # 프로바이더 실키는 이 서비스만 보유 — 클라이언트(agent-service·control-plane)는 키 없이 경유.
+    # /v1 은 OAuth2 리소스 서버 (llm:invoke, ADR-0016) — JWT issuer 는 docker 프로파일 소유, 시크릿 불필요
     build: ../llm-gateway
     container_name: llm-gateway
     environment:
@@ -132,9 +133,10 @@ services:
     # Kafka 접속 주소는 application-docker.yml 이관 (datasource 선례 — 환경 차이값은 프로파일 소유).
     # kafka 에 depends_on 을 걸지 않는다 — Kafka 다운 시에도 webhook 202 수신은 유지(발행 실패는 로그)가 설계 경로
     environment:
-      # 시드 인시던트 임베딩 전용 키 (OpenAI) — 미설정 시 검색 도구만 조용히 비활성
-      OPENAI_API_KEY:
-      # Alertmanager 웹훅 공유 시크릿 (ADR-0016) — 미설정 = 기동 실패 (인증 항상 필수). JWT issuer 는 docker 프로파일 소유
+      # 임베딩은 llm-gateway 경유 + OAuth 토큰 (ADR-0016) — 프로바이더 키 불필요. 게이트웨이 호출용 클라이언트 시크릿은
+      # auth-server 등록값과 같은 원천(infra/.env)을 이름만 바꿔 전달, 미설정이면 compose 자체가 실패 (인증 항상 필수)
+      AUTH_CLIENT_SECRET: ${AUTH_CLIENT_SECRET_CONTROL_PLANE:?infra/.env 의 AUTH_CLIENT_SECRET_CONTROL_PLANE 필요}
+      # Alertmanager 웹훅 공유 시크릿 (ADR-0016) — 미설정 = 기동 실패 (인증 항상 필수). JWT issuer·토큰 URL 은 docker 프로파일 소유
       ALERTMANAGER_WEBHOOK_SECRET:
       # Slack Incoming Webhook (DAY 19) — 미설정 시 알림 비활성
       SLACK_WEBHOOK_URL:
