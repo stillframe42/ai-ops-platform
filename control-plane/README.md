@@ -14,6 +14,16 @@
   (`ALERTMANAGER_WEBHOOK_SECRET`, 필수) / actuator probe·스크레이프 permitAll. issuer 는 env `AUTH_ISSUER_URI`
   (기본 `http://localhost:8091`, docker 프로파일은 `http://auth-server:8091`). 무인증 상태는 없다 —
   MCP Inspector 등 수동 호출은 auth-server 에서 토큰을 발급받아 `--header "Authorization: Bearer <토큰>"`
+- **llm-gateway OAuth 클라이언트** (2026-08-28, ADR-0016) — 임베딩 호출의 bearer 를 Client Credentials 토큰(`llm:invoke`,
+  client_id `control-plane`)으로 교체. Spring AI 2.0 의 OpenAI 클라이언트는 공식 openai-java SDK(OkHttp)라 RestClient
+  인터셉터가 닿지 않아 `OpenAiHttpClientBuilderCustomizer` 로 OkHttp 인터셉터(`GatewayTokenInterceptor`)를 단다 —
+  발급·캐시·만료 60초 전 재발급은 `OAuth2AuthorizedClientManager`, 401 은 재발급 후 1회 재시도. 시크릿 `AUTH_CLIENT_SECRET`
+  (필수), 토큰 URL `AUTH_TOKEN_URL` (기본 `http://localhost:8091/oauth2/token`). OPENAI_API_KEY 는 더 이상 쓰지 않는다
+- **감사 로그** (2026-08-28, ADR-0016) — 로거명 `audit`, 필드는 MDC → docker 프로파일 ECS JSON 최상위 필드
+  (`traceId` 는 tracing 이 같은 경로로 채움). 3종: `mcp_request`(`McpAuditFilter` — client_id·scope·rpc.method·tool·http.status,
+  도구 본체가 MCP 서버의 별도 스레드에서 돌 수 있어 서블릿 필터에서 기록) / `approval_decision`(incident_id·status·decided_by) /
+  `action_execution`(incident_id·action·ok·manual). ECS 는 점 표기 키를 중첩한다(`audit.type` → `audit:{type}`) — Loki `json` 파서가
+  다시 평탄화해 `audit_type`·`http_status`·`client_id` 로 질의: `{service="control-plane"} | json | log_logger="audit" | tool="searchSimilarIncidents"`
 - **MCP 도구 호출 계측** (DAY 17) — `mcp_tool_calls_seconds_*{tool, outcome}` (Spring AI 2.0.0 에
   내장 관측이 없어 명시적 계측 — `McpToolMetrics`, outcome: success/degraded/failure). Grafana
   `MCP 도구 호출` 대시보드, 전체 도구 일람은 `docs/tools-catalog.md`
@@ -54,7 +64,7 @@
 
 ```bash
 ./gradlew test          # 단위 테스트 (실 DB·임베딩 API 무의존)
-./gradlew bootRun       # 로컬 실행 — postgres(5433)의 controlplane DB·auth-server(8091)·ALERTMANAGER_WEBHOOK_SECRET 필요 (OPENAI_API_KEY 는 선택)
+./gradlew bootRun       # 로컬 실행 — postgres(5433)의 controlplane DB·auth-server(8091)·ALERTMANAGER_WEBHOOK_SECRET·AUTH_CLIENT_SECRET 필요
 ```
 
 컨테이너 실행은 `infra/docker-compose.yml` (전체 스택 단일 진입점). 필요한 환경 변수는 compose 의 control-plane 서비스 주석 참고.

@@ -11,6 +11,22 @@ spring:
           issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8091}
           # aud 검사 — llm-gateway 용 토큰이 여기서 통하지 않게 (단일 토큰 다중 aud 의 리소스별 검사)
           audiences: control-plane
+      client:
+        # llm-gateway 호출용 클라이언트 (ADR-0016) — control-plane 은 리소스 서버이자 게이트웨이의 OAuth 클라이언트.
+        # Client Credentials 토큰은 AuthorizedClientManager 가 캐시·만료 60초 전 재발급, 부착은 GatewayTokenInterceptor
+        registration:
+          llm-gateway:
+            client-id: control-plane
+            # 기본값 없음: 미설정 = 기동 실패 (인증 항상 필수). 값은 infra/.env 의 AUTH_CLIENT_SECRET_CONTROL_PLANE (git 미추적, 값 미출력)
+            client-secret: ${AUTH_CLIENT_SECRET}
+            authorization-grant-type: client_credentials
+            # scope 생략 = 빈 스코프·aud 없는 토큰 발급 → 게이트웨이 401 (8/26 실측) — 반드시 명시
+            scope: llm:invoke
+            provider: auth-server
+        provider:
+          auth-server:
+            # issuer-uri 대신 token-uri — issuer 로 두면 기동 시 메타데이터 조회로 auth-server 에 기동 순서가 결합된다
+            token-uri: ${AUTH_TOKEN_URL:http://localhost:8091/oauth2/token}
 
   # 주입 RestClient.Builder 공통 타임아웃 (8/19 — SlackNotifier·TargetAppActionExecutor 의
   # 사용처별 requestFactory 조립 중복 제거. Boot 4 현행 키는 clients 복수형)
@@ -64,9 +80,9 @@ spring:
         protocol: STREAMABLE
 
     openai:
-      # 임베딩 전용 키 — .env / 환경 변수 (git 미추적, 값 미출력).
-      # 기본값 빈 문자열: 키가 없어도 기동은 되고, 검색 도구만 조용히 비활성 (Langfuse 키-게이트 관례)
-      api-key: ${OPENAI_API_KEY:}
+      # 자리 표시 값 — 프로바이더 실키는 llm-gateway 만 보유하고, 실제 Authorization 은 GatewayTokenInterceptor 가
+      # OAuth 토큰으로 교체한다 (ADR-0016). SDK 가 빈 키를 거부하므로 비어 있지 않은 고정 문자열을 둔다
+      api-key: gateway-token
       # 임베딩 호출은 llm-gateway 경유 (ADR-0015 단일 통과점) — 기본값은 호스트 실행 기준, docker 프로파일이 덮어쓴다.
       # /v1 포함 필수 — 공식 SDK 는 base-url 에 /embeddings 만 덧붙인다 (DAY 31 실측 404)
       base-url: http://localhost:8090/v1

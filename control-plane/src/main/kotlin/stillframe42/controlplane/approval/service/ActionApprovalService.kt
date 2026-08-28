@@ -13,6 +13,7 @@ import stillframe42.controlplane.approval.model.ApprovalDecisionOutcome
 import stillframe42.controlplane.approval.model.ApprovalStatus
 import stillframe42.controlplane.approval.model.SlackMessageRef
 import stillframe42.controlplane.approval.repository.ActionApprovalRepository
+import stillframe42.controlplane.audit.AuditLog
 import tools.jackson.databind.json.JsonMapper
 
 /**
@@ -80,7 +81,11 @@ class ActionApprovalService(
                 throw DecisionPublishFailedException(incidentId)
             }
         }
-        logger.info("승인 결정 — {} {} (by {})", incidentId, status, decidedBy)
+        AuditLog.record(
+            AUDIT_DECISION,
+            mapOf("incident_id" to incidentId, "status" to status, "decided_by" to decidedBy),
+            "승인 결정 — $incidentId $status (by $decidedBy)",
+        )
         // Slack 카드 마감·스레드 회신은 AFTER_COMMIT 리스너 (ApprovalDecidedListener) —
         // 입력 경로(버튼·API·타임아웃)와 무관하게 여기 한 곳에서 연결된다
         applicationEventPublisher.publishEvent(ApprovalDecided(incidentId, status, decidedBy, decidedAt))
@@ -103,6 +108,13 @@ class ActionApprovalService(
     /** 실행 결과 감사 기록 — 실행 리스너 스레드에서 새 트랜잭션 (물리적으로 이미 일어난 사실의 기록) */
     @Transactional
     fun recordExecution(incidentId: String, executedAt: Instant, executions: List<ActionExecution>) {
+        executions.forEach {
+            AuditLog.record(
+                AUDIT_EXECUTION,
+                mapOf("incident_id" to incidentId, "action" to it.action, "ok" to it.ok.toString(), "manual" to it.manual.toString()),
+                "조치 실행 — $incidentId ${it.action} ok=${it.ok} manual=${it.manual}: ${it.detail}",
+            )
+        }
         val note = executions.joinToString(" / ") {
             val outcome = if (it.manual) "수동 안내" else if (it.ok) "성공" else "실패"
             "${it.action}: $outcome — ${it.detail}"
@@ -156,4 +168,9 @@ class ActionApprovalService(
             "note" to "",
         ),
     )
+
+    companion object {
+        const val AUDIT_DECISION = "approval_decision"
+        const val AUDIT_EXECUTION = "action_execution"
+    }
 }

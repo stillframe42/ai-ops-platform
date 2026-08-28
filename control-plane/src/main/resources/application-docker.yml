@@ -19,6 +19,10 @@ spring:
         jwt:
           # 컨테이너 네트워크 기준 issuer — auth-server 의 AUTH_ISSUER 와 같은 값 (K8s Service 명 = compose 컨테이너명)
           issuer-uri: http://auth-server:8091
+      client:
+        provider:
+          auth-server:
+            token-uri: http://auth-server:8091/oauth2/token
 
   ai:
     openai:
