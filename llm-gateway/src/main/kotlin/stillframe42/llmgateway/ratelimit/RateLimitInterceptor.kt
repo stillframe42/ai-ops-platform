@@ -7,6 +7,7 @@ import org.springframework.http.MediaType
 import org.springframework.web.servlet.HandlerInterceptor
 import stillframe42.llmgateway.api.OpenAiError
 import stillframe42.llmgateway.relay.GatewayMetrics
+import stillframe42.llmgateway.security.ClientIdentity
 import tools.jackson.databind.ObjectMapper
 
 /**
@@ -22,7 +23,7 @@ class RateLimitInterceptor(
     private val logger = LoggerFactory.getLogger(javaClass)
 
     override fun preHandle(request: HttpServletRequest, response: HttpServletResponse, handler: Any): Boolean {
-        val service = request.getHeader("X-Client-Service") ?: "unknown"
+        val service = ClientIdentity.current()
         val decision = rateLimiter.tryConsume(service)
         if (decision.allowed) return true
 

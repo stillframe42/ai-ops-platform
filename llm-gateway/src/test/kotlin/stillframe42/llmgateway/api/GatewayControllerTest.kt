@@ -4,6 +4,9 @@ import org.junit.jupiter.api.Test
 import org.mockito.BDDMockito.given
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
+import org.springframework.context.annotation.Import
+import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt
 import org.springframework.http.MediaType
 import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.servlet.MockMvc
@@ -15,8 +18,12 @@ import stillframe42.llmgateway.cache.CacheStatus
 import stillframe42.llmgateway.cache.CachedChatResult
 import stillframe42.llmgateway.cache.CachingChatService
 import stillframe42.llmgateway.relay.EmbeddingRelayService
+import stillframe42.llmgateway.security.SecurityConfig
+import stillframe42.llmgateway.security.SecurityConfigTest
 
+// 슬라이스에 보안 자동구성이 포함된다 — 인가 규칙은 SecurityConfigTest 소관, 여기서는 agent 토큰으로 통과만 시킨다
 @WebMvcTest(GatewayController::class)
+@Import(SecurityConfig::class, SecurityConfigTest.JwtStub::class)
 class GatewayControllerTest {
 
     @Autowired
@@ -27,6 +34,8 @@ class GatewayControllerTest {
 
     @MockitoBean
     lateinit var embeddingRelay: EmbeddingRelayService
+
+    private fun agentToken() = jwt().jwt { it.subject("agent-service") }.authorities(SimpleGrantedAuthority(SecurityConfig.SCOPE_LLM_INVOKE))
 
     private fun response() = ChatCompletionResponse(
         id = "chatcmpl-test",
@@ -44,12 +53,12 @@ class GatewayControllerTest {
             model = "claude-sonnet-5",
             messages = listOf(ChatMessage(role = "user", content = "ping")),
         )
-        given(cachingChat.complete(request, "monitoring-summary", null, "unknown"))
+        given(cachingChat.complete(request, "monitoring-summary", null, "agent-service"))
             .willReturn(CachedChatResult(response(), CacheStatus.MISS))
 
         mockMvc.perform(
             post("/v1/chat/completions")
-                .contentType(MediaType.APPLICATION_JSON)
+                .contentType(MediaType.APPLICATION_JSON).with(agentToken())
                 .header("X-Task-Type", "monitoring-summary")
                 .content("""{"model":"claude-sonnet-5","messages":[{"role":"user","content":"ping"}]}"""),
         )
@@ -65,12 +74,12 @@ class GatewayControllerTest {
     @Test
     fun `캐시 적중은 X-Gateway-Cache 헤더로 드러난다 - no-cache 헤더는 그대로 전달`() {
         val request = ChatCompletionRequest(messages = listOf(ChatMessage(role = "user", content = "ping")))
-        given(cachingChat.complete(request, null, "no-cache", "unknown"))
+        given(cachingChat.complete(request, null, "no-cache", "agent-service"))
             .willReturn(CachedChatResult(response(), CacheStatus.BYPASS))
 
         mockMvc.perform(
             post("/v1/chat/completions")
-                .contentType(MediaType.APPLICATION_JSON)
+                .contentType(MediaType.APPLICATION_JSON).with(agentToken())
                 .header("X-Cache-Control", "no-cache")
                 .content("""{"messages":[{"role":"user","content":"ping"}]}"""),
         )
@@ -81,12 +90,12 @@ class GatewayControllerTest {
     @Test
     fun `폴백 발생은 X-Gateway-Fallback 헤더로 드러난다`() {
         val request = ChatCompletionRequest(messages = listOf(ChatMessage(role = "user", content = "ping")))
-        given(cachingChat.complete(request, null, null, "unknown"))
+        given(cachingChat.complete(request, null, null, "agent-service"))
             .willReturn(CachedChatResult(response(), CacheStatus.MISS, fallbackTarget = "openai"))
 
         mockMvc.perform(
             post("/v1/chat/completions")
-                .contentType(MediaType.APPLICATION_JSON)
+                .contentType(MediaType.APPLICATION_JSON).with(agentToken())
                 .content("""{"messages":[{"role":"user","content":"ping"}]}"""),
         )
             .andExpect(status().isOk)
@@ -96,12 +105,12 @@ class GatewayControllerTest {
     @Test
     fun `폴백이 없으면 X-Gateway-Fallback 헤더도 없다`() {
         val request = ChatCompletionRequest(messages = listOf(ChatMessage(role = "user", content = "ping")))
-        given(cachingChat.complete(request, null, null, "unknown"))
+        given(cachingChat.complete(request, null, null, "agent-service"))
             .willReturn(CachedChatResult(response(), CacheStatus.MISS))
 
         mockMvc.perform(
             post("/v1/chat/completions")
-                .contentType(MediaType.APPLICATION_JSON)
+                .contentType(MediaType.APPLICATION_JSON).with(agentToken())
                 .content("""{"messages":[{"role":"user","content":"ping"}]}"""),
         )
             .andExpect(status().isOk)
@@ -112,7 +121,7 @@ class GatewayControllerTest {
     fun `stream=true 요청은 400 - OpenAI 오류 계약`() {
         mockMvc.perform(
             post("/v1/chat/completions")
-                .contentType(MediaType.APPLICATION_JSON)
+                .contentType(MediaType.APPLICATION_JSON).with(agentToken())
                 .content("""{"stream":true,"messages":[{"role":"user","content":"ping"}]}"""),
         )
             .andExpect(status().isBadRequest)
@@ -124,7 +133,7 @@ class GatewayControllerTest {
     fun `빈 messages 는 400`() {
         mockMvc.perform(
             post("/v1/chat/completions")
-                .contentType(MediaType.APPLICATION_JSON)
+                .contentType(MediaType.APPLICATION_JSON).with(agentToken())
                 .content("""{"messages":[]}"""),
         )
             .andExpect(status().isBadRequest)
@@ -135,7 +144,7 @@ class GatewayControllerTest {
     fun `임베딩 input 타입 오류는 400 - param 지목`() {
         mockMvc.perform(
             post("/v1/embeddings")
-                .contentType(MediaType.APPLICATION_JSON)
+                .contentType(MediaType.APPLICATION_JSON).with(agentToken())
                 .content("""{"input":123}"""),
         )
             .andExpect(status().isBadRequest)
@@ -156,7 +165,7 @@ class GatewayControllerTest {
 
         mockMvc.perform(
             post("/v1/embeddings")
-                .contentType(MediaType.APPLICATION_JSON)
+                .contentType(MediaType.APPLICATION_JSON).with(agentToken())
                 .content("""{"input":"유사 인시던트 검색"}"""),
         )
             .andExpect(status().isOk)

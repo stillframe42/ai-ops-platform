@@ -11,7 +11,8 @@
 | 3 | 비용 추적 + 예산 통제 — 중앙 집계·초과 시 저비용 모델 다운그레이드 | Phase 4 |
 | 4 | 폴백 — Anthropic 장애 시 OpenAI 전환 (Resilience4j) + 고가용성 (replica 2·PDB) | Phase 5 |
 | 5 | Rate Limiting — Bucket4j + Redis, 서비스별 한도 | Phase 4 |
-| 6 | 입출력 가드레일 + 인증 전파 — 확장 지점만 확보 | 7주차 (보안 주간) |
+| 6 | OAuth2 리소스 서버 — `/v1` 전부 `llm:invoke` 토큰 필수, 서비스 식별 = JWT client_id, 요청 감사 로그 | 2026-08-28 (ADR-0016) |
+| 7 | 입출력 가드레일 — 확장 지점만 확보 | 보안 주간 후반 |
 
 ## API — OpenAI 호환
 
@@ -48,7 +49,8 @@
 | `X-Task-Type` | 요청 | 라우팅 정책 키 (monitoring-summary / root-cause-analysis / ...) | 2 |
 | `X-Cache-Control: no-cache` | 요청 | 캐싱 제외 (실시간 메트릭 분석 요청) | 3 |
 | `X-Gateway-Cache` | 응답 | 캐시 판정 노출 (`exact_hit` / `semantic_hit` / `miss` / `bypass`) | 3 |
-| `X-Client-Service` | 요청 | 비용 집계·예산·rate limit 의 서비스 차원 (부재 = `unknown`) | 4 |
+| ~~`X-Client-Service`~~ | 요청 | **제거 (2026-08-28)** — 서비스 차원은 검증된 JWT 의 `sub`(client_id). 헤더는 무시된다 | 4 → ADR-0016 |
+| `Authorization: Bearer <JWT>` | 요청 | auth-server 발급 Client Credentials 토큰 — `aud` 에 `llm-gateway`, 스코프 `llm:invoke` (무토큰 401 · 스코프 부재 403) | ADR-0016 |
 | `X-Gateway-Downgrade: budget-exceeded` | 응답 | 예산 100% 도달로 저비용 모델 강제 전환됨 (응답 `model` 필드와 함께 확인) | 4 |
 | `Retry-After` | 응답 (429) | 분당 한도 초과 시 재시도 대기 초 | 4 |
 | `X-Gateway-Fallback` | 응답 | 주 프로바이더 장애로 폴백 발생 (`openai` = 교차 프로바이더 재중계, `local` = 로컬 폴백 응답) | 5 |
@@ -93,9 +95,20 @@
 
 ## Rate Limiting (Phase 4)
 
-- Bucket4j + Redis 토큰 버킷 (`gw:rl:` — 분산 대응), `X-Client-Service` 별 분당 한도 (`gateway.ratelimit`, docker 프로파일만 활성)
+- Bucket4j + Redis 토큰 버킷 (`gw:rl:` — 분산 대응), JWT client_id 별 분당 한도 (`gateway.ratelimit.service-rpm` 의 키 = client_id, docker 프로파일만 활성)
 - 초과 시 **429 + `Retry-After`** (OpenAI `rate_limit_error` 계약 — 클라이언트 SDK 표준 재시도가 그대로 동작)
 - Redis 장애 = 통과 (fail-open — 가용성 우선, fail-closed 요건은 보안 주간 재검토)
+
+## 인증 + 감사 로그 (ADR-0016)
+
+- `/v1` 하위 = OAuth2 리소스 서버 (`SecurityConfig`) — control-plane 과 같은 issuer (`AUTH_ISSUER_URI`, 기본 `http://localhost:8091`,
+  docker 프로파일 `http://auth-server:8091`) 의 JWKS 로 자체 검증, `audiences: llm-gateway`, `hasAuthority("SCOPE_llm:invoke")`.
+  actuator probe·스크레이프만 permitAll. 무인증 상태는 없다
+- 서비스 식별 (`ClientIdentity`) — 예산·rate limit·비용 원장의 service 차원 = 토큰 `sub`(client_id). 등록명이 서비스명과 같아
+  (`agent-service`·`control-plane`) `gateway.yml` 의 한도 키는 무수정
+- 감사 로그 (`GatewayAuditFilter`) — 로거명 `audit`, 요청당 1행, MDC 필드 `audit.type=gateway_request`·`client_id`·`scope`·
+  `http.path`·`task_type`·`http.status`·`cache` (docker 프로파일 ECS JSON 최상위 필드, `traceId` 동반).
+  Loki: `{service="llm-gateway"} | json | log_logger="audit" | client_id="agent-service"` (ECS 중첩 키는 `json` 파서가 `audit_type`·`http_status` 로 평탄화)
 
 ## 모듈 구조
 

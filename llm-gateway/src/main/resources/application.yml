@@ -2,6 +2,16 @@ spring:
   application:
     name: llm-gateway
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # 토큰 발급자 (ADR-0016) — auth-server 의 issuer 와 문자 단위 일치, 검증 키는 issuer 의 JWKS 에서 조회 (control-plane 과 같은 관례).
+          # 기본값은 호스트 실행 기준 — docker 프로파일이 컨테이너 주소로 덮어쓴다. 잘못된 값은 401 로 닫힌다 (무인증 상태 없음)
+          issuer-uri: ${AUTH_ISSUER_URI:http://localhost:8091}
+          # aud 검사 — control-plane 전용 토큰(ops:approve 만 등)이 여기서 통하지 않게
+          audiences: llm-gateway
+
   config:
     # 게이트웨이 도메인 정책(gateway.*)은 gateway.yml 로 분리 (8/22) — 이 파일은 프레임워크 배선만.
     # 병합 규칙: import 문서 > 이 파일, application-docker.yml(프로파일) > import 문서

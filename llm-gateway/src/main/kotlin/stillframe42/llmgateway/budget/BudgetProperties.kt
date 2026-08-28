@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 @ConfigurationProperties("gateway.budget")
 data class BudgetProperties(
     val dailyLimitUsd: Double? = null,
-    // 서비스별 일 한도 (X-Client-Service 헤더 기준) — 미등록 서비스는 전체 한도만 적용
+    // 서비스별 일 한도 (JWT client_id 기준) — 미등록 서비스는 전체 한도만 적용
     val serviceDailyLimitUsd: Map<String, Double> = emptyMap(),
     // 경고 발송 임계 비율 (전체 한도 기준)
     val warnRatio: Double = 0.8,

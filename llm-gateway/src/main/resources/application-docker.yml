@@ -5,6 +5,13 @@ logging:
       console: ecs
 
 spring:
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # 컨테이너 네트워크 기준 issuer — auth-server 의 AUTH_ISSUER 와 같은 값 (K8s Service 명 = compose 컨테이너명)
+          issuer-uri: http://auth-server:8091
+
   data:
     redis:
       # 정확 일치 캐시 — 클러스터·compose 공통 서비스명

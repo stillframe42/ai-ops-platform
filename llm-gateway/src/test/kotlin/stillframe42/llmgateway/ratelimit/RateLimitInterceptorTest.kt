@@ -1,12 +1,17 @@
 package stillframe42.llmgateway.ratelimit
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import org.springframework.mock.web.MockHttpServletRequest
 import org.springframework.mock.web.MockHttpServletResponse
+import org.springframework.security.core.authority.SimpleGrantedAuthority
+import org.springframework.security.core.context.SecurityContextHolder
+import org.springframework.security.oauth2.jwt.Jwt
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken
 import stillframe42.llmgateway.relay.GatewayMetrics
 import tools.jackson.databind.json.JsonMapper
 
@@ -15,6 +20,9 @@ class RateLimitInterceptorTest {
     private val registry = SimpleMeterRegistry()
     private val limiter = FakeRateLimiter()
     private val interceptor = RateLimitInterceptor(limiter, GatewayMetrics(registry), JsonMapper.builder().build())
+
+    @AfterTest
+    fun clearContext() = SecurityContextHolder.clearContext()
 
     @Test
     fun `한도 내 요청은 통과시킨다`() {
@@ -42,16 +50,24 @@ class RateLimitInterceptorTest {
     }
 
     @Test
-    fun `서비스 헤더 부재는 unknown 버킷으로 계량한다`() {
+    fun `인증 컨텍스트가 없으면 anonymous 버킷으로 계량한다`() {
         limiter.next = RateLimitDecision(allowed = true)
 
         interceptor.preHandle(request(service = null), MockHttpServletResponse(), Any())
 
-        assertEquals("unknown", limiter.lastService)
+        assertEquals("anonymous", limiter.lastService)
     }
 
+    /** 서비스 차원은 헤더가 아니라 검증된 토큰의 sub — 헤더를 넣어도 무시된다 */
     private fun request(service: String?) = MockHttpServletRequest("POST", "/v1/chat/completions").apply {
-        service?.let { addHeader("X-Client-Service", it) }
+        addHeader("X-Client-Service", "forged-service")
+        service?.let { authenticateAs(it) }
+    }
+
+    private fun authenticateAs(clientId: String) {
+        val jwt = Jwt.withTokenValue("t").header("alg", "RS256").subject(clientId).build()
+        SecurityContextHolder.getContext().authentication =
+            JwtAuthenticationToken(jwt, listOf(SimpleGrantedAuthority("SCOPE_llm:invoke")))
     }
 
     private class FakeRateLimiter : RateLimiter {
