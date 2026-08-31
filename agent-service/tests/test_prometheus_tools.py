@@ -2,11 +2,19 @@
 
 import json
 
+from app.security.untrusted import CLOSE_TAG
+
 import httpx
 import pytest
 
 from app.tools import prometheus_tools
 
+
+
+def _unwrap(out: str) -> str:
+    # 도구 결과는 untrusted 구분자로 감싸인다 — 본문만 파싱
+    assert out.startswith('<untrusted_content source="') and out.endswith(CLOSE_TAG)
+    return out.split("\n", 1)[1].rsplit("\n", 1)[0]
 
 def _success(data: dict) -> httpx.Response:
     return httpx.Response(200, json={"status": "success", "data": data})
@@ -30,7 +38,7 @@ def test_query_prometheus_returns_result_json(monkeypatch):
     _install(monkeypatch, handler)
     out = prometheus_tools.query_prometheus.invoke({"promql": 'up{job="target-app"}'})
 
-    result = json.loads(out)
+    result = json.loads(_unwrap(out))
     assert result[0]["value"][1] == "1"
 
 
@@ -84,7 +92,7 @@ def test_get_active_alerts_returns_alerts_with_labels(monkeypatch):
     _install(monkeypatch, handler)
     out = prometheus_tools.get_active_alerts.invoke({})
 
-    alerts = json.loads(out)
+    alerts = json.loads(_unwrap(out))
     assert alerts[0]["labels"]["scenario"] == "latency-surge"
     assert alerts[0]["state"] == "firing"
 
@@ -111,7 +119,7 @@ def test_compare_with_baseline_evaluates_now_and_one_hour_ago(monkeypatch):
     assert len(captured) == 2
     assert "time" not in captured[0]
     assert "time" in captured[1]
-    result = json.loads(out)
+    result = json.loads(_unwrap(out))
     assert set(result) == {"current", "baseline_1h_ago"}
 
 

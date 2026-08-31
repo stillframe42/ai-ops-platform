@@ -5,11 +5,19 @@ prometheus_tools 와 동일한 _transport 시임 주입 패턴.
 
 import json
 
+from app.security.untrusted import CLOSE_TAG
+
 import httpx
 import pytest
 
 from app.tools import loki_tools
 
+
+
+def _unwrap(out: str) -> str:
+    # 도구 결과는 untrusted 구분자로 감싸인다 — 본문만 파싱
+    assert out.startswith('<untrusted_content source="') and out.endswith(CLOSE_TAG)
+    return out.split("\n", 1)[1].rsplit("\n", 1)[0]
 
 def _success(result: list) -> httpx.Response:
     return httpx.Response(
@@ -67,7 +75,7 @@ def test_get_app_logs_flattens_streams_to_lines(monkeypatch):
     out = loki_tools.get_app_logs.invoke({"minutes": 10, "level": "ERROR"})
 
     # 스트림 구분·Loki 타임스탬프는 버리고 로그 라인만 — 라인 자체가 @timestamp 를 포함한 JSON
-    lines = json.loads(out)
+    lines = json.loads(_unwrap(out))
     assert lines == [
         '{"log":{"level":"ERROR"},"message":"boom-1"}',
         '{"log":{"level":"ERROR"},"message":"boom-2"}',

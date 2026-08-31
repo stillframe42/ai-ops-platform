@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 
 from app.config import get_settings
 from app.config.llm import create_llm
+from app.security.untrusted import UNTRUSTED_POLICY, wrap_untrusted
 from app.supervisor.state import AIOpsState, MonitoringResult
 from app.tools.prometheus_tools import (
     get_active_alerts,
@@ -44,7 +45,7 @@ target-app 주요 메트릭 (실제 노출 이름):
 
 응답 규칙: 마지막 메시지는 2~4문장의 상황 요약만 작성한다 — 관측 수치와 영향받는
 엔드포인트를 반드시 포함하라.
-"""
+""" + UNTRUSTED_POLICY
 
 MONITOR_TOOLS = [get_active_alerts, query_prometheus, query_prometheus_range]
 
@@ -75,7 +76,8 @@ async def monitor_node(state: AIOpsState) -> dict:
     task = HumanMessage(
         content=(
             f"인시던트 발생 — 시나리오: {incident.scenario}, Alert: {incident.alert_name}, "
-            f"발생 시각: {incident.occurred_at}\n요약: {incident.summary}\n"
+            # summary 는 웹훅 annotation 원문 — 비신뢰 (위협 모델 ②)
+            f"발생 시각: {incident.occurred_at}\n요약:\n{wrap_untrusted('alert-annotation', incident.summary)}\n"
             "관련 메트릭을 조회해 현재 상황을 요약하라."
         )
     )

@@ -10,6 +10,7 @@ import httpx
 from langchain_core.tools import tool
 
 from app.config import get_settings
+from app.security.untrusted import wrap_untrusted
 
 # 테스트 주입 지점 — httpx.MockTransport 로 교체하면 스택 없이 검증 가능
 _transport: httpx.BaseTransport | None = None
@@ -34,7 +35,7 @@ def query_prometheus(promql: str) -> str:
     histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le, uri))
     """
     data = _api_get("/api/v1/query", {"query": promql})
-    return json.dumps(data["result"], ensure_ascii=False)
+    return wrap_untrusted("prometheus", json.dumps(data["result"], ensure_ascii=False))
 
 
 @tool
@@ -54,7 +55,7 @@ def query_prometheus_range(promql: str, minutes: int) -> str:
             "step": f"{step_seconds}s",
         },
     )
-    return json.dumps(data["result"], ensure_ascii=False)
+    return wrap_untrusted("prometheus", json.dumps(data["result"], ensure_ascii=False))
 
 
 @tool
@@ -66,9 +67,9 @@ def compare_with_baseline(promql: str) -> str:
     """
     current = _api_get("/api/v1/query", {"query": promql})
     baseline = _api_get("/api/v1/query", {"query": promql, "time": time.time() - 3600})
-    return json.dumps(
-        {"current": current["result"], "baseline_1h_ago": baseline["result"]},
-        ensure_ascii=False,
+    return wrap_untrusted(
+        "prometheus",
+        json.dumps({"current": current["result"], "baseline_1h_ago": baseline["result"]}, ensure_ascii=False),
     )
 
 
@@ -76,4 +77,5 @@ def compare_with_baseline(promql: str) -> str:
 def get_active_alerts() -> str:
     """현재 발화 중(pending/firing)인 Prometheus Alert 목록을 반환한다 — scenario 라벨 포함."""
     data = _api_get("/api/v1/alerts", {})
-    return json.dumps(data["alerts"], ensure_ascii=False)
+    # annotation 은 Alert 규칙이 아니라 웹훅·라벨값에서도 올 수 있는 문자열 (위협 모델 ②·⑤)
+    return wrap_untrusted("prometheus-alerts", json.dumps(data["alerts"], ensure_ascii=False))

@@ -14,6 +14,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from app.config import get_settings
 from app.config.llm import create_llm
+from app.security.untrusted import UNTRUSTED_POLICY, wrap_untrusted
 from app.supervisor.state import AIOpsState, AnalysisResult
 from app.tools.loki_tools import get_app_logs
 from app.tools.mcp_tools import load_mcp_tools
@@ -53,7 +54,7 @@ suggested_actions 는 구체적 조치 후보를 짧게 나열한다 (실행 여
 suggested_actions 는 "같은 증상이 실제 운영에서 발생했다면"을 기준으로 판단하라.
 "인위적 주입이므로 관찰만으로 충분"이라는 결론은 금지 — 주입은 실제 장애의 대역이며,
 증상을 해소할 조치 후보(재시작·스케일아웃·롤백 등)를 실제 장애와 동일하게 제안해야 한다.
-"""
+""" + UNTRUSTED_POLICY
 
 # 관측 스택 직접 조회 도구 — MCP 대상 아님 (ADR-0002 경계)
 LOCAL_ANALYSIS_TOOLS = [get_app_logs, compare_with_baseline]
@@ -111,7 +112,7 @@ async def analysis_node(state: AIOpsState) -> dict:
         content=(
             f"인시던트 — 시나리오: {incident.scenario}, Alert: {incident.alert_name}, "
             f"발생 시각: {incident.occurred_at}\n"
-            f"모니터링 상황 요약: {summary}\n"
+            f"모니터링 상황 요약:\n{wrap_untrusted('monitor-summary', summary)}\n"
             "근본 원인 가설을 세우고 도구로 검증해 원인 보고서를 작성하라."
         )
     )

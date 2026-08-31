@@ -176,3 +176,23 @@ def test_agent_degrades_to_local_tools_and_retries_discovery(monkeypatch):
     assert first is not second
     assert calls["load"] == 2
     assert calls["tools"][0] == analysis_agent.LOCAL_ANALYSIS_TOOLS
+
+
+def test_analysis_task_wraps_monitor_summary_and_policy_in_prompts():
+    """모니터 요약(비신뢰 파생)은 구분자 안, 정책 절은 분석·실행·라우터 프롬프트 공통."""
+    from app.agents import action_agent
+    from app.security.untrusted import UNTRUSTED_POLICY
+    from app.supervisor import router
+
+    stub = _StubAgent()
+    analysis_agent._cached_agent = stub
+    try:
+        asyncio.run(analysis_agent.analysis_node(_state()))
+    finally:
+        analysis_agent._cached_agent = None
+
+    task = stub.captured_payload["messages"][0].content
+    assert '<untrusted_content source="monitor-summary">' in task
+    assert UNTRUSTED_POLICY.strip() in analysis_agent.ANALYSIS_SYSTEM_PROMPT
+    assert UNTRUSTED_POLICY.strip() in action_agent.ACTION_SYSTEM_PROMPT
+    assert UNTRUSTED_POLICY.strip() in router._ROUTE_PROMPT

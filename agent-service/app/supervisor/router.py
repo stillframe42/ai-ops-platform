@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.config.llm import create_llm
+from app.security.untrusted import UNTRUSTED_POLICY, wrap_untrusted
 
 _ROUTE_PROMPT = """\
 너는 AIOps 플랫폼의 Supervisor 라우터다. 분석 에이전트가 낮은 확신의 보고서를 냈다.
@@ -24,8 +25,9 @@ _ROUTE_PROMPT = """\
 분석 보고서:
 - 가설: {hypothesis}
 - 심각도: {severity} / 확신도: {confidence}
-- 근거: {evidence}
-"""
+- 근거:
+{evidence}
+""" + UNTRUSTED_POLICY
 
 
 class RouteDecision(BaseModel):
@@ -50,6 +52,6 @@ def decide_ambiguous_route(analysis) -> RouteDecision:
         hypothesis=analysis.root_cause_hypothesis,
         severity=analysis.severity,
         confidence=analysis.confidence,
-        evidence="; ".join(analysis.evidence) or "(없음)",
+        evidence=wrap_untrusted("analysis-evidence", "; ".join(analysis.evidence) or "(없음)"),
     )
     return get_route_llm().invoke(prompt)

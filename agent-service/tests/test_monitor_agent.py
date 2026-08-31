@@ -93,3 +93,23 @@ def test_monitor_node_keeps_messages_convention(monkeypatch):
     # 기존 관례 유지: [monitor] 접두어 요약 1건만 그래프 messages 에 남긴다
     assert len(update["messages"]) == 1
     assert update["messages"][0].content.startswith("[monitor]")
+
+
+def test_monitor_task_wraps_alert_summary_as_untrusted(monkeypatch):
+    """웹훅 annotation(summary)은 비신뢰 — 구분자 안에 들어가고, 시스템 프롬프트가 정책 절을 담는다."""
+    from app.security.untrusted import UNTRUSTED_POLICY
+
+    captured: dict = {}
+
+    class _Capturing(_StubAgent):
+        async def ainvoke(self, payload: dict) -> dict:
+            captured["task"] = payload["messages"][0].content
+            return await super().ainvoke(payload)
+
+    monkeypatch.setattr(monitor_agent, "get_monitor_agent", lambda: _Capturing())
+
+    asyncio.run(monitor_agent.monitor_node({"incident": _incident(), "messages": []}))
+
+    task = captured["task"]
+    assert '<untrusted_content source="alert-annotation">\np95 latency 3s 초과\n</untrusted_content>' in task
+    assert UNTRUSTED_POLICY.strip() in monitor_agent.MONITOR_SYSTEM_PROMPT

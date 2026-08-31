@@ -13,6 +13,7 @@ from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from app.config.settings import Settings
+from app.security.untrusted import untrusted_tool
 from app.tools.oauth_client import shared_auth
 
 # control-plane 의 spring.ai.mcp.server.name 과 일치 — 관측·로그 대조용 식별자
@@ -31,4 +32,5 @@ async def load_mcp_tools(settings: Settings) -> list[BaseTool]:
     (handle_tool_errors=True)대로 오류 ToolMessage 로 LLM 에 돌아간다 — 예외 비전파
     (DAY 13 부분 진행 관례와 정합)."""
     client = MultiServerMCPClient(build_mcp_connections(settings))
-    return await client.get_tools()
+    # 도구 결과(배포 이력·앱 설정·유사 인시던트 보고서)는 비신뢰 데이터 (위협 모델 ③④) — 출처 표시 구분자로 격리
+    return [untrusted_tool(tool) for tool in await client.get_tools()]

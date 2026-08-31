@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from app.config import get_settings
 from app.config.llm import create_llm
+from app.security.untrusted import UNTRUSTED_POLICY, wrap_untrusted
 from app.supervisor.state import ActionPlan, AIOpsState
 
 # 조치 카탈로그는 scenarios.md "화이트리스트 + 승인 필수" 원칙 기준 (ActionType 과 1:1)
@@ -36,7 +37,7 @@ ACTION_SYSTEM_PROMPT = """\
 재현될 수 있다. 원인 보고서가 주입을 지목하더라도 그것은 실제 장애의 대역이다 —
 "인위적 주입이므로 NOTIFY_ONLY 만" 으로 결론짓지 말고, 같은 증상이 실제 운영에서
 발생했다면 취할 조치를 동일하게 제안하라 (승인 여부는 사람이 판단한다).
-"""
+""" + UNTRUSTED_POLICY
 
 
 @lru_cache
@@ -60,7 +61,8 @@ async def action_node(state: AIOpsState) -> dict:
             f"인시던트 — 시나리오: {incident.scenario}, Alert: {incident.alert_name}, "
             f"심각도: {analysis.severity}, 확신도: {analysis.confidence}\n"
             f"원인 가설: {analysis.root_cause_hypothesis}\n"
-            f"근거: {'; '.join(analysis.evidence) or '(없음)'}\n"
+            # 근거는 로그·도구 결과 인용이라 주입 문구가 그대로 옮겨질 수 있다 — 여기서도 격리
+            f"근거:\n{wrap_untrusted('analysis-evidence', '; '.join(analysis.evidence) or '(없음)')}\n"
             f"분석 단계 제안: {'; '.join(analysis.suggested_actions) or '(없음)'}\n"
             "조치 계획을 작성하라."
         )

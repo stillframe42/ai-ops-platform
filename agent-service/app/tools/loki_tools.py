@@ -11,6 +11,7 @@ import httpx
 from langchain_core.tools import tool
 
 from app.config import get_settings
+from app.security.untrusted import wrap_untrusted
 
 # 테스트 주입 지점 — httpx.MockTransport 로 교체하면 스택 없이 검증 가능
 _transport: httpx.BaseTransport | None = None
@@ -50,4 +51,5 @@ def get_app_logs(minutes: int, level: str = "ERROR") -> str:
     )
     # 스트림 구분·Loki 타임스탬프는 제외하고 로그 라인만 — 라인 자체가 @timestamp 포함 JSON
     lines = [line for stream in data["result"] for _, line in stream["values"]]
-    return json.dumps(lines, ensure_ascii=False)
+    # 로그 본문은 외부 요청이 그대로 실리는 비신뢰 데이터 (위협 모델 ①) — 구분자로 격리
+    return wrap_untrusted("loki-logs", json.dumps(lines, ensure_ascii=False))
