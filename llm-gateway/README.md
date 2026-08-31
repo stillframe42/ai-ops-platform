@@ -12,7 +12,8 @@
 | 4 | 폴백 — Anthropic 장애 시 OpenAI 전환 (Resilience4j) + 고가용성 (replica 2·PDB) | Phase 5 |
 | 5 | Rate Limiting — Bucket4j + Redis, 서비스별 한도 | Phase 4 |
 | 6 | OAuth2 리소스 서버 — `/v1` 전부 `llm:invoke` 토큰 필수, 서비스 식별 = JWT client_id, 요청 감사 로그 | 2026-08-28 (ADR-0016) |
-| 7 | 입출력 가드레일 — 확장 지점만 확보 | 보안 주간 후반 |
+| 7 | 입력 가드레일 — 패턴 1차(정규화: NFKC·제로폭·base64·자모 분리) + LLM 분류기 2차(SUSPECT 만, haiku 자기 호출), 플래깅 후 통과(차단은 `gateway.guardrail.mode=block`) | 2026-08-30 (DAY 38) |
+| 8 | 출력 가드레일 — 미구현 (예정: 시스템 프롬프트 유출·민감 정보 스캔은 control-plane 발송·저장 경로) | 예정 |
 
 ## API — OpenAI 호환
 
@@ -54,6 +55,8 @@
 | `X-Gateway-Downgrade: budget-exceeded` | 응답 | 예산 100% 도달로 저비용 모델 강제 전환됨 (응답 `model` 필드와 함께 확인) | 4 |
 | `Retry-After` | 응답 (429) | 분당 한도 초과 시 재시도 대기 초 | 4 |
 | `X-Gateway-Fallback` | 응답 | 주 프로바이더 장애로 폴백 발생 (`openai` = 교차 프로바이더 재중계, `local` = 로컬 폴백 응답) | 5 |
+| `X-Gateway-Guardrail` | 응답 | 입력 가드레일 판정 — 항상 존재 (`clean` / `suspect` = 휴리스틱만 걸리고 2차 미확정 / `flagged` = 주입 판정, 통과 / `blocked` = 400 거부). 비클린 요청의 응답은 캐시에 저장하지 않는다 | 2026-08-30 |
+| `X-Gateway-Guardrail-Stage` | 응답 | 판정 계층 (`pattern` / `classifier` / `policy`) — 비클린일 때만 | 2026-08-30 |
 
 ## 응답 캐싱 (Phase 3) — 2단계
 

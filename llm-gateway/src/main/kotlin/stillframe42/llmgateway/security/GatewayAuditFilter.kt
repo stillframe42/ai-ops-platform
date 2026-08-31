@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory
 import org.slf4j.MDC
 import org.springframework.stereotype.Component
 import org.springframework.web.filter.OncePerRequestFilter
+import stillframe42.llmgateway.api.GatewayHeaders
 
 /**
  * 게이트웨이 요청 감사 로그 (ADR-0016) — 누가(client_id·scope)·무엇을(경로·태스크)·결과(status·캐시 판정)를
@@ -35,14 +36,15 @@ class GatewayAuditFilter : OncePerRequestFilter() {
             "client_id" to ClientIdentity.current(),
             "scope" to ClientIdentity.currentScopes(),
             "http.path" to request.requestURI,
-            "task_type" to (request.getHeader("X-Task-Type") ?: "none"),
+            "task_type" to (request.getHeader(GatewayHeaders.TASK_TYPE) ?: "none"),
             "http.status" to response.status.toString(),
-            "cache" to (response.getHeader("X-Gateway-Cache") ?: "none"),
+            "cache" to (response.getHeader(GatewayHeaders.CACHE) ?: "none"),
+            "guardrail" to (response.getHeader(GatewayHeaders.GUARDRAIL) ?: "none"),
         )
         withMdc(fields) {
             auditLogger.info(
-                "gateway_request client_id={} path={} task={} status={} cache={}",
-                fields["client_id"], fields["http.path"], fields["task_type"], fields["http.status"], fields["cache"],
+                "gateway_request client_id={} path={} task={} status={} cache={} guardrail={}",
+                fields["client_id"], fields["http.path"], fields["task_type"], fields["http.status"], fields["cache"], fields["guardrail"],
             )
         }
     }

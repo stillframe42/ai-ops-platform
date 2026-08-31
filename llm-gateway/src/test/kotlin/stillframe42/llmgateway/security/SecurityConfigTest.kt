@@ -2,6 +2,10 @@ package stillframe42.llmgateway.security
 
 import kotlin.test.Test
 import org.mockito.BDDMockito.given
+import org.junit.jupiter.api.BeforeEach
+import stillframe42.llmgateway.anyNonNull
+import stillframe42.llmgateway.guardrail.GuardrailDecision
+import stillframe42.llmgateway.guardrail.InputGuardrailChain
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
@@ -48,6 +52,14 @@ class SecurityConfigTest(@Autowired private val mvc: MockMvc) {
 
     @MockitoBean
     private lateinit var embeddingRelayService: EmbeddingRelayService
+
+    @MockitoBean
+    lateinit var inputGuardrailChain: InputGuardrailChain
+
+    @BeforeEach
+    fun cleanGuardrail() {
+        given(inputGuardrailChain.evaluate(anyNonNull())).willReturn(GuardrailDecision.CLEAN)
+    }
 
     private val body = """{"messages":[{"role":"user","content":"ping"}]}"""
     private val request = ChatCompletionRequest(messages = listOf(ChatMessage(role = "user", content = "ping")))

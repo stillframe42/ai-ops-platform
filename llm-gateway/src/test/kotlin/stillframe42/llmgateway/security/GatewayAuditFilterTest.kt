@@ -44,6 +44,7 @@ class GatewayAuditFilterTest {
         val chain = MockFilterChain(object : jakarta.servlet.http.HttpServlet() {
             override fun service(req: jakarta.servlet.http.HttpServletRequest, res: jakarta.servlet.http.HttpServletResponse) {
                 res.setHeader("X-Gateway-Cache", "exact_hit")
+                res.setHeader("X-Gateway-Guardrail", "flagged")
                 res.status = 200
             }
         })
@@ -59,6 +60,7 @@ class GatewayAuditFilterTest {
         assertEquals("root-cause-analysis", mdc["task_type"])
         assertEquals("200", mdc["http.status"])
         assertEquals("exact_hit", mdc["cache"])
+        assertEquals("flagged", mdc["guardrail"])
         // 로그 행이 끝나면 MDC 는 비어 있어야 한다 — 다음 요청·다른 로그로 누수 금지
         assertTrue(org.slf4j.MDC.getCopyOfContextMap().isNullOrEmpty())
     }

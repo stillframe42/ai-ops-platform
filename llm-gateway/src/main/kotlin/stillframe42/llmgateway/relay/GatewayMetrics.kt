@@ -5,6 +5,8 @@ import io.micrometer.core.instrument.Timer
 import org.springframework.stereotype.Component
 import stillframe42.llmgateway.api.TokenUsage
 import stillframe42.llmgateway.cache.CacheStatus
+import stillframe42.llmgateway.guardrail.GuardrailStage
+import stillframe42.llmgateway.guardrail.GuardrailVerdict
 import stillframe42.llmgateway.routing.Provider
 
 /**
@@ -82,6 +84,11 @@ class GatewayMetrics(
     /** 주 프로바이더 장애로 폴백한 요청 수 — target: 교차 프로바이더명 또는 local */
     fun fallback(from: Provider, target: String) {
         meterRegistry.counter("gateway.fallback", "from", from.name.lowercase(), "target", target).increment()
+    }
+
+    /** 입력 가드레일 판정 — 단계별 카운트 (Prometheus 노출명 gateway_guardrail_total{stage,verdict}) */
+    fun guardrail(stage: GuardrailStage, verdict: GuardrailVerdict) {
+        meterRegistry.counter("gateway.guardrail", "stage", stage.name.lowercase(), "verdict", verdict.name.lowercase()).increment()
     }
 
     /** 분당 한도 초과로 429 반환한 요청 수 */

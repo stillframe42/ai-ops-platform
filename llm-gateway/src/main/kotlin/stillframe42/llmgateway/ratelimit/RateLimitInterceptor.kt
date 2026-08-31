@@ -3,6 +3,7 @@ package stillframe42.llmgateway.ratelimit
 import jakarta.servlet.http.HttpServletRequest
 import jakarta.servlet.http.HttpServletResponse
 import org.slf4j.LoggerFactory
+import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.web.servlet.HandlerInterceptor
 import stillframe42.llmgateway.api.OpenAiError
@@ -30,7 +31,7 @@ class RateLimitInterceptor(
         logger.warn("분당 한도 초과 — service={}, retryAfter={}s", service, decision.retryAfterSeconds)
         gatewayMetrics.rateLimited(service)
         response.status = 429
-        response.setHeader("Retry-After", decision.retryAfterSeconds.toString())
+        response.setHeader(HttpHeaders.RETRY_AFTER, decision.retryAfterSeconds.toString())
         // charset 명시 필수 — Tomcat writer 는 미지정 시 ISO-8859-1 이라 한글 메시지가 깨진다 (8/19 실측)
         response.characterEncoding = Charsets.UTF_8.name()
         response.contentType = MediaType.APPLICATION_JSON_VALUE

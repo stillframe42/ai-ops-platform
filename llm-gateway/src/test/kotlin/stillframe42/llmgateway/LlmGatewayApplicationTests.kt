@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.http.client.HttpClientSettings
 import org.springframework.boot.test.context.SpringBootTest
 import stillframe42.llmgateway.budget.BudgetProperties
+import stillframe42.llmgateway.guardrail.GuardrailProperties
 import stillframe42.llmgateway.cost.CostProperties
 import stillframe42.llmgateway.routing.RoutingProperties
 
@@ -40,10 +41,15 @@ class LlmGatewayApplicationTests {
 	@Autowired
 	lateinit var budgetProperties: BudgetProperties
 
+	@Autowired
+	lateinit var guardrailProperties: GuardrailProperties
+
 	@Test
 	fun `도메인 정책이 분리 파일(gateway yml)에서 바인딩된다`() {
 		assertTrue(routingProperties.rules.any { it.task == "monitoring-summary" && it.model == "claude-haiku-4-5" })
 		assertTrue(costProperties.prices.any { it.modelPrefix == "gpt-5.6-terra" })
 		assertEquals(5.0, budgetProperties.dailyLimitUsd)
+		assertTrue(routingProperties.rules.any { it.task == "guardrail-classify" && it.maxTokens == 5 })
+		assertEquals(GuardrailProperties.Mode.FLAG, guardrailProperties.mode)
 	}
 }

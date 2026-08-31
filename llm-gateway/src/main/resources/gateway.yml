@@ -40,6 +40,14 @@ gateway:
   fallback:
     provider: openai
     model: gpt-5.6-terra
+  # 입력 가드레일 — 1차 패턴(항상) + 2차 LLM 분류기(SUSPECT 만). mode=flag 는 판정만 남기고 통과, block 은 FLAGGED 를 400 으로
+  guardrail:
+    enabled: true
+    mode: flag
+    classifier:
+      enabled: true
+      task-type: guardrail-classify
+      max-chars: 3000
   # rate limit 은 docker 프로파일만 활성 (default-rpm 부재 = 비활성 — 로컬은 Redis 없이 기동)
   # 태스크 유형 → 모델 라우팅 — ADR-0007 역할별 차등의 실현
   routing:
@@ -53,6 +61,11 @@ gateway:
       - task: root-cause-analysis
         provider: anthropic
         model: claude-sonnet-5
+      # 입력 가드레일 2차 분류기 — 게이트웨이 자기 호출 (service=llm-gateway 로 집계), 답은 한 단어라 토큰 상한 최소
+      - task: guardrail-classify
+        provider: anthropic
+        model: claude-haiku-4-5
+        max-tokens: 5
       # 교차 검증 — 타 프로바이더 (호출자 없음, 모델·경로는 폴백 실측으로 검증됨 — 단가 등록 동반)
       - task: code-review-critical
         provider: openai
