@@ -11,6 +11,7 @@ import httpx
 from langchain_core.tools import tool
 
 from app.config import get_settings
+from app.security.tool_gating import validate_log_level, validate_minutes
 from app.security.untrusted import wrap_untrusted
 
 # 테스트 주입 지점 — httpx.MockTransport 로 교체하면 스택 없이 검증 가능
@@ -38,6 +39,9 @@ def get_app_logs(minutes: int, level: str = "ERROR") -> str:
     로그는 JSON 구조화 형식 — @timestamp, log.level, log.logger, message 필드를 포함한다.
     예: 5xx 원인 조사는 get_app_logs(minutes=10, level="ERROR")
     """
+    # level 은 LogQL 문자열에 삽입되는 LLM 자유 인자 — 화이트리스트 밖이면 필터 탈출이 된다 (RT-15)
+    validate_log_level(level)
+    validate_minutes(minutes)
     now_ns = int(time.time() * 1_000_000_000)
     data = _api_get(
         "/loki/api/v1/query_range",

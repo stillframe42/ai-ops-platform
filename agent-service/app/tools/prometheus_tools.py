@@ -10,6 +10,7 @@ import httpx
 from langchain_core.tools import tool
 
 from app.config import get_settings
+from app.security.tool_gating import validate_minutes, validate_promql
 from app.security.untrusted import wrap_untrusted
 
 # 테스트 주입 지점 — httpx.MockTransport 로 교체하면 스택 없이 검증 가능
@@ -34,7 +35,8 @@ def query_prometheus(promql: str) -> str:
     예: p95 latency 는
     histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le, uri))
     """
-    data = _api_get("/api/v1/query", {"query": promql})
+    # promql 은 LLM 자유 문자열 — 화이트리스트 검증 후에만 전송 (RT-14)
+    data = _api_get("/api/v1/query", {"query": validate_promql(promql)})
     return wrap_untrusted("prometheus", json.dumps(data["result"], ensure_ascii=False))
 
 
@@ -44,6 +46,8 @@ def query_prometheus_range(promql: str, minutes: int) -> str:
 
     메모리 누수 같은 추세 판정에 사용한다 (예: jvm_memory_usage_after_gc 를 minutes=30 으로).
     """
+    validate_promql(promql)
+    validate_minutes(minutes)
     now = time.time()
     step_seconds = max(15, minutes)  # 창 크기와 무관하게 약 60개 포인트 유지 (15s 하한)
     data = _api_get(
@@ -65,6 +69,7 @@ def compare_with_baseline(promql: str) -> str:
     배경 부하(k6 상시 2 RPS)가 일정해 1시간 전 값이 평상시 기준선 역할을 한다.
     예: 요청률 비교는 compare_with_baseline('sum(rate(http_server_requests_seconds_count[5m]))')
     """
+    validate_promql(promql)
     current = _api_get("/api/v1/query", {"query": promql})
     baseline = _api_get("/api/v1/query", {"query": promql, "time": time.time() - 3600})
     return wrap_untrusted(
