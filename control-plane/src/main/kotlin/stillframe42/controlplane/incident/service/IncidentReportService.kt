@@ -4,10 +4,12 @@ import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import stillframe42.controlplane.audit.AuditLog
 import stillframe42.controlplane.incident.model.IncidentReport
 import stillframe42.controlplane.incident.model.IncidentReportDetail
 import stillframe42.controlplane.incident.model.IncidentReportSummary
 import stillframe42.controlplane.incident.repository.IncidentReportRepository
+import stillframe42.controlplane.security.StoredReportSanitizer
 
 /**
  * 결과 수신 처리 (DAY 19) — 파싱 → 멱등 저장 → 신규일 때만 알림.
@@ -35,10 +37,22 @@ class IncidentReportService(
      */
     @Transactional
     fun ingest(payload: String) {
-        val report = IncidentReport.parse(payload)
+        // 저장 전 스캔 — 주입 문구가 jsonb 로 남으면 유사 인시던트 검색으로 재주입된다 (자기 오염 루프)
+        val sanitized = StoredReportSanitizer.sanitize(payload)
+        val report = IncidentReport.parse(sanitized.payload)
         if (report == null) {
             logger.warn("결과 페이로드 파싱 실패 — 건너뜀 (본문 {}자)", payload.length)
             return
+        }
+        if (sanitized.findings.isNotEmpty()) {
+            AuditLog.record(
+                type = "report_sanitized",
+                fields = mapOf(
+                    "incident_id" to report.incidentId,
+                    "findings" to sanitized.findings.joinToString(","),
+                ),
+                message = "보고서 저장 스캔 — ${sanitized.findings.size}건 처리 (${report.incidentId})",
+            )
         }
         val isNew = incidentReportRepository.upsert(report)
         if (isNew) {

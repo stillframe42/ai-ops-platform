@@ -5,7 +5,9 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
 import org.springframework.web.client.RestClient
+import stillframe42.controlplane.audit.AuditLog
 import stillframe42.controlplane.incident.model.IncidentReport
+import stillframe42.controlplane.security.SensitiveOutputMasker
 import tools.jackson.databind.json.JsonMapper
 
 /**
@@ -37,12 +39,25 @@ class SlackNotifier(
             logger.info("Slack 알림 비활성 — {} 발송 생략", report.incidentId)
             return
         }
+        // 발송 직전 마스킹 — 외부 채널이라 시크릿·내부 URL 을 싣지 않는다. 상세 링크(baseUrl)는 의도된 내부 링크라 예외
+        val message = SensitiveOutputMasker.mask(buildMessage(report), allowedUrlPrefixes = setOf(baseUrl))
+        if (message.hits.isNotEmpty()) {
+            AuditLog.record(
+                type = "output_masked",
+                fields = mapOf(
+                    "incident_id" to report.incidentId,
+                    "channel" to "slack-notify",
+                    "hits" to message.hits.joinToString(","),
+                ),
+                message = "Slack 발송 전 마스킹 — ${message.hits} (${report.incidentId})",
+            )
+        }
         // 전송 실패는 로그만 — 알림 실패가 저장·오프셋 커밋을 되돌리면 안 된다 (Notifier 계약)
         runCatching {
             restClient.post()
                 .uri(webhookUrl)
                 .contentType(MediaType.APPLICATION_JSON)
-                .body(mapper.writeValueAsString(mapOf("text" to buildMessage(report))))
+                .body(mapper.writeValueAsString(mapOf("text" to message.text)))
                 .retrieve()
                 .toBodilessEntity()
         }.onFailure {

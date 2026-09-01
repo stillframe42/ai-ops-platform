@@ -14,6 +14,7 @@ import java.time.Instant
 import stillframe42.controlplane.approval.model.ActionApprovalRequest
 import stillframe42.controlplane.approval.model.ActionExecution
 import stillframe42.controlplane.approval.model.ApprovalStatus
+import stillframe42.controlplane.security.SensitiveOutputMasker
 
 /**
  * 승인 카드 메시지 조립 (DAY 23, ADR-0006 카드 내용 스펙) — 순수 함수만: HTTP 무의존이라
@@ -95,12 +96,15 @@ object ApprovalMessageFactory {
         lines += ":vertical_traffic_light: *[${request.riskLevel ?: "P?"}] " +
             "${request.scenario ?: "unknown"} 조치 승인 요청*"
         lines += "• 인시던트: `${request.incidentId}`" + (request.alertName?.let { " ($it)" } ?: "")
-        lines += "• 원인 가설: ${request.rootCauseHypothesis ?: "-"}"
+        // LLM 생성 필드만 마스킹 — 외부(Slack) 발송 직전 조립 지점 (SlackNotifier 와 같은 출력 가드레일)
+        lines += "• 원인 가설: ${request.rootCauseHypothesis?.maskedForSlack() ?: "-"}"
         lines += "• confidence: ${request.confidence?.let { "%.2f".format(it) } ?: "-"}"
-        lines += "• 조치안: ${request.actions.ifEmpty { listOf(request.actionType) }.joinToString(", ")}"
-        request.rationale?.let { lines += "• 사유: $it" }
-        request.expectedEffect?.let { lines += "• 기대 효과: $it" }
-        request.risk?.let { lines += "• 리스크: $it" }
+        lines += "• 조치안: ${request.actions.ifEmpty { listOf(request.actionType) }.joinToString(", ") { it.maskedForSlack() }}"
+        request.rationale?.let { lines += "• 사유: ${it.maskedForSlack()}" }
+        request.expectedEffect?.let { lines += "• 기대 효과: ${it.maskedForSlack()}" }
+        request.risk?.let { lines += "• 리스크: ${it.maskedForSlack()}" }
         return lines.joinToString("\n")
     }
+
+    private fun String.maskedForSlack(): String = SensitiveOutputMasker.mask(this).text
 }

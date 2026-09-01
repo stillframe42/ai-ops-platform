@@ -12,6 +12,7 @@ import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.access.intercept.AuthorizationFilter
 import org.springframework.security.web.authentication.HttpStatusEntryPoint
+import stillframe42.controlplane.security.AuditingAccessDeniedHandler
 
 /**
  * OAuth2 리소스 서버 (ADR-0016) — auth-server 가 발급한 JWT 를 issuer JWKS 로 자체 검증하고
@@ -60,7 +61,11 @@ class SecurityConfig {
                     .anyRequest().authenticated()
             }
             // Boot 자동구성의 JwtDecoder(issuer-uri·audiences) 사용 — scope 클레임은 기본 변환대로 SCOPE_ 접두 권한이 된다
-            .oauth2ResourceServer { it.jwt(Customizer.withDefaults()) }
+            .oauth2ResourceServer {
+                it.jwt(Customizer.withDefaults())
+                    // 스코프 밖 호출(도구 오남용 신호)을 감사 경보로 — 응답은 기본과 같은 403
+                    .accessDeniedHandler(AuditingAccessDeniedHandler())
+            }
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .csrf { it.disable() }
         return http.build()

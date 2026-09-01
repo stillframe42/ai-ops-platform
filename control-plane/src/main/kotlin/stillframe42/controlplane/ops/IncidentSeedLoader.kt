@@ -7,6 +7,7 @@ import org.springframework.ai.vectorstore.VectorStore
 import org.springframework.boot.ApplicationArguments
 import org.springframework.boot.ApplicationRunner
 import org.springframework.stereotype.Component
+import stillframe42.controlplane.security.PromptInjectionScanner
 
 /**
  * searchSimilarIncidents 의 조회 대상 시드 — 실 인시던트 보고서 축적(DAY 20 결과 컨슈머) 전까지의
@@ -24,14 +25,25 @@ class IncidentSeedLoader(private val vectorStore: VectorStore) : ApplicationRunn
         // 시드 실패(임베딩 키 미설정 등)가 앱 기동을 막으면 안 된다 — 검색 외 도구 2종은
         // 벡터 스토어 무의존이라 여전히 제공 가능 (Langfuse 키-게이트와 같은 조용한 비활성 관례)
         try {
-            vectorStore.add(SEED_INCIDENTS)
-            logger.info("시드 인시던트 {}건 적재 완료 (upsert)", SEED_INCIDENTS.size)
+            // 시드도 저장 경로 — 보고서 저장과 같은 스캔을 거친다 (위협 모델 벡터 ③, 스캔 없는 적재 금지)
+            val accepted = accepted(SEED_INCIDENTS)
+            (SEED_INCIDENTS - accepted.toSet()).forEach {
+                logger.warn("시드 인시던트 제외 — 주입 의심 문구 (id={})", it.id)
+            }
+            vectorStore.add(accepted)
+            logger.info("시드 인시던트 {}건 적재 완료 (upsert)", accepted.size)
         } catch (e: Exception) {
             logger.warn("시드 인시던트 적재 실패 — searchSimilarIncidents 는 빈 결과/오류로 동작: {}", e.message)
         }
     }
 
     companion object {
+        /** 본문·메타데이터 문자열 값에 주입 확정 패턴이 없는 시드만 통과 — 테스트가 직접 검증하는 경계 */
+        fun accepted(documents: List<Document>): List<Document> = documents.filter { document ->
+            val texts = listOf(document.text.orEmpty()) + document.metadata.values.filterIsInstance<String>()
+            texts.all { PromptInjectionScanner.detect(it) == null }
+        }
+
         private fun seed(key: String, summary: String, metadata: Map<String, Any>) = Document(
             UUID.nameUUIDFromBytes("aiops-seed-$key".toByteArray()).toString(),
             summary,

@@ -41,6 +41,18 @@ class ApprovalMessageFactoryTest {
     )
 
     @Test
+    fun `LLM 생성 필드의 민감 정보는 카드에서 마스킹된다 - 발송 전 출력 가드레일`() {
+        val blocks = ApprovalMessageFactory.requestBlocks(
+            request().copy(rationale = "설정 client_secret=abc123def456 노출이 원인, 내부 http://auth-server:8091 확인"),
+        )
+
+        val summary = assertIs<MarkdownTextObject>(assertIs<SectionBlock>(blocks[0]).text).text
+        assertTrue("abc123def456" !in summary)
+        assertTrue("auth-server:8091" !in summary)
+        assertTrue("[masked:" in summary)
+    }
+
+    @Test
     fun `요청 카드는 요약 섹션과 승인·거부 버튼으로 구성된다`() {
         val blocks = ApprovalMessageFactory.requestBlocks(request())
 
