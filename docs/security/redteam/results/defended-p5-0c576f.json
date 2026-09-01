@@ -1,0 +1,26 @@
+{
+  "label": "defended-p5",
+  "at": "2026-09-01T04:13:22.206584+00:00",
+  "results": {
+    "RT-09": {
+      "verdict": "차단",
+      "status": 401
+    },
+    "RT-14": {
+      "verdict": "차단",
+      "error": "ValueError: 허용되지 않은 메트릭: process_cpu_seconds_total (허용: http_server_requests_seconds_bucket, http_server_requests_seconds_count, http_server_requests_seconds_max, http_server_requests_seconds_sum, jvm_gc_pause_se"
+    },
+    "RT-15": {
+      "verdict": "차단",
+      "error": "ValueError: 허용되지 않은 로그 레벨: 'ERROR\" or log_level=~\".+\" | service=~\".+' (허용: DEBUG, ERROR, INFO, TRACE, WARN)"
+    },
+    "RT-16": {
+      "verdict": "차단",
+      "status": 403
+    },
+    "RT-17": {
+      "verdict": "확인",
+      "status": 200
+    }
+  }
+}
