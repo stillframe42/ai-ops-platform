@@ -23,6 +23,7 @@ import stillframe42.llmgateway.guardrail.GuardrailDecision
 import stillframe42.llmgateway.guardrail.GuardrailStage
 import stillframe42.llmgateway.guardrail.GuardrailVerdict
 import stillframe42.llmgateway.guardrail.InputGuardrailChain
+import stillframe42.llmgateway.masking.InputMaskingService
 import stillframe42.llmgateway.relay.EmbeddingRelayService
 import stillframe42.llmgateway.security.SecurityConfig
 import stillframe42.llmgateway.security.SecurityConfigTest
@@ -44,9 +45,15 @@ class GatewayControllerTest {
     @MockitoBean
     lateinit var guardrailChain: InputGuardrailChain
 
+    @MockitoBean
+    lateinit var inputMaskingService: InputMaskingService
+
     @BeforeEach
     fun cleanGuardrail() {
         given(guardrailChain.evaluate(anyNonNull())).willReturn(GuardrailDecision.CLEAN)
+        // 마스킹은 passthrough 스텁 — 마스킹 자체 검증은 InputMaskingServiceTest 소관
+        given(inputMaskingService.mask(anyNonNull<ChatCompletionRequest>())).willAnswer { it.arguments[0] }
+        given(inputMaskingService.mask(anyNonNull<EmbeddingsRequest>())).willAnswer { it.arguments[0] }
     }
 
     private fun agentToken() = jwt().jwt { it.subject("agent-service") }.authorities(SimpleGrantedAuthority(SecurityConfig.SCOPE_LLM_INVOKE))

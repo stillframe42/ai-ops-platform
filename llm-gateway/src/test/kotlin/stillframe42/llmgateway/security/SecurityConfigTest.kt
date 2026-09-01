@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach
 import stillframe42.llmgateway.anyNonNull
 import stillframe42.llmgateway.guardrail.GuardrailDecision
 import stillframe42.llmgateway.guardrail.InputGuardrailChain
+import stillframe42.llmgateway.masking.InputMaskingService
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest
@@ -56,9 +57,14 @@ class SecurityConfigTest(@Autowired private val mvc: MockMvc) {
     @MockitoBean
     lateinit var inputGuardrailChain: InputGuardrailChain
 
+    @MockitoBean
+    lateinit var inputMaskingService: InputMaskingService
+
     @BeforeEach
     fun cleanGuardrail() {
         given(inputGuardrailChain.evaluate(anyNonNull())).willReturn(GuardrailDecision.CLEAN)
+        // 마스킹은 passthrough 스텁 — 마스킹 자체 검증은 InputMaskingServiceTest 소관
+        given(inputMaskingService.mask(anyNonNull<ChatCompletionRequest>())).willAnswer { it.arguments[0] }
     }
 
     private val body = """{"messages":[{"role":"user","content":"ping"}]}"""

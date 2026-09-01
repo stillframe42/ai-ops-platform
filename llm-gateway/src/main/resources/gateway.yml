@@ -48,6 +48,10 @@ gateway:
       enabled: true
       task-type: guardrail-classify
       max-chars: 3000
+  # 민감 데이터 마스킹 — LLM 방향 입력(user·tool)의 시크릿·PII. 임베딩 포함 = RAG 저장·의미 캐시 키 영속 대비
+  masking:
+    enabled: true
+    include-embeddings: true
   # rate limit 은 docker 프로파일만 활성 (default-rpm 부재 = 비활성 — 로컬은 Redis 없이 기동)
   # 태스크 유형 → 모델 라우팅 — ADR-0007 역할별 차등의 실현
   routing:

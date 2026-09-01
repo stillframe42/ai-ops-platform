@@ -91,6 +91,11 @@ class GatewayMetrics(
         meterRegistry.counter("gateway.guardrail", "stage", stage.name.lowercase(), "verdict", verdict.name.lowercase()).increment()
     }
 
+    /** 입력 마스킹 치환 건수 — 패턴별 카운트 (Prometheus 노출명 gateway_masking_total{pattern}) */
+    fun masking(pattern: String, count: Int) {
+        meterRegistry.counter("gateway.masking", "pattern", pattern).increment(count.toDouble())
+    }
+
     /** 분당 한도 초과로 429 반환한 요청 수 */
     fun rateLimited(service: String) {
         meterRegistry.counter("gateway.ratelimit.rejected", "service", service).increment()

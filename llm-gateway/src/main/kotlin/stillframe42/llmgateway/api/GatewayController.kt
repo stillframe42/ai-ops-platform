@@ -10,6 +10,7 @@ import stillframe42.llmgateway.guardrail.GuardrailBlockedException
 import stillframe42.llmgateway.guardrail.GuardrailStage
 import stillframe42.llmgateway.guardrail.GuardrailVerdict
 import stillframe42.llmgateway.guardrail.InputGuardrailChain
+import stillframe42.llmgateway.masking.InputMaskingService
 import stillframe42.llmgateway.relay.EmbeddingRelayService
 import stillframe42.llmgateway.security.ClientIdentity
 
@@ -18,6 +19,7 @@ class GatewayController(
     private val cachingChatService: CachingChatService,
     private val embeddingRelayService: EmbeddingRelayService,
     private val inputGuardrailChain: InputGuardrailChain,
+    private val inputMaskingService: InputMaskingService,
 ) {
 
     @PostMapping("/v1/chat/completions")
@@ -34,14 +36,16 @@ class GatewayController(
             throw InvalidRequestException("messages 는 비어 있을 수 없습니다", param = "messages")
         }
 
+        // 마스킹은 가드레일·캐시보다 앞 — 시크릿·PII 가 프로바이더·캐시 키·저장 응답에 실리지 않는다
+        val maskedRequest = inputMaskingService.mask(request)
         // 입력 가드레일은 캐시 조회보다 앞 — 판정이 캐시 정책(비클린 = 저장 금지)을 결정한다
-        val guardrail = inputGuardrailChain.evaluate(request)
+        val guardrail = inputGuardrailChain.evaluate(maskedRequest)
         if (guardrail.verdict == GuardrailVerdict.BLOCKED) throw GuardrailBlockedException(guardrail)
         // 비클린 요청의 응답은 캐시에 남기지 않는다 — 주입 영향을 받은 응답이 유사 질의에 재사용되는 오염 경로 차단
         val effectiveCacheControl = if (guardrail.isClean) cacheControl else "no-cache"
 
         // 서비스 차원은 검증된 토큰의 client_id — 헤더 자기 신고(X-Client-Service)는 위조 가능해 제거 (ADR-0016)
-        val result = cachingChatService.complete(request, taskType, effectiveCacheControl, ClientIdentity.current())
+        val result = cachingChatService.complete(maskedRequest, taskType, effectiveCacheControl, ClientIdentity.current())
 
         val builder = ResponseEntity.ok()
             // 캐시 판정 노출 — 확인 기준 실측·클라이언트 디버깅용 (OpenAI 계약 밖 부가 헤더라 무해)
@@ -67,6 +71,7 @@ class GatewayController(
         if (request.inputTexts().isEmpty()) {
             throw InvalidRequestException("input 은 비어 있을 수 없습니다", param = "input")
         }
-        return embeddingRelayService.relay(request)
+        // 임베딩 입력은 RAG 저장 텍스트·의미 캐시 키로 영속된다 — 채팅과 같은 마스킹 대상 (gateway.masking.include-embeddings)
+        return embeddingRelayService.relay(inputMaskingService.mask(request))
     }
 }
