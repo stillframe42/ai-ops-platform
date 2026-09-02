@@ -142,7 +142,7 @@ helm upgrade aiops charts/aiops -n aiops -f charts/aiops/values-local.yaml --set
 
 데모/학습 프로젝트로 범위를 고정한다. 아래는 의도적으로 하지 않는다.
 
-- **실 사용자 트래픽 없음** — 실 사용자·실 서비스를 대상으로 운영하지 않는다. K8s 배포(8월~)도 운영 설계 학습 목적이며, 부하는 자체 부하 테스트로 한정.
+- **실 사용자 트래픽 없음** — 실 사용자·실 서비스를 대상으로 운영하지 않는다. K8s 배포(2026-08~)도 운영 설계 학습 목적이며, 부하는 자체 부하 테스트로 한정.
 - **멀티 테넌시 없음** — 단일 대상(target-app), 단일 운영자를 가정한다.
 - **실 서비스 대상 자동 조치 없음** — 조치 실행은 저장소 내 데모 앱에 한정하고, 그마저도 사람 승인 없이는 실행하지 않는다.
 - **범용 AIOps 제품 아님** — 임의 시스템에 붙는 플러그인 구조를 지향하지 않고, 정의된 시나리오 3종의 E2E 데모를 목표로 한다.
@@ -153,19 +153,19 @@ helm upgrade aiops charts/aiops -n aiops -f charts/aiops/values-local.yaml --set
 
 **7월 — 코어 구축 (완료, 주 단위 실적)**
 
-| 주차 | 마일스톤 | 산출물 |
+| 기간 | 마일스톤 | 산출물 |
 |------|----------|--------|
-| 1주 | 설계 + 관측 기반 | 시나리오 3종 정의·C4·초기 ADR, target-app + fault-injection, Prometheus/Grafana/Alertmanager/Loki 스택 |
-| 2주 | 멀티 에이전트 코어 | Supervisor StateGraph + 모니터링/분석/실행 에이전트, 하이브리드 라우팅 ([ADR-0008](docs/adr/0008-hybrid-routing.md)), Durable Execution ([ADR-0009](docs/adr/0009-postgres-checkpointer.md)) |
-| 3주 | 자동 파이프라인 | MCP 도구 노출 ([ADR-0010](docs/adr/0010-mcp-tool-exposure.md)), Kafka 트리거 ([ADR-0011](docs/adr/0011-kafka-trigger.md)) — chaos 주입부터 Slack 보고까지 사람 개입 없음, 장애 주입 실측 (다운 중 무유실) |
-| 4주 | human-in-the-loop | 승인 도메인 + Slack 승인 카드/Socket Mode ([ADR-0006](docs/adr/0006-slack-approval-ux.md)) + 조치 실행 대행 ([ADR-0005](docs/adr/0005-action-executor.md)) + 회복 확인 — 승인·거부·타임아웃 3경로 실측 (Alert 발화→종결 약 1분 54초) |
+| 7/13~14 | 설계 + 관측 기반 | 시나리오 3종 정의·C4·초기 ADR, target-app + fault-injection, Prometheus/Grafana/Alertmanager/Loki 스택 |
+| 7/16~21 | 멀티 에이전트 코어 | Supervisor StateGraph + 모니터링/분석/실행 에이전트, 하이브리드 라우팅 ([ADR-0008](docs/adr/0008-hybrid-routing.md)), Durable Execution ([ADR-0009](docs/adr/0009-postgres-checkpointer.md)) |
+| 7/23~28 | 자동 파이프라인 | MCP 도구 노출 ([ADR-0010](docs/adr/0010-mcp-tool-exposure.md)), Kafka 트리거 ([ADR-0011](docs/adr/0011-kafka-trigger.md)) — chaos 주입부터 Slack 보고까지 사람 개입 없음, 장애 주입 실측 (다운 중 무유실) |
+| 7/31~8/7 | human-in-the-loop | 승인 도메인 + Slack 승인 카드/Socket Mode ([ADR-0006](docs/adr/0006-slack-approval-ux.md)) + 조치 실행 대행 ([ADR-0005](docs/adr/0005-action-executor.md)) + 회복 확인 — 승인·거부·타임아웃 3경로 실측 (Alert 발화→종결 약 1분 54초) |
 
 **8월 — 클라우드 네이티브 + 보안**
 
 | 마일스톤 | 산출물 |
 |----------|--------|
-| K8s 운영 설계 (완료 — 5주차) | kind 3노드 + Helm umbrella 9종 차트 (빈 클러스터→전체 복원 3분 24초 실측, [ADR-0013](docs/adr/0013-k8s-migration.md) — compose 는 개발용 유지), Durable Execution × pod 강제 삭제 무유실 실측, KEDA lag 기반 스케일링 (10건 동시 주입 무유실, [ADR-0014](docs/adr/0014-autoscaling-strategy.md) — CPU 는 LLM 워크로드의 수요 신호가 아님) |
-| LLM 게이트웨이 (완료 — 6주차) | 별도 서비스 직접 구현 ([ADR-0015](docs/adr/0015-llm-gateway.md) — LiteLLM/Bifrost 비교표 포함): 모든 LLM 호출 단일 경유 (OpenAI 호환), 태스크별 모델 라우팅, 2단계 시맨틱 캐싱 L1 Redis + L2 pgvector (히트 시 응답 92.2% 단축 실측), 비용 집계·일별 예산 (100% = 차단 아닌 다운그레이드)·Rate Limiting, 프로바이더 폴백 체인 + 서킷 (키 무효화 실측 — 교차 프로바이더 정상 응답), replica 2 + PDB, 전용 대시보드 13패널 + W3C trace 전파 |
+| K8s 운영 설계 (완료 — 8/10~14) | kind 3노드 + Helm umbrella 9종 차트 (빈 클러스터→전체 복원 3분 24초 실측, [ADR-0013](docs/adr/0013-k8s-migration.md) — compose 는 개발용 유지), Durable Execution × pod 강제 삭제 무유실 실측, KEDA lag 기반 스케일링 (10건 동시 주입 무유실, [ADR-0014](docs/adr/0014-autoscaling-strategy.md) — CPU 는 LLM 워크로드의 수요 신호가 아님) |
+| LLM 게이트웨이 (완료 — 8/17~22) | 별도 서비스 직접 구현 ([ADR-0015](docs/adr/0015-llm-gateway.md) — LiteLLM/Bifrost 비교표 포함): 모든 LLM 호출 단일 경유 (OpenAI 호환), 태스크별 모델 라우팅, 2단계 시맨틱 캐싱 L1 Redis + L2 pgvector (히트 시 응답 92.2% 단축 실측), 비용 집계·일별 예산 (100% = 차단 아닌 다운그레이드)·Rate Limiting, 프로바이더 폴백 체인 + 서킷 (키 무효화 실측 — 교차 프로바이더 정상 응답), replica 2 + PDB, 전용 대시보드 13패널 + W3C trace 전파 |
 | AI 시스템 보안 | Prompt Injection 방어, 민감 로그 자동 마스킹, Spring Security + 에이전트 권한 설계, Zero Trust 도구 범위 제한 |
 
 **9월 — Observability + 성능 최적화**

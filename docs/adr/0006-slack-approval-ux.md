@@ -5,7 +5,7 @@
 
 ## 맥락
 
-3주차까지의 Slack 연동은 Incoming Webhook 발신 전용(분석 보고 알림)이다. 4주차 human-in-the-loop 는 사람의 승인 입력을 받아야 하는데, Incoming Webhook 으로는 버튼 클릭을 수신할 수 없다 (scenarios.md ADR-0006 예약). 표준 Interactivity 는 Slack 이 호출할 공개 Request URL 을 요구하지만, 로컬 compose 스택에는 공개 URL 이 없다.
+초기 Slack 연동은 Incoming Webhook 발신 전용(분석 보고 알림)이었다. human-in-the-loop 는 사람의 승인 입력을 받아야 하는데, Incoming Webhook 으로는 버튼 클릭을 수신할 수 없다 (scenarios.md ADR-0006 예약). 표준 Interactivity 는 Slack 이 호출할 공개 Request URL 을 요구하지만, 로컬 compose 스택에는 공개 URL 이 없다.
 
 DAY 19 의 알림 포맷(`SlackNotifier.buildMessage`)이 승인 요청 포맷의 초안이다 (코드 주석으로 예약됨).
 
@@ -25,7 +25,7 @@ DAY 19 의 알림 포맷(`SlackNotifier.buildMessage`)이 승인 요청 포맷�
 | 대안 | 장점 | 단점 | 기각 사유 |
 |------|------|------|-----------|
 | 승인 링크 방식 (Incoming Webhook 유지) | 준비물 없음 — 가장 단순 | 승인자 식별 별도 처리 필요, GET 링크로 상태 변경(멱등성·오클릭 위험), 버튼 UX 아님 | 승인자 감사가 HITL 의 핵심 산출물 — 식별 없는 승인은 반쪽 |
-| 터널 (ngrok 류) + HTTP Interactivity | 실운영과 가장 유사한 형태 | 터널 상시 유지·URL 변동 관리, 로컬 스택 밖 의존 추가 | 데모 편익 대비 운영 부담 — 8월 K8s 전환(공개 인그레스) 때 자연 해소 |
+| 터널 (ngrok 류) + HTTP Interactivity | 실운영과 가장 유사한 형태 | 터널 상시 유지·URL 변동 관리, 로컬 스택 밖 의존 추가 | 데모 편익 대비 운영 부담 — K8s 전환(2026-08, 공개 인그레스) 때 자연 해소 |
 | Socket Mode (채택) | 공개 URL 불요, Block Kit 전체 사용, 승인자 ID 수신 | Slack App 생성·토큰 2종 관리, Bolt 의존성 추가 | — |
 
 ## 결과

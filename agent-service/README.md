@@ -35,7 +35,7 @@ app/
 ├── supervisor/        # 공유 상태 스키마 + Supervisor StateGraph
 ├── agents/            # 모니터링/분석/실행 에이전트 노드
 ├── events/            # Kafka 인시던트 컨슈머 (DAY 18, ADR-0011)
-└── tools/             # Prometheus(DAY 9)·Loki(DAY 10)·MCP 클라이언트(DAY 16)·조치 실행(4주차) 도구
+└── tools/             # Prometheus(DAY 9)·Loki(DAY 10)·MCP 클라이언트(DAY 16)·조치 실행(DAY 21~) 도구
 ```
 
 ## Kafka 인시던트 컨슈머 (DAY 18, ADR-0011)
