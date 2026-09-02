@@ -1,0 +1,28 @@
+# auth-server 단위 테스트 CI (2026-09-02)
+name: ci-auth-server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "auth-server/**"
+      - ".github/workflows/ci-auth-server.yml"
+  pull_request:
+    paths:
+      - "auth-server/**"
+      - ".github/workflows/ci-auth-server.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: auth-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew test

@@ -1,0 +1,31 @@
+# llm-gateway 단위 테스트 CI (2026-09-02)
+# 레드팀 결정론 회귀(guardrail/RedteamRegressionTest)가 포함되므로 케이스 데이터셋 변경도 트리거한다.
+name: ci-llm-gateway
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "llm-gateway/**"
+      - "docs/security/redteam/cases.yaml"
+      - ".github/workflows/ci-llm-gateway.yml"
+  pull_request:
+    paths:
+      - "llm-gateway/**"
+      - "docs/security/redteam/cases.yaml"
+      - ".github/workflows/ci-llm-gateway.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: llm-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew test

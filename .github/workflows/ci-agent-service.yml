@@ -1,0 +1,32 @@
+# agent-service 단위 테스트 CI (2026-09-02 — 저장소 첫 CI)
+# 레드팀 결정론 회귀(tests/test_redteam_regression.py)가 포함되므로 케이스 데이터셋 변경도 트리거한다.
+# 실 LLM E2E 러너(scripts/run_redteam.py)는 비용·비결정성 때문에 CI 제외 — 로컬 수동 (redteam/README.md)
+name: ci-agent-service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "agent-service/**"
+      - "docs/security/redteam/cases.yaml"
+      - ".github/workflows/ci-agent-service.yml"
+  pull_request:
+    paths:
+      - "agent-service/**"
+      - "docs/security/redteam/cases.yaml"
+      - ".github/workflows/ci-agent-service.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "agent-service/uv.lock"
+      - run: uv sync --frozen
+      - run: uv run pytest tests
