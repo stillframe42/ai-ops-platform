@@ -15,7 +15,8 @@
 | [0009](0009-postgres-checkpointer.md) | LangGraph 체크포인터 | 처음부터 PostgreSQL (Durable Execution), thread_id = incident id | 2026-07-20 |
 | [0010](0010-mcp-tool-exposure.md) | 운영 도구 노출 방식 | MCP 표준 (Streamable HTTP) — REST 직접 호출 대체 | 2026-07-23 |
 | [0011](0011-kafka-trigger.md) | 에이전트 트리거 | Kafka 이벤트 (`ops.incidents`) — 수동 커밋 + 멱등 2층, 다운 중 무유실 실측 | 2026-07-26 |
-| [0013](0013-k8s-migration.md) | K8s 이전·compose 역할 분담 | kind + Helm umbrella 가 운영 형상 표준 (docker 프로파일 무수정 재사용), compose 는 개발용 유지 — 폐기 재검토는 8월 말 | 2026-08-13 |
+| [0013](0013-k8s-migration.md) | K8s 이전·compose 역할 분담 | kind + Helm umbrella 가 운영 형상 표준 (docker 프로파일 무수정 재사용), compose 는 개발용 유지 — 폐기 재검토는 보안 작업 이후 | 2026-08-13 |
 | [0014](0014-autoscaling-strategy.md) | 오토스케일링 전략 | agent-service 는 KEDA Kafka lag 기반 (min 1·max 3 = 파티션, LLM 워크로드는 CPU 가 수요 신호가 아님), control-plane 은 min 1 고정·HPA 생략 — 10건 무유실 실측 | 2026-08-14 |
 | [0015](0015-llm-gateway.md) | LLM 게이트웨이 도입 방식 | 별도 서비스 직접 구현 (Spring Boot + Spring AI, OpenAI 호환 노출) — 승인됨 (LiteLLM/Bifrost 비교표·실측 병기, 2026-08-22 확정) | 2026-08-17 |
 | [0016](0016-mcp-authentication.md) | MCP 인증 | 별도 auth-server 발급(Client Credentials) + 리소스 서버별 동일 issuer 검증(control-plane·llm-gateway), 스코프 ops:read/ops:approve/llm:invoke, 인증 항상 필수, 감사 로그·Secret 관리 확정 — 승인됨 (2026-08-28 확정) | 2026-08-25 |
+| [0017](0017-prompt-injection-defense.md) | Prompt Injection 계층 방어 | 계층 4종(구조적 분리·입력 가드레일·도구 인자 검증·출력/저장 스캔+마스킹) + 플래깅 우선 정책, 레드팀 20/20(baseline 8→0), 결정론 회귀 CI — 승인됨 | 2026-09-02 |
