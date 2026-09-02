@@ -2,7 +2,7 @@
 
 C4 모델의 Level 1(System Context)·Level 2(Container). 미결 경로는 **점선**으로 표기하는 관례였으나, 2026-08-04 기준 예약된 미결 경로가 전부 확정 전환되어 현재 점선 없음 — 새 미결 경로가 생기면 같은 관례로 표기하고 [scenarios.md 의 ADR 후보 목록](scenarios.md#미결-사항--adr-후보)에 번호를 예약한다.
 
-갱신 이력: Alertmanager([ADR-0003](adr/0003-alertmanager-webhook.md))·Loki([ADR-0004](adr/0004-loki-adoption.md)) 확정 (2026-07-14) → 2026-07-28 반영: control-plane 실체화, 도구 노출 MCP([ADR-0010](adr/0010-mcp-tool-exposure.md)), 트리거 Kafka 이벤트([ADR-0011](adr/0011-kafka-trigger.md)), 결과 저장·Slack 알림 확정 → 2026-08-04 반영: 승인 왕복 활성(`ops.actions.pending`/`decisions`), Slack 승인 카드·Socket Mode 버튼([ADR-0006](adr/0006-slack-approval-ux.md)), 조치 실행 control-plane 대행([ADR-0005](adr/0005-action-executor.md)), 회복 확인 노드 → 2026-08-22 반영: llm-gateway·Redis 컨테이너 추가([ADR-0015](adr/0015-llm-gateway.md)) — 모든 LLM 호출(채팅·임베딩)이 게이트웨이 단일 경유로 전환, 프로바이더 직접 호출 경로 제거.
+갱신 이력: Alertmanager([ADR-0003](adr/0003-alertmanager-webhook.md))·Loki([ADR-0004](adr/0004-loki-adoption.md)) 확정 (2026-07-14) → 2026-07-28 반영: control-plane 실체화, 도구 노출 MCP([ADR-0010](adr/0010-mcp-tool-exposure.md)), 트리거 Kafka 이벤트([ADR-0011](adr/0011-kafka-trigger.md)), 결과 저장·Slack 알림 확정 → 2026-08-04 반영: 승인 왕복 활성(`ops.actions.pending`/`decisions`), Slack 승인 카드·Socket Mode 버튼([ADR-0006](adr/0006-slack-approval-ux.md)), 조치 실행 control-plane 대행([ADR-0005](adr/0005-action-executor.md)), 회복 확인 노드 → 2026-08-22 반영: llm-gateway·Redis 컨테이너 추가([ADR-0015](adr/0015-llm-gateway.md)) — 모든 LLM 호출(채팅·임베딩)이 게이트웨이 단일 경유로 전환, 프로바이더 직접 호출 경로 제거 → 2026-09-02 반영: auth-server 를 Level 2 에 반영(2026-08-25 도입 — 전 M2M 호출 OAuth2 토큰 검증, [ADR-0016](adr/0016-mcp-authentication.md)), Prompt Injection 계층 방어([ADR-0017](adr/0017-prompt-injection-defense.md)) — "보안 아키텍처" 절 신설.
 
 ## Level 1 — System Context
 
@@ -52,6 +52,7 @@ flowchart TB
         alloy["Alloy<br/>로그 수송 (컨테이너 stdout 수집)"]
         pg["PostgreSQL (pgvector)<br/>LangGraph 체크포인트 (ADR-0009)<br/>vector_store · incident_reports (Flyway)"]
         lf["Langfuse v3<br/>LLM 관측·비용 추적<br/>(웹+worker · ClickHouse · MinIO · Redis)"]
+        auth["auth-server<br/>OAuth2 토큰 발급 (Client Credentials)<br/>JWKS 공개 (ADR-0016)"]
     end
 
     target["target-app<br/>Spring Boot · fault-injection 제공"]
@@ -71,6 +72,7 @@ flowchart TB
     kafka -->|"결과·승인 요청 소비 (@KafkaListener)<br/>upsert 멱등 · pending 저장·카드 발송"| cp
     cp -->|"결정 발행 ops.actions.decisions<br/>approved 는 실행 결과 포함 (ADR-0005)"| kafka
 
+    agents & cp & gw -->|"OAuth2 토큰 발급 요청<br/>(Client Credentials · ADR-0016)"| auth
     agents -->|"MCP 도구 호출 (Streamable HTTP · OAuth2 bearer ops:read)<br/>배포 이력 · 유사 인시던트 · 앱 설정 (ADR-0010·0016)"| cp
     agents -->|"채팅 (OpenAI 호환 · X-Task-Type 라우팅)<br/>ADR-0015 단일 통과점"| gw
     cp -->|"임베딩 (OpenAI 호환)<br/>유사 인시던트 검색·L2 캐시"| gw
@@ -97,7 +99,7 @@ flowchart TB
     classDef container fill:#1168bd,color:#fff,stroke:#0b4884
     classDef external fill:#999,color:#fff,stroke:#6b6b6b
     class operator person
-    class cp,agents,gw,redis,kafka,prom,graf,am,loki,alloy,pg,lf container
+    class cp,agents,gw,redis,kafka,prom,graf,am,loki,alloy,pg,lf,auth container
     class target,slack,llm external
 ```
 
@@ -168,3 +170,51 @@ flowchart LR
 | 분산 추적 — 수집·시각화 (OTLP → Tempo) | OTLP | 로드맵 2026-09 — 전파는 위 행으로 선행 확정, 수집 도입 시 Level 2 갱신 |
 
 > OTLP/Tempo 는 현재 컨테이너 목록에 없다. [README 로드맵](../README.md#로드맵)의 2026-09(Observability) 단계에서 도입하며, 그 시점에 이 다이어그램을 갱신한다. 전파 계층(traceparent·로그 상관)이 2026-08-22 에 먼저 확정되어, 수집 단계는 exporter 장착부터 시작한다.
+
+## 보안 아키텍처
+
+두 축이다 — **인증·인가**(누가 호출했는가, [ADR-0016](adr/0016-mcp-authentication.md))와 **Prompt Injection 계층 방어**(데이터 속 지시를 명령으로 오인하지 않는가, [ADR-0017](adr/0017-prompt-injection-defense.md)). 신뢰 경계·주입 벡터의 전체 도식과 레드팀 결과는 [위협 모델](security/threat-model.md).
+
+### 인증 흐름 (M2M OAuth 2.1 — Client Credentials)
+
+발급자는 `auth-server` 하나, 검증은 각 리소스 서버가 동일 issuer 의 JWKS 로 자체 수행한다 (중앙 게이트웨이 없음 — 순환 결합 회피, ADR-0016). 신뢰 헤더·mTLS 는 JWT 서명이 identity 를 보증하므로 불필요.
+
+```mermaid
+flowchart LR
+    auth["auth-server<br/>토큰 발급 (Client Credentials, 15분)<br/>JWKS 공개"]
+    agent["agent-service<br/>ops:read · llm:invoke"]
+    cp["control-plane<br/>리소스 서버 (MCP /mcp · 승인 API)<br/>+ 클라이언트 (llm:invoke)"]
+    gw["llm-gateway<br/>리소스 서버 (/v1)"]
+
+    agent -->|"① 토큰 요청 (scope)"| auth
+    cp -->|"① 토큰 요청 (llm:invoke)"| auth
+    agent -->|"② MCP 호출 + Bearer (ops:read)"| cp
+    agent -->|"② LLM 호출 + Bearer (llm:invoke)"| gw
+    cp -->|"② 임베딩 + Bearer (llm:invoke)"| gw
+    cp -.->|"JWKS 로 서명·aud·scope 검증"| auth
+    gw -.->|"JWKS 로 서명·aud·scope 검증"| auth
+
+    classDef issuer fill:#08427b,color:#fff,stroke:#052e56
+    classDef svc fill:#1168bd,color:#fff,stroke:#0b4884
+    class auth issuer
+    class agent,cp,gw svc
+```
+
+- **스코프 분리**: agent-service 는 `ops:read`+`llm:invoke` 만 — 승인(`ops:approve`)은 구조적으로 불가(RT-16 = 403). 조치 실행은 HITL 승인 후 control-plane 대행만 (ADR-0005).
+- **직접 경로 차단**: 무인증 승인 API·`X-Client-Service` 헤더 위조(위협 모델 ⑦⑧)는 스코프·JWT client_id 로 해소 (2026-08-26·28).
+- **감사**: 모든 M2M 호출이 client_id 와 함께 구조화 로그(`audit`)로 남는다 — 403 은 `authz_denied` 경보.
+
+### Prompt Injection 계층 방어 (ADR-0017)
+
+각 계층을 "주입을 막을 수 있는 가장 신뢰도 높은 지점"에 둔다 — 단일 방어는 없다.
+
+| 계층 | 위치 | 막는 것 | 강제 방식 |
+|------|------|---------|----------|
+| ① 구조적 분리 | agent-service | 데이터 속 지시를 명령으로 오인 | `<untrusted_content>` 구분자 + 시스템 프롬프트 정책 |
+| ② 입력 가드레일 | llm-gateway (강제 지점) | 교과서적 주입·인코딩 우회 | 정규화 + 패턴 1차 + LLM 분류기 2차, 플래깅 우선 |
+| ③ 도구 인자 검증 | agent-service | LLM 생성 인자의 오남용 (PromQL/LogQL) | 화이트리스트 결정론 검증 → ValueError |
+| ④ 출력/저장 스캔 + 마스킹 | control-plane + llm-gateway | 시크릿·프롬프트 유출·RAG 재주입 오염 | 저장 값 대체 · 발송 마스킹 · 입력 마스킹 |
+
+- **플래깅 우선**: 가드레일 탐지는 기본 차단이 아니라 통과+관측 — 오탐이 장애 대응을 세우는 비용 회피, 후단 계층이 최종 행동 도달을 막는다 (차단 모드는 스위치).
+- **강제 지점**: 모든 LLM 호출이 llm-gateway 를 지나므로(ADR-0015) ②·④(입력 마스킹)는 에이전트 코드와 무관하게 강제된다.
+- **효과·회귀**: 레드팀 20/20 (baseline 8→0), 계층별 결정론 테스트가 CI 에 고정 (`docs/security/redteam/`).

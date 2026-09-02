@@ -57,8 +57,8 @@ flowchart LR
 
 ### 간접 주입 (콘텐츠가 데이터 통로를 타고 프롬프트에 도달)
 
-| # | 벡터 | 실경로 | 현재 통제 (2026-08-25) | 예정 방어 계층 | OWASP |
-|---|------|--------|----------------------|---------------|-------|
+| # | 벡터 | 실경로 | 통제 (구현 이력) | 실증·비고 | OWASP |
+|---|------|--------|------------------|-----------|-------|
 | ① | **Loki 로그** | target-app 이 요청 URI·본문 일부를 로그에 기록 → `get_app_logs` → 분석 프롬프트 ToolMessage | **구조적 분리 + 입력 가드레일 (2026-08-30) + 입력 마스킹 (2026-09-01)** — `<untrusted_content source="loki-logs">` 래핑, 게이트웨이가 tool 메시지 스캔·시크릿 마스킹 | — | LLM01 |
 | ② | **Alert annotation** | Alertmanager 웹훅 summary → `incident.summary` → 모니터 프롬프트 | 웹훅 공유 시크릿 (2026-08-26) · **구조적 분리 `alert-annotation` + 입력 가드레일 (2026-08-30)** | — | LLM01 |
 | ③ | **유사 인시던트 RAG** | 보고서 자동 저장 → pgvector → `searchSimilarIncidents` → 미래 분석 재주입 (**자기 오염 루프**) | 검색 결과 untrusted 래핑 `mcp:searchSimilarIncidents` (2026-08-30) · **저장 시점 스캔 (2026-09-01)** — `StoredReportSanitizer` 가 보고서 저장 전 주입 패턴 값 대체·민감정보 마스킹, 시드 로더 동일 적용 | — | LLM08 |
