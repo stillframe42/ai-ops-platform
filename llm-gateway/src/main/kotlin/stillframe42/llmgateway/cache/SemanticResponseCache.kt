@@ -36,6 +36,12 @@ class SemanticResponseCache(
                     .build(),
             )
         }?.firstOrNull() ?: return null
+        // RT-13 (2026-09-02 실측 보완): 임베딩은 숫자 차이에 둔감 — 에러율 12% 질의가 2% 질의의 저장 응답으로
+        // 대체됐다. 운영 질의의 수치는 의미 결정 요소라, 숫자 토큰 열이 정확히 일치할 때만 히트를 인정한다
+        if (numericTokens(promptText(request)) != numericTokens(document.text.orEmpty())) {
+            log.debug("의미 캐시 후보 기각 — 숫자 토큰 불일치 (RT-13 필터)")
+            return null
+        }
         val json = document.metadata["response"] as? String ?: return null
         return guarded("역직렬화") { objectMapper.readValue(json, ChatCompletionResponse::class.java) }
     }
@@ -58,6 +64,9 @@ class SemanticResponseCache(
     private fun promptText(request: ChatCompletionRequest): String =
         request.messages.joinToString("\n") { "${it.role}: ${it.contentText()}" }
 
+    // 소수점 포함 숫자 열 추출 — 등장 순서까지 비교해 수치가 하나라도 다른 질의는 다른 질문으로 본다
+    private fun numericTokens(text: String): List<String> = NUMBER.findAll(text).map { it.value }.toList()
+
     private fun <T> guarded(operation: String, block: () -> T?): T? =
         runCatching(block).getOrElse {
             log.warn("의미 캐시 {} 실패 — 무캐시 통과: {}", operation, it.message)
@@ -65,6 +74,8 @@ class SemanticResponseCache(
         }
 
     companion object {
+        private val NUMBER = Regex("\\d+(?:\\.\\d+)?")
+
         // 임베딩 대상 = 순수 프롬프트 텍스트와 정확 일치 (기본 템플릿의 "\n\n" 접두도 거리 0.037 소모 — DAY 31 실측)
         private val EMBED_PROMPT_TEXT_ONLY = DefaultContentFormatter.builder()
             .withTextTemplate("{content}")
