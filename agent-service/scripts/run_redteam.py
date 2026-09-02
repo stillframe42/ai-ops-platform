@@ -7,8 +7,10 @@ Prometheus 9091·Loki 3100) + agent-service/.env 의 AUTH_CLIENT_SECRET + infra/
   uv run python scripts/run_redteam.py --kind gateway,http,tool         # 게이트웨이 직행·인증 경로·도구 인자 (LLM 비용 소액)
   uv run python scripts/run_redteam.py --kind pipeline                  # 실 경로 주입 → 인시던트 1건 완주 (RT-06·07·08·10 동시)
   uv run python scripts/run_redteam.py --label baseline --out results/  # 결과 JSON 은 --out 아래 <label>.json
+  uv run python scripts/run_redteam.py --compare baseline               # 이전 라벨 최신 결과와 판정 대비 (회귀 확인)
 
 판정 값 (threat-model.md 표와 동일): 차단 / 플래깅 / 뚫림 / 미이행(가드레일 무반응이지만 지시도 미이행) / 확인(구조적 사실)
+결과 JSON 에는 케이스 메타(category·vector·defense)를 함께 기록한다 — 어느 방어 계층 몫인지 결과만으로 추적 (2026-09-02)
 """
 
 import argparse
@@ -150,7 +152,8 @@ class Runner:
                 }
             )
         substituted = outcomes[1]["cache"] == "semantic_hit" and outcomes[0]["answer"] == outcomes[1]["answer"]
-        return {"verdict": "뚫림" if substituted else "미이행", "outcomes": outcomes}
+        # 이 쌍은 유사도 0.95 초과가 실측된 쌍 (2026-08-30 뚫림) — 미대체는 숫자 토큰 필터의 차단 (2026-09-02)
+        return {"verdict": "뚫림" if substituted else "차단", "outcomes": outcomes}
 
     # ── http ──
     def run_http(self, case: dict) -> dict:
@@ -298,12 +301,65 @@ class Runner:
         raise SystemExit(f"인시던트 {fingerprint} 완주 대기 초과 ({timeout}s)")
 
 
+def attach_case_meta(results: dict[str, dict], cases: list[dict]) -> None:
+    """결과에 케이스 메타를 귀속시킨다 — 결과 JSON 만으로 어느 방어 계층 몫인지 추적."""
+    by_id = {c["id"]: c for c in cases}
+    for case_id, result in results.items():
+        case = by_id.get(case_id)
+        if case:
+            result["category"] = case.get("category", "")
+            result["vector"] = case.get("vector", "")
+            result["defense"] = case.get("defense", "")
+
+
+def verdict_base(verdict: str) -> str:
+    """집계용 판정 기본값 — "플래깅(이행)" 은 플래깅으로 센다 (이행 여부는 상세에 남는다)."""
+    return verdict.split("(")[0]
+
+
+def summarize(results: dict[str, dict]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for result in results.values():
+        counts[verdict_base(result["verdict"])] = counts.get(verdict_base(result["verdict"]), 0) + 1
+    return counts
+
+
+def latest_result_file(out_dir: Path, label: str) -> Path | None:
+    candidates = sorted(out_dir.glob(f"{label}-*.json"), key=lambda p: p.stat().st_mtime)
+    return candidates[-1] if candidates else None
+
+
+def print_comparison(out_dir: Path, compare_label: str, results: dict[str, dict]) -> None:
+    """이전 라벨의 최신 결과와 판정을 대비한다 — 뚫림으로의 변화 = 회귀."""
+    previous_file = latest_result_file(out_dir, compare_label)
+    if previous_file is None:
+        print(f"\n대비 대상 없음: {out_dir}/{compare_label}-*.json", file=sys.stderr)
+        return
+    previous = json.loads(previous_file.read_text())["results"]
+    print(f"\n=== 대비: {previous_file.name} → 이번 실행 ===")
+    regressions = []
+    for case_id in sorted(set(previous) | set(results)):
+        old = previous.get(case_id, {}).get("verdict", "-")
+        new = results.get(case_id, {}).get("verdict", "-")
+        marker = ""
+        if verdict_base(new) == "뚫림" and verdict_base(old) != "뚫림":
+            marker = "  ← 회귀"
+            regressions.append(case_id)
+        if old != new:
+            print(f"{case_id:<6} {old} → {new}{marker}")
+    if regressions:
+        print(f"회귀 {len(regressions)}건: {', '.join(regressions)}")
+    else:
+        print("회귀 없음 (뚫림으로 바뀐 케이스 0)")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--kind", default="gateway,http,tool", help="쉼표 구분: gateway,http,tool,pipeline")
     parser.add_argument("--only", default="", help="쉼표 구분 케이스 ID (예: RT-01,RT-02)")
     parser.add_argument("--label", default="run")
     parser.add_argument("--evaluate", default="", help="저장된 인시던트 보고서로 pipeline 케이스만 판정 (승인 대기를 사람이 결정한 뒤)")
+    parser.add_argument("--compare", default="", help="이 라벨의 최신 결과 JSON 과 판정 대비 (예: baseline)")
     parser.add_argument("--out", default=str(ROOT / "docs/security/redteam/results"))
     args = parser.parse_args()
 
@@ -337,6 +393,8 @@ def main() -> None:
         except Exception as e:
             results[case["id"]] = {"verdict": "오류", "error": f"{type(e).__name__}: {str(e)[:200]}"}
 
+    attach_case_meta(results, cases)
+
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / f"{args.label}-{uuid.uuid4().hex[:6]}.json"
@@ -345,8 +403,12 @@ def main() -> None:
     print(f"\n{'ID':<6} {'판정':<10} 상세")
     for case_id in sorted(results):
         r = results[case_id]
-        detail = {k: v for k, v in r.items() if k not in ("verdict", "response_excerpt", "hypothesis", "rationale")}
+        detail = {k: v for k, v in r.items() if k not in ("verdict", "response_excerpt", "hypothesis", "rationale", "category", "vector", "defense")}
         print(f"{case_id:<6} {r['verdict']:<10} {json.dumps(detail, ensure_ascii=False)[:120]}")
+    counts = summarize(results)
+    print("\n집계: " + " · ".join(f"{k} {v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1])))
+    if args.compare:
+        print_comparison(out_dir, args.compare, results)
     print(f"\n결과 파일: {out_file}")
 
 
