@@ -13,7 +13,7 @@
 | 5 | Rate Limiting — Bucket4j + Redis, 서비스별 한도 | 2026-08-19 |
 | 6 | OAuth2 리소스 서버 — `/v1` 전부 `llm:invoke` 토큰 필수, 서비스 식별 = JWT client_id, 요청 감사 로그 | 2026-08-28 (ADR-0016) |
 | 7 | 입력 가드레일 — 패턴 1차(정규화: NFKC·제로폭·base64·자모 분리) + LLM 분류기 2차(SUSPECT 만, haiku 자기 호출), 플래깅 후 통과(차단은 `gateway.guardrail.mode=block`) | 2026-08-30 (DAY 38) |
-| 8 | 출력 가드레일 — 미구현 (예정: 시스템 프롬프트 유출·민감 정보 스캔은 control-plane 발송·저장 경로) | 예정 |
+| 8 | 입력 마스킹 — user·tool 메시지 + 임베딩의 시크릿 패턴 마스킹(RAG·캐시 키 영속 대비), 마스킹→가드레일→캐시 순, `gateway_masking_total{pattern}` — 게이트웨이는 LLM **입력** 담당(출력 발송·저장 스캔은 control-plane, [ADR-0017](../docs/adr/0017-prompt-injection-defense.md)) | 2026-09-01 |
 
 ## API — OpenAI 호환
 

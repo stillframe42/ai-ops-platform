@@ -166,7 +166,7 @@ helm upgrade aiops charts/aiops -n aiops -f charts/aiops/values-local.yaml --set
 |----------|--------|
 | K8s 운영 설계 (완료 — 8/10~14) | kind 3노드 + Helm umbrella 9종 차트 (빈 클러스터→전체 복원 3분 24초 실측, [ADR-0013](docs/adr/0013-k8s-migration.md) — compose 는 개발용 유지), Durable Execution × pod 강제 삭제 무유실 실측, KEDA lag 기반 스케일링 (10건 동시 주입 무유실, [ADR-0014](docs/adr/0014-autoscaling-strategy.md) — CPU 는 LLM 워크로드의 수요 신호가 아님) |
 | LLM 게이트웨이 (완료 — 8/17~22) | 별도 서비스 직접 구현 ([ADR-0015](docs/adr/0015-llm-gateway.md) — LiteLLM/Bifrost 비교표 포함): 모든 LLM 호출 단일 경유 (OpenAI 호환), 태스크별 모델 라우팅, 2단계 시맨틱 캐싱 L1 Redis + L2 pgvector (히트 시 응답 92.2% 단축 실측), 비용 집계·일별 예산 (100% = 차단 아닌 다운그레이드)·Rate Limiting, 프로바이더 폴백 체인 + 서킷 (키 무효화 실측 — 교차 프로바이더 정상 응답), replica 2 + PDB, 전용 대시보드 13패널 + W3C trace 전파 |
-| AI 시스템 보안 | Prompt Injection 방어, 민감 로그 자동 마스킹, Spring Security + 에이전트 권한 설계, Zero Trust 도구 범위 제한 |
+| AI 시스템 보안 (완료 — 8/24~9/2) | OAuth 2.1 M2M 인증 — auth-server 발급(Client Credentials) + 리소스 서버별 동일 issuer 검증, 스코프 `ops:read`/`ops:approve`/`llm:invoke`, 전 M2M 호출 감사 로그 ([ADR-0016](docs/adr/0016-mcp-authentication.md)) · Prompt Injection 계층 방어 4종 (구조적 분리·입력 가드레일·도구 인자 검증·출력/저장 스캔+마스킹, [ADR-0017](docs/adr/0017-prompt-injection-defense.md)) · 레드팀 20종 회귀 스위트 — baseline 뚫림 8 → 0, 계층별 결정론 테스트 CI 고정 |
 
 **9월 — Observability + 성능 최적화**
 
