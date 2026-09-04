@@ -3,7 +3,7 @@
 # namespace 는 aiops 단일 — 릴리스·주소 체계 단순화
 apiVersion: v2
 name: aiops
-description: 멀티 에이전트 AIOps 플랫폼 전체 스택 — 앱 6종 + DB/Kafka/Redis + 모니터링·로그
+description: 멀티 에이전트 AIOps 플랫폼 전체 스택 — 앱 6종 + DB/Kafka/Redis + 모니터링·로그·추적
 type: application
 version: 0.1.0
 
@@ -36,7 +36,7 @@ dependencies:
   - name: auth-server
     version: 0.1.0
     repository: "file://../auth-server"
-  # 외부 차트 3종 — 설치 실측 버전으로 고정 (재현성)
+  # 외부 차트 5종 — 설치 실측 버전으로 고정 (재현성)
   - name: kube-prometheus-stack
     version: 88.2.0
     repository: "https://prometheus-community.github.io/helm-charts"
@@ -45,4 +45,11 @@ dependencies:
     repository: "https://grafana.github.io/helm-charts"
   - name: alloy
     version: 1.11.1
+    repository: "https://grafana.github.io/helm-charts"
+  # 분산 추적 수집 (DAY 42, docs/otel-genai-mapping.md §2) — 앱은 otel-collector 만 바라본다, 백엔드 라우팅은 values 의 config
+  - name: opentelemetry-collector
+    version: 0.172.0
+    repository: "https://open-telemetry.github.io/opentelemetry-helm-charts"
+  - name: tempo
+    version: 1.24.4
     repository: "https://grafana.github.io/helm-charts"

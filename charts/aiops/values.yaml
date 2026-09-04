@@ -1,6 +1,6 @@
 # umbrella 전역 values — 환경 무관 구성만 (환경 차이값은 values-local.yaml / values-prod.yaml).
 # 자작 차트 6종의 기본값은 각 차트 values.yaml 소유 — 여기 복제하지 않는다 (기본값 소유 = 한 곳).
-# 외부 차트 3종의 구성은 infra/k8s/monitoring/values-*.yaml 을 이관한 것 (해당 디렉토리 폐지).
+# 외부 차트 5종의 구성 — 모니터링 3종은 infra/k8s/monitoring/values-*.yaml 을 이관한 것 (해당 디렉토리 폐지), 추적 2종은 DAY 42 신설.
 # fullnameOverride 동결: 릴리스명(aiops)이 서비스명에 번지지 않게 — port-forward 습관·주소 계약 유지
 
 kube-prometheus-stack:
@@ -16,12 +16,39 @@ kube-prometheus-stack:
       auth:
         disable_login_form: true
     additionalDataSources:
-      # 같은 namespace 라 평이름 — uid 는 대시보드 JSON 참조 정합
+      # 같은 namespace 라 평이름 — uid 는 대시보드 JSON 참조 정합. jsonData 는 compose datasources.yml 과 동기
       - name: Loki
         uid: loki
         type: loki
         access: proxy
         url: http://loki:3100
+        jsonData:
+          # 로그 → 트레이스: 로그 행의 traceId 를 Tempo 링크로 (JVM ECS JSON "trace.id" / agent-service plain 포맷 [traceId]).
+          # $$ 는 Grafana provisioning 의 env 확장 회피 (compose datasources.yml 과 같은 이유).
+      # $$ 는 Grafana provisioning 의 env 확장 회피 — ${__value.raw} 는 Grafana 링크 변수라 리터럴로 남겨야 한다 (실측: 미이스케이프 시 빈 url)
+          derivedFields:
+            - name: traceId
+              matcherRegex: '"trace\\.id":"([0-9a-f]{32})"'
+              url: "$${__value.raw}"
+              datasourceUid: tempo
+              urlDisplayLabel: Tempo
+            - name: traceId
+              matcherRegex: '\\[([0-9a-f]{32})\\]'
+              url: "$${__value.raw}"
+              datasourceUid: tempo
+              urlDisplayLabel: Tempo
+      - name: Tempo
+        uid: tempo
+        type: tempo
+        access: proxy
+        url: http://tempo:3200
+        jsonData:
+          # 트레이스 → 로그: 스팬의 traceId 로 Loki 검색 (감사 로그 traceId 필드 재사용)
+          tracesToLogsV2:
+            datasourceUid: loki
+            filterByTraceID: true
+            spanStartTimeShift: "-5m"
+            spanEndTimeShift: "5m"
 
   alertmanager:
     config:
@@ -150,3 +177,119 @@ alloy:
             url = "http://loki:3100/loki/api/v1/push"
           }
         }
+
+# OTel Collector — 관측 파이프라인의 단일 수신처 (DAY 42, docs/otel-genai-mapping.md §2·§5).
+# compose 의 infra/otel/collector.yml 과 같은 규칙 — 차이는 Langfuse exporter 부재뿐 (Langfuse 는 compose 전용 백엔드).
+# 백엔드 교체·추가는 이 config 변경으로 끝난다: 앱은 otel-collector 주소만 안다
+opentelemetry-collector:
+  fullnameOverride: otel-collector
+  mode: deployment
+  image:
+    repository: otel/opentelemetry-collector-contrib
+    tag: 0.159.0
+  # 차트 기본 receiver(jaeger·zipkin·prometheus self-scrape)는 쓰지 않는다 — 포트도 닫는다
+  ports:
+    jaeger-compact:
+      enabled: false
+    jaeger-thrift:
+      enabled: false
+    jaeger-grpc:
+      enabled: false
+    zipkin:
+      enabled: false
+    # prometheus exporter 노출 포트 — ServiceMonitor 가 스크레이프
+    prom-exporter:
+      enabled: true
+      containerPort: 8889
+      servicePort: 8889
+      protocol: TCP
+  serviceMonitor:
+    enabled: true
+    metricsEndpoints:
+      - port: prom-exporter
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+  # alternateConfig = 차트 기본 config(jaeger·zipkin·debug·logs 파이프라인)와 병합하지 않고 통째로 대체 —
+  # values 의 null 은 병합에서 삭제로 동작하지 않아(렌더 실측) 명시 전체 설정으로 compose 판과 대칭을 유지한다
+  alternateConfig:
+    extensions:
+      health_check:
+        endpoint: ${env:MY_POD_IP}:13133
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: ${env:MY_POD_IP}:4317
+          http:
+            endpoint: ${env:MY_POD_IP}:4318
+    processors:
+      memory_limiter:
+        check_interval: 5s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+      batch: {}
+      # Spring AI 2.0.0 의 구세대 키(gen_ai.system) → 표준 최신 키 복제 (원본 유지)
+      transform/normalize:
+        error_mode: ignore
+        trace_statements:
+          - context: span
+            statements:
+              - set(attributes["gen_ai.provider.name"], attributes["gen_ai.system"]) where attributes["gen_ai.system"] != nil and attributes["gen_ai.provider.name"] == nil
+      # 운영 형상은 캡처 자체를 끄지만(§6) 규칙은 compose 와 동일하게 둔다 — 설정 대칭
+      transform/strip-content:
+        error_mode: ignore
+        trace_statements:
+          - context: span
+            statements:
+              - delete_key(attributes, "gen_ai.input.messages")
+              - delete_key(attributes, "gen_ai.output.messages")
+              - delete_key(attributes, "gen_ai.system_instructions")
+    exporters:
+      otlp/tempo:
+        endpoint: tempo:4317
+        tls:
+          insecure: true
+      prometheus:
+        endpoint: ${env:MY_POD_IP}:8889
+        resource_to_telemetry_conversion:
+          enabled: true
+    service:
+      extensions: [health_check]
+      telemetry:
+        metrics:
+          readers:
+            - pull:
+                exporter:
+                  prometheus:
+                    host: ${env:MY_POD_IP}
+                    port: 8888
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, transform/normalize, transform/strip-content, batch]
+          exporters: [otlp/tempo]
+        metrics:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [prometheus]
+
+# Tempo monolithic — 트레이스 저장·조회 (Grafana 데이터소스 uid=tempo). 수신은 Collector 한 곳
+tempo:
+  fullnameOverride: tempo
+  tempo:
+    reportingEnabled: false
+    retention: 48h
+    receivers:
+      jaeger: null
+      opencensus: null
+      otlp:
+        protocols:
+          grpc:
+            endpoint: "0.0.0.0:4317"
+  persistence:
+    enabled: true
+    size: 2Gi

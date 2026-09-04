@@ -19,6 +19,8 @@ env:
   mcpServerUrl: http://control-plane:8080/mcp
   authTokenUrl: http://auth-server:8091/oauth2/token
   kafkaBootstrapServers: kafka:9092
+  # OTLP 트레이스 전송 (DAY 42) — Collector 주소만 안다. 백엔드(Tempo)는 umbrella 의 collector config 소관
+  otelExporterOtlpEndpoint: http://otel-collector:4318
 
 # graceful shutdown 여유 — 체크포인터 재개와 조합 (진행 중 그래프는 재기동 후 체크포인트에서 재개)
 terminationGracePeriodSeconds: 60

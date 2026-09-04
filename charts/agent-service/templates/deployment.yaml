@@ -40,6 +40,9 @@ spec:
             # 접속 실패는 컨슈머 백오프가 흡수 (compose 승계 — 기동 의존 없음)
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: {{ .Values.env.kafkaBootstrapServers | quote }}
+            # OTLP 트레이스 전송 — 미설정이면 전파만 (키-게이트)
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.env.otelExporterOtlpEndpoint | quote }}
             # 체크포인트 DB — 크리덴셜은 postgres 와 같은 원천, URL 은 K8s env 의존 확장($(VAR))으로 조합
             - name: POSTGRES_USER
               valueFrom:
