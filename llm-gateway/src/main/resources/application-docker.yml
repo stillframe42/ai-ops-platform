@@ -28,3 +28,12 @@ gateway:
     default-rpm: 30
     service-rpm:
       agent-service: 60
+
+management:
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          # OTLP/HTTP → Collector (DAY 42, docs/otel-genai-mapping.md §2). K8s Service 명 = compose 컨테이너명 계약.
+          # 기본 프로파일(로컬 개발)은 미설정 = 스팬 생성만·전송 없음. 백엔드(Tempo·Langfuse)는 Collector 소관
+          endpoint: http://otel-collector:4318/v1/traces

@@ -33,3 +33,12 @@ ops:
   action:
     # compose 내부 네트워크 기준 — 조치 실행(chaos/reset)은 컨테이너 이름으로 도달 (DAY 24)
     target-app-base-url: http://target-app:8080
+
+management:
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          # OTLP/HTTP → Collector (DAY 42, docs/otel-genai-mapping.md §2). K8s Service 명 = compose 컨테이너명 계약.
+          # 기본 프로파일(로컬 개발)은 미설정 = 스팬 생성만·전송 없음. 백엔드(Tempo·Langfuse)는 Collector 소관
+          endpoint: http://otel-collector:4318/v1/traces

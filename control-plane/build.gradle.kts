@@ -44,6 +44,8 @@ dependencies {
 
 	implementation("org.springframework.boot:spring-boot-micrometer-tracing-opentelemetry")
 	implementation("io.micrometer:micrometer-tracing-bridge-otel")
+	// OTLP/HTTP 스팬 전송 (DAY 42) — 엔드포인트는 docker 프로파일 소유 (미설정 = 전송 없음)
+	implementation("io.opentelemetry:opentelemetry-exporter-otlp")
 
 	runtimeOnly("org.flywaydb:flyway-database-postgresql")
 	runtimeOnly("io.micrometer:micrometer-registry-prometheus")
