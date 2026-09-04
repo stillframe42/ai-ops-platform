@@ -1,0 +1,27 @@
+# Tempo monolithic — 트레이스 저장·조회 백엔드 (docs/otel-genai-mapping.md §2). 로컬 파일 저장, 학습 규모 (Loki 와 같은 수용, ADR-0004).
+# 수신은 Collector 한 곳 — 앱이 Tempo 를 직접 부르지 않는다
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/blocks
+    wal:
+      path: /var/tempo/wal
+
+compactor:
+  compaction:
+    # 데모·검증 범위 — 이틀치면 인시던트 재현·비교에 충분
+    block_retention: 48h
+
+usage_report:
+  reporting_enabled: false

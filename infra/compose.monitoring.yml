@@ -59,6 +59,40 @@ services:
       - "3100:3100"
     logging: *default-logging
 
+  otel-collector:
+    # 관측 파이프라인의 단일 수신처 (DAY 42, docs/otel-genai-mapping.md §2) — 앱은 이 주소만 안다.
+    # 백엔드 라우팅(Tempo·Langfuse·Prometheus)은 otel/collector.yml 소관 — 백엔드 교체 = 설정 변경, 앱 재배포 없음
+    image: otel/opentelemetry-collector-contrib:0.159.0
+    container_name: otel-collector
+    command:
+      - --config=/etc/otelcol/collector.yml
+    volumes:
+      - ./otel/collector.yml:/etc/otelcol/collector.yml:ro
+    environment:
+      # Langfuse OTLP 수신 인증 (Basic) — compose.langfuse.yml 초기 프로젝트 키와 같은 원천 (infra/.env)
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:?infra/.env 의 LANGFUSE_PUBLIC_KEY 필요}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:?infra/.env 의 LANGFUSE_SECRET_KEY 필요}
+    ports:
+      # 호스트 실행 앱(로컬 개발)이 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 로 보낼 수 있게 노출
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - tempo
+    logging: *default-logging
+
+  tempo:
+    # 트레이스 저장·조회 (Grafana 데이터소스) — 설정은 tempo/tempo.yml, 데이터는 named volume
+    image: grafana/tempo:2.9.0
+    container_name: tempo
+    command:
+      - -config.file=/etc/tempo/tempo.yml
+    volumes:
+      - ./tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
+    ports:
+      - "3200:3200"
+    logging: *default-logging
+
   alloy:
     # 로그 수송: 컨테이너 stdout → Alloy(docker discovery) → Loki (ADR-0004 추가 사항 참조)
     image: grafana/alloy:v1.17.1
@@ -72,3 +106,6 @@ services:
     depends_on:
       - loki
     logging: *default-logging
+
+volumes:
+  tempo-data:

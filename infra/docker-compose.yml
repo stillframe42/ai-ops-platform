@@ -57,6 +57,8 @@ services:
       LOKI_URL: http://loki:3100
       CHECKPOINT_DB_URL: postgresql://${POSTGRES_USER:-aiops}:${POSTGRES_PASSWORD:-aiops}@postgres:5432/aiops
       LANGFUSE_HOST: http://langfuse-server:3000
+      # OTLP 트레이스 전송 (DAY 42) — Collector 주소만 안다. 백엔드(Tempo·Langfuse)는 otel/collector.yml 소관
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
       # MCP 도구 서버 (DAY 16, ADR-0010) — 컨테이너 내부 네트워크 기준, 로컬 기본값(localhost:8081)을 덮어쓴다.
       # control-plane 에 depends_on 을 걸지 않는다 — 발견 실패 시 로컬 도구 강등(부분 진행)이 설계 경로
       MCP_SERVER_URL: http://control-plane:8080/mcp

@@ -13,3 +13,30 @@ datasources:
     type: loki
     access: proxy
     url: http://loki:3100
+    jsonData:
+      # 로그 → 트레이스: 로그 행의 traceId 를 Tempo 링크로 (JVM ECS JSON "trace.id" / agent-service plain 포맷 [traceId]).
+      # $$ 는 Grafana provisioning 의 env 확장 회피 — ${__value.raw} 는 Grafana 링크 변수라 리터럴로 남겨야 한다 (실측: 미이스케이프 시 빈 url)
+      derivedFields:
+        - name: traceId
+          matcherRegex: '"trace\.id":"([0-9a-f]{32})"'
+          url: "$${__value.raw}"
+          datasourceUid: tempo
+          urlDisplayLabel: Tempo
+        - name: traceId
+          matcherRegex: '\[([0-9a-f]{32})\]'
+          url: "$${__value.raw}"
+          datasourceUid: tempo
+          urlDisplayLabel: Tempo
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      # 트레이스 → 로그: 스팬의 traceId 로 Loki 를 검색 (감사 로그·앱 로그 상관 — traceId 는 DAY 37 감사 로그 필드 재사용)
+      tracesToLogsV2:
+        datasourceUid: loki
+        filterByTraceID: true
+        spanStartTimeShift: "-5m"
+        spanEndTimeShift: "5m"

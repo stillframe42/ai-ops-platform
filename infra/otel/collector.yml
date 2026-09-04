@@ -1,0 +1,82 @@
+# OTel Collector (compose) — 앱 3종(agent-service·llm-gateway·control-plane)의 단일 수신처 (docs/otel-genai-mapping.md §2·§5).
+# 백엔드 라우팅은 이 파일에서만 결정한다: 앱은 Collector 주소만 알고, 백엔드 교체·추가는 여기 exporter 변경으로 끝난다.
+# K8s 판은 charts/aiops/values.yaml 의 opentelemetry-collector.config — Langfuse exporter 유무만 다르다 (compose 전용 백엔드).
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  # Langfuse OTLP 수신 인증 — Basic(public:secret). 키는 compose.langfuse.yml 초기 프로젝트 키와 같은 원천(infra/.env)
+  basicauth/langfuse:
+    client_auth:
+      username: ${env:LANGFUSE_PUBLIC_KEY}
+      password: ${env:LANGFUSE_SECRET_KEY}
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 256
+    spike_limit_mib: 64
+  batch: {}
+  # Spring AI 2.0.0 은 프로바이더를 구세대 키(gen_ai.system)로 발신 — 표준 최신 키를 복제한다 (원본 유지, §5)
+  transform/normalize:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - set(attributes["gen_ai.provider.name"], attributes["gen_ai.system"]) where attributes["gen_ai.system"] != nil and attributes["gen_ai.provider.name"] == nil
+  # 프롬프트·응답 본문은 Tempo 에 남기지 않는다 — 캡처 지점이 게이트웨이 마스킹보다 앞이라 원문이다 (§6). Langfuse 경로만 유지
+  transform/strip-content:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - delete_key(attributes, "gen_ai.input.messages")
+          - delete_key(attributes, "gen_ai.output.messages")
+          - delete_key(attributes, "gen_ai.system_instructions")
+  # Langfuse 는 agent-service 스팬만 받는다 — 같은 LLM 호출이 게이트웨이(Spring AI) 스팬으로도 나오므로 비용 이중 집계 방지 (§5)
+  filter/agent-only:
+    error_mode: ignore
+    traces:
+      span:
+        - resource.attributes["service.name"] != "agent-service"
+
+exporters:
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  # otlphttp 는 endpoint 뒤에 /v1/traces 를 붙인다 → Langfuse 의 /api/public/otel/v1/traces (3.222.0 실측 2026-09-03)
+  otlphttp/langfuse:
+    endpoint: http://langfuse-server:3000/api/public/otel
+    auth:
+      authenticator: basicauth/langfuse
+  # gen_ai 메트릭(토큰·지연)을 Prometheus 가 스크레이프 — pull 모델 일관 (remote write 미사용, §2)
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    # service.name 등 리소스 속성을 라벨로 — 대시보드의 서비스 축
+    resource_to_telemetry_conversion:
+      enabled: true
+
+service:
+  extensions: [health_check, basicauth/langfuse]
+  pipelines:
+    traces/tempo:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/normalize, transform/strip-content, batch]
+      exporters: [otlp/tempo]
+    traces/langfuse:
+      receivers: [otlp]
+      processors: [memory_limiter, filter/agent-only, batch]
+      exporters: [otlphttp/langfuse]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]

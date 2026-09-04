@@ -42,7 +42,8 @@ x-langfuse-env: &langfuse-env
 
 services:
   langfuse-server:
-    image: langfuse/langfuse:3
+    # 부동 태그 3 → 실측 버전 고정 (DAY 42): OTLP 수신(/api/public/otel/v1/traces)·세션 속성 인식을 검증한 버전
+    image: langfuse/langfuse:3.222.0
     container_name: langfuse-server
     depends_on:
       postgres:
@@ -73,7 +74,7 @@ services:
     logging: *default-logging
 
   langfuse-worker:
-    image: langfuse/langfuse-worker:3
+    image: langfuse/langfuse-worker:3.222.0
     container_name: langfuse-worker
     depends_on:
       postgres:
