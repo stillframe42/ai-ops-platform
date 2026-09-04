@@ -15,7 +15,7 @@
 | [`llm-gateway/`](llm-gateway/) | LLM 게이트웨이 — 모든 LLM 호출의 단일 통과점 (OpenAI 호환 API): 태스크별 모델 라우팅, 2단계 시맨틱 캐싱, 비용 집계·예산 통제(초과 시 다운그레이드), Rate Limiting, 프로바이더 폴백 체인 ([ADR-0015](docs/adr/0015-llm-gateway.md)) |
 | [`auth-server/`](auth-server/) | 인가 서버 — 서비스 간 OAuth 2.1 토큰 발급 (Client Credentials, 스코프 `ops:read`/`ops:approve`/`llm:invoke`), control-plane·llm-gateway 의 issuer ([ADR-0016](docs/adr/0016-mcp-authentication.md)) |
 | [`target-app/`](target-app/) | 모니터링 대상 데모 앱 — fault-injection(지연/에러율/메모리 누수) 제공 |
-| [`infra/`](infra/) | 로컬 실행 인프라 — docker-compose 단일 진입점 (Prometheus·Alertmanager·Grafana·Loki·Kafka·Langfuse·PostgreSQL) |
+| [`infra/`](infra/) | 로컬 실행 인프라 — docker-compose 단일 진입점 (Prometheus·Alertmanager·Grafana·Loki·OTel Collector·Tempo·Kafka·Langfuse·PostgreSQL) |
 
 C4 다이어그램(System Context / Container / agent-service 내부)과 컨테이너 간 통신 프로토콜 표는 [`docs/architecture.md`](docs/architecture.md)에서 관리한다. 시나리오 정의는 [`docs/scenarios.md`](docs/scenarios.md), 아키텍처 결정 이력은 [`docs/adr/`](docs/adr/) 참고.
 
@@ -60,6 +60,7 @@ docker compose up -d postgres
 # 최초 1회 — 공유 postgres 에 DB 분리 생성 (Langfuse / control-plane)
 docker exec postgres createdb -U aiops langfuse
 docker exec postgres createdb -U aiops controlplane
+docker exec postgres createdb -U aiops llmgateway
 docker compose up -d
 ```
 
@@ -90,6 +91,8 @@ curl -X POST http://localhost:8080/chaos/reset                        # 데모 �
 | 3002 | Grafana | 메트릭·로그 대시보드 |
 | 9091 / 9093 | Prometheus / Alertmanager | 룰·Alert 상태 확인 |
 | 3003 | Langfuse | LLM 트레이스·비용 (세션 = 인시던트) |
+| 3200 | Tempo | 분산 트레이스 API (Grafana Explore → Tempo 데이터소스, 로그↔트레이스 traceId 상관) |
+| 4317 / 4318 | OTel Collector | OTLP gRPC / HTTP 수신 — 호스트 실행 앱은 `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318` |
 | 8082 | kafka-ui | 토픽·오프셋 관찰 |
 
 ## K8s 배포 (kind)
@@ -113,7 +116,7 @@ kind load docker-image --name aiops aiops/control-plane:local aiops/agent-servic
 # 3. Secret 반입 (.env 2곳 → K8s Secret, 값 미출력 — 확정 방식: Secret 직접 생성 + values 미기록, ADR-0016)
 ./infra/k8s/create-secrets.sh
 
-# 4. 전체 설치 — umbrella 한 번으로 앱 6종(llm-gateway·auth-server 포함) + DB/Kafka/Redis + 모니터링·로그
+# 4. 전체 설치 — umbrella 한 번으로 앱 6종(llm-gateway·auth-server 포함) + DB/Kafka/Redis + 모니터링·로그·추적(OTel Collector·Tempo)
 helm dependency build charts/aiops
 helm install aiops charts/aiops -n aiops --create-namespace -f charts/aiops/values-local.yaml
 ```
