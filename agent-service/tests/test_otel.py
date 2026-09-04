@@ -93,3 +93,25 @@ def test_resume_is_wrapped_in_root_span_too():
 
     span = next(s for s in exporter.get_finished_spans() if s.name == "incident.resume")
     assert span.attributes["incident.id"] == "inc-otel-002"
+
+
+def test_span_processor_is_absent_without_endpoint():
+    """OTLP 엔드포인트 미설정 = 전파만 (현행 유지) — exporter·processor 를 만들지 않는다 (키-게이트 관례)."""
+    from app.config.otel import build_span_processor
+
+    assert build_span_processor(None) is None
+    assert build_span_processor("") is None
+
+
+def test_span_processor_targets_collector_traces_path():
+    """엔드포인트가 있으면 Batch processor + OTLP/HTTP exporter — Collector 의 /v1/traces 로 향한다."""
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+    from app.config.otel import build_span_processor
+
+    processor = build_span_processor("http://otel-collector:4318")
+
+    assert isinstance(processor, BatchSpanProcessor)
+    exporter = processor.span_exporter
+    assert exporter._endpoint == "http://otel-collector:4318/v1/traces"
+    processor.shutdown()

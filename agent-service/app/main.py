@@ -20,14 +20,16 @@ from app.supervisor.runtime import build_incident, open_runtime
 
 # uvicorn 이 이 모듈을 import 하는 시점에 실행 — lifespan 보다 앞서야 기동 로그부터 잡힌다
 configure_logging()
-# 트레이스 전파는 Langfuse 핸들러 생성(lifespan, 같은 OTel 기반)보다 앞서 전역 provider 를 잡는다
-setup_tracing()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 체크포인터 수명 = 앱 수명 — 연결을 열고 setup(멱등) 후 그래프를 조립한다
     settings = get_settings()
+    # 트레이스 전파는 Langfuse 핸들러 생성(open_runtime, 같은 OTel 기반)보다 앞서 전역 provider 를 잡는다.
+    # OTLP 전송은 설정 키-게이트 — 엔드포인트 미설정(로컬 기본)이면 전파만. import 시점이 아닌 여기서 읽는 이유:
+    # Settings 는 AUTH_CLIENT_SECRET 필수라 모듈 import 만으로 조립하면 .env 없는 환경(CI)에서 깨진다
+    setup_tracing(settings.otel_exporter_otlp_endpoint)
+    # 체크포인터 수명 = 앱 수명 — 연결을 열고 setup(멱등) 후 그래프를 조립한다
     async with open_runtime(settings) as runtime:
         app.state.runtime = runtime
         # Kafka 컨슈머 2종 — 빈 bootstrap 이면 비활성 (수동 트리거만).
