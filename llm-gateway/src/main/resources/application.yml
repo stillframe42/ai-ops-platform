@@ -50,6 +50,11 @@ server:
   port: 8090
 
 management:
+  # OTel Resource 에 인스턴스 id (DAY 43) — 없으면 복제본 여럿의 스팬·메트릭을 가를 수 없다 (agent-service 는 SDK 가 HOSTNAME 으로).
+  # 컨테이너/pod 의 HOSTNAME, 호스트 실행은 로컬 표시
+  opentelemetry:
+    resource-attributes:
+      service.instance.id: ${HOSTNAME:local}
   endpoints:
     web:
       exposure:
