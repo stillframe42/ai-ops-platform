@@ -13,6 +13,7 @@ from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.config import get_settings
+from app.config.agent_spans import instrumented_tool
 from app.config.llm import create_llm
 from app.security.untrusted import UNTRUSTED_POLICY, wrap_untrusted
 from app.supervisor.state import AIOpsState, AnalysisResult
@@ -89,7 +90,8 @@ async def get_analysis_agent():
 
     agent = create_agent(
         model=create_llm(settings, task_type="root-cause-analysis"),
-        tools=LOCAL_ANALYSIS_TOOLS + mcp_tools,
+        # 로컬 도구는 여기서, MCP 도구는 발견 시점(load_mcp_tools)에 execute_tool 스팬으로 감싼다 (DAY 43)
+        tools=[instrumented_tool(tool) for tool in LOCAL_ANALYSIS_TOOLS] + mcp_tools,
         system_prompt=ANALYSIS_SYSTEM_PROMPT,
         response_format=AnalysisResult,
     )

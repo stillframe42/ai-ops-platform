@@ -17,6 +17,7 @@ from langgraph.types import Command, RetryPolicy
 from app.agents.action_agent import action_node
 from app.agents.analysis_agent import analysis_node
 from app.agents.monitor_agent import monitor_node
+from app.config.agent_spans import agent_node, plain_node
 from app.supervisor import router
 from app.supervisor.approval import approval_node
 from app.supervisor.recovery import recovery_node
@@ -173,13 +174,15 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
     """Supervisor → 에이전트 → Supervisor 순환 구조. checkpointer 는 DAY 12 에 PostgreSQL 로."""
     builder = StateGraph(AIOpsState)
 
-    builder.add_node("supervisor", supervisor_node)
+    # 노드는 GenAI Agent Spans 로 감싼다 (DAY 43): LLM 을 쓰는 노드 = invoke_agent {노드}, 그 외 = 일반 스팬.
+    # 노드 본문은 무수정 — 래핑은 여기 한 곳 (app/config/agent_spans.py)
+    builder.add_node("supervisor", agent_node("supervisor", supervisor_node))
     # 에이전트 노드 실패는 error_handler 가 상태에 기록 — 전체 실행을 중단시키지 않는다 (DAY 13).
     # 타임아웃 초과도 같은 경로 (NodeTimeoutError → record_node_failure)
     for name, node in ((MONITOR, monitor_node), (ANALYSIS, analysis_node), (ACTION, action_node)):
         builder.add_node(
             name,
-            node,
+            agent_node(name, node),
             error_handler=record_node_failure,
             retry_policy=AGENT_RETRY_POLICY,
             timeout=NODE_TIMEOUTS[name],
@@ -187,11 +190,11 @@ def build_graph(checkpointer=None) -> CompiledStateGraph:
 
     # 승인 노드는 순수 노드로 등록 — interrupt 가 예외 전파로 동작하므로 error_handler·
     # retry 가 붙으면 승인 대기가 실패 기록으로 오인된다 (app/supervisor/approval.py)
-    builder.add_node(APPROVAL, approval_node)
+    builder.add_node(APPROVAL, plain_node(APPROVAL, approval_node))
     # 회복 확인은 LLM 없는 규칙 폴링 — 재시도 정책 불요, 실패만 기록 (DAY 24)
     builder.add_node(
         RECOVERY,
-        recovery_node,
+        plain_node(RECOVERY, recovery_node),
         error_handler=record_node_failure,
         timeout=NODE_TIMEOUTS[RECOVERY],
     )

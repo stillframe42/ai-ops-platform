@@ -151,6 +151,10 @@ def _patch_agent_factory(monkeypatch, load_behavior):
     return calls
 
 
+def _names(tools) -> list:
+    return [getattr(tool, "name", tool) for tool in tools]
+
+
 def test_agent_includes_mcp_tools_and_caches_on_success(monkeypatch):
     calls = _patch_agent_factory(monkeypatch, lambda: ["mcp-tool"])
 
@@ -160,7 +164,8 @@ def test_agent_includes_mcp_tools_and_caches_on_success(monkeypatch):
     # 성공 시 캐시 — 도구 발견(tools/list)은 프로세스당 1회
     assert first is second
     assert calls["load"] == 1
-    assert calls["tools"][0] == analysis_agent.LOCAL_ANALYSIS_TOOLS + ["mcp-tool"]
+    # 로컬 도구는 execute_tool 스팬 래핑 사본이라 이름으로 대조 (DAY 43)
+    assert _names(calls["tools"][0]) == _names(analysis_agent.LOCAL_ANALYSIS_TOOLS) + ["mcp-tool"]
 
 
 def test_agent_degrades_to_local_tools_and_retries_discovery(monkeypatch):
@@ -175,7 +180,7 @@ def test_agent_degrades_to_local_tools_and_retries_discovery(monkeypatch):
     # 실패 시 로컬 도구만으로 강등 (부분 진행 — DAY 13 관례) + 캐시하지 않아 다음 실행에서 재발견
     assert first is not second
     assert calls["load"] == 2
-    assert calls["tools"][0] == analysis_agent.LOCAL_ANALYSIS_TOOLS
+    assert _names(calls["tools"][0]) == _names(analysis_agent.LOCAL_ANALYSIS_TOOLS)
 
 
 def test_analysis_task_wraps_monitor_summary_and_policy_in_prompts():

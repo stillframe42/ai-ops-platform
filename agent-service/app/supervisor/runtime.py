@@ -10,14 +10,14 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-from opentelemetry import trace
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.types import Command
 from psycopg.rows import dict_row
+from opentelemetry.context import Context
 from psycopg_pool import AsyncConnectionPool
 
+from app.config.agent_spans import RunSpanRef, span_ref, workflow_span
 from app.config.settings import Settings
-from app.config.otel_genai import incident_attributes
 from app.supervisor.graph import DONE, GRAPH_RECURSION_LIMIT, build_graph
 from app.supervisor.state import (
     ActionExecution,
@@ -32,9 +32,6 @@ from app.supervisor.state import (
 )
 
 logger = logging.getLogger(__name__)
-
-# 인시던트 루트 스팬용 — SDK 미구성이면 no-op provider 라 스팬 오버헤드 0
-_tracer = trace.get_tracer("agent-service")
 
 # 시나리오별 인시던트 프리셋 (Alert Rule 이름은 infra/prometheus/rules 기준)
 INCIDENT_PRESETS: dict[str, tuple[str, str]] = {
@@ -102,32 +99,47 @@ class GraphRuntime:
             "recursion_limit": GRAPH_RECURSION_LIMIT,
         }
 
-    async def start(self, incident: IncidentInfo) -> None:
-        # 인시던트 루트 스팬 — 이 실행의 모든 게이트웨이 호출이 같은 traceId 로 전파되고, 세션 축
-        # gen_ai.conversation.id(=incident id)는 하위 스팬 전부에 상속된다 (otel_genai — 인시던트 1건의 LLM 호출·
-        # 비용이 Langfuse 세션 하나로 묶이는 근거). 승인 대기로 끊긴 재개는 새 trace — 구간 연결은 추후 심화 소관
-        with _tracer.start_as_current_span("incident.run", attributes=incident_attributes(incident.id)):
+    async def start(self, incident: IncidentInfo, parent_context: Context | None = None) -> None:
+        # 워크플로 루트 스팬(invoke_workflow) — 이 실행의 노드·도구·게이트웨이 호출이 같은 traceId 로 묶이고, 세션 축
+        # gen_ai.conversation.id(=incident id)는 하위 스팬 전부에 상속된다 (인시던트 1건 = Langfuse 세션 하나).
+        # parent_context 는 Kafka 헤더의 상류(control-plane 웹훅) 컨텍스트 — 있으면 그 trace 에 잇는다.
+        # 루트 좌표를 상태에 넣어 두는 이유: 승인 대기로 끊긴 뒤의 재개 trace 가 이 실행을 link 로 가리키기 위해
+        with workflow_span(incident.id, parent_context=parent_context) as span:
+            trace_id, span_id = span_ref(span)
             await self.graph.ainvoke(
-                {"incident": incident, "messages": []}, config=self._config(incident.id)
+                {"incident": incident, "messages": [], "run_trace_id": trace_id, "run_span_id": span_id},
+                config=self._config(incident.id),
             )
 
-    async def resume(self, incident_id: str) -> None:
+    async def resume(self, incident_id: str, parent_context: Context | None = None) -> None:
         """입력 None + 동일 thread_id — 마지막 체크포인트의 미완 노드부터 이어간다.
 
         승인 대기(interrupt) 상태에서 호출되면 approval 노드가 재실행되며 다시 interrupt
         로 멈춘다 — 결정 없는 재개는 대기를 갱신할 뿐이다 (반복 알림 재전달 경로).
         """
-        with _tracer.start_as_current_span("incident.resume", attributes=incident_attributes(incident_id)):
+        link = await self._run_ref(incident_id)
+        with workflow_span(incident_id, parent_context=parent_context, link_to=link, resumed=True):
             await self.graph.ainvoke(None, config=self._config(incident_id))
 
-    async def resume_with_decision(self, incident_id: str, decision: dict) -> None:
+    async def resume_with_decision(
+        self, incident_id: str, decision: dict, parent_context: Context | None = None
+    ) -> None:
         """승인 대기 중인 그래프를 결정으로 재개한다 — interrupt 지점이 이 값을 돌려받는다.
 
         결정 페이로드 검증은 두 겹: 소비 측(DecisionEventProcessor)이 status 를 걸러 넣고,
         approval 노드가 다시 정규화한다 (알 수 없는 값은 안전 측 거부).
+        재개는 새 trace(승인 결정 이벤트의 상류가 부모) — 원 실행은 link 로 가리킨다.
         """
-        with _tracer.start_as_current_span("incident.resume", attributes=incident_attributes(incident_id)):
+        link = await self._run_ref(incident_id)
+        with workflow_span(incident_id, parent_context=parent_context, link_to=link, resumed=True):
             await self.graph.ainvoke(Command(resume=decision), config=self._config(incident_id))
+
+    async def _run_ref(self, incident_id: str) -> RunSpanRef | None:
+        """체크포인트에 보관된 원 실행(run) 워크플로 스팬 좌표 — 없으면(구버전 체크포인트) link 없음."""
+        snapshot = await self.graph.aget_state(self._config(incident_id))
+        values = snapshot.values or {}
+        trace_id, span_id = values.get("run_trace_id"), values.get("run_span_id")
+        return (trace_id, span_id) if trace_id and span_id else None
 
     def start_background(self, incident: IncidentInfo) -> None:
         self._spawn(incident.id, self.start(incident))

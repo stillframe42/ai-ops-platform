@@ -120,3 +120,6 @@ class AIOpsState(TypedDict):
     # 노드 실패 축적 — add 리듀서라 각 error_handler 의 기록이 덮어쓰지 않고 누적된다
     errors: NotRequired[Annotated[list[NodeFailure], operator.add]]
     messages: Annotated[list[AnyMessage], add_messages]
+    # 원 실행(run) 워크플로 스팬 좌표 (DAY 43, hex) — 승인 대기 후 재개 trace 가 span link 로 가리킨다
+    run_trace_id: NotRequired[str]
+    run_span_id: NotRequired[str]

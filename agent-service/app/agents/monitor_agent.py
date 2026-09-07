@@ -11,6 +11,7 @@ from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 
 from app.config import get_settings
+from app.config.agent_spans import instrumented_tool
 from app.config.llm import create_llm
 from app.security.untrusted import UNTRUSTED_POLICY, wrap_untrusted
 from app.supervisor.state import AIOpsState, MonitoringResult
@@ -56,7 +57,7 @@ def get_monitor_agent():
     settings = get_settings()
     return create_agent(
         model=create_llm(settings, task_type="monitoring-summary"),
-        tools=MONITOR_TOOLS,
+        tools=[instrumented_tool(tool) for tool in MONITOR_TOOLS],  # execute_tool 스팬 (DAY 43)
         system_prompt=MONITOR_SYSTEM_PROMPT,
     )
 

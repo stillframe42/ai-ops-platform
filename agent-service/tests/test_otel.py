@@ -63,18 +63,32 @@ def test_httpx_request_carries_traceparent():
     assert int(flags, 16) & 0x01 == 0x01, f"unsampled 전파 — 하류 상관이 끊긴다: {flags}"
 
 
+class _Snapshot:
+    def __init__(self, values: dict) -> None:
+        self.values = values
+
+
 class _SpanCapturingGraph:
     """ainvoke 시점의 현재 스팬 컨텍스트를 기록하는 스텁 — LLM 호출 없이 스팬 상속만 검증."""
 
-    def __init__(self) -> None:
+    def __init__(self, state: dict | None = None) -> None:
         self.trace_id: int | None = None
+        self.inputs: list = []
+        self._state = state or {}
 
-    async def ainvoke(self, *_args, **_kwargs) -> None:
+    async def ainvoke(self, inputs, **_kwargs) -> None:
+        self.inputs.append(inputs)
         self.trace_id = trace.get_current_span().get_span_context().trace_id
 
+    async def aget_state(self, _config) -> _Snapshot:
+        return _Snapshot(self._state)
 
-def test_incident_run_is_wrapped_in_root_span():
-    """start() 는 인시던트 루트 스팬 안에서 그래프를 실행한다 — 실행 중 호출이 traceId 를 상속."""
+
+WORKFLOW = "invoke_workflow incident-response"
+
+
+def test_incident_run_is_wrapped_in_workflow_span():
+    """start() 는 `invoke_workflow incident-response` 루트 스팬 안에서 그래프를 실행하고, 루트 좌표를 상태에 넣는다."""
     exporter = _exporter()
     graph = _SpanCapturingGraph()
     runtime = GraphRuntime(graph)
@@ -82,20 +96,62 @@ def test_incident_run_is_wrapped_in_root_span():
 
     asyncio.run(runtime.start(incident))
 
-    span = next(s for s in exporter.get_finished_spans() if s.name == "incident.run")
-    assert span.attributes["incident.id"] == "inc-otel-001"
+    span = next(s for s in exporter.get_finished_spans() if s.attributes.get("incident.id") == "inc-otel-001")
+    assert span.name == WORKFLOW
+    assert span.attributes["gen_ai.operation.name"] == "invoke_workflow"
+    assert span.attributes["gen_ai.workflow.name"] == "incident-response"
+    assert span.attributes["gen_ai.conversation.id"] == "inc-otel-001"
+    assert span.attributes["aiops.resumed"] is False
     assert graph.trace_id == span.context.trace_id  # 그래프 실행이 루트 스팬 컨텍스트 안에 있었다
+    # 체크포인트로 갈 초기 입력에 run 좌표 — 재개 trace 의 link 원천
+    assert graph.inputs[0]["run_trace_id"] == format(span.context.trace_id, "032x")
+    assert graph.inputs[0]["run_span_id"] == format(span.context.span_id, "016x")
 
 
-def test_resume_is_wrapped_in_root_span_too():
-    """재개(다운 복구·승인 재개)도 같은 규약 — 인시던트 id 속성이 붙은 스팬으로 감싼다."""
+def test_resume_links_to_original_run_span():
+    """재개(승인 후·다운 복구)는 새 trace 지만 체크포인트의 run 좌표로 원 실행을 link 한다."""
     exporter = _exporter()
-    runtime = GraphRuntime(_SpanCapturingGraph())
+    run_trace, run_span = "0" * 31 + "a", "0" * 15 + "b"
+    runtime = GraphRuntime(_SpanCapturingGraph({"run_trace_id": run_trace, "run_span_id": run_span}))
 
     asyncio.run(runtime.resume("inc-otel-002"))
 
-    span = next(s for s in exporter.get_finished_spans() if s.name == "incident.resume")
-    assert span.attributes["incident.id"] == "inc-otel-002"
+    span = next(s for s in exporter.get_finished_spans() if s.attributes.get("incident.id") == "inc-otel-002")
+    assert span.name == WORKFLOW and span.attributes["aiops.resumed"] is True
+    assert span.context.trace_id != int(run_trace, 16)  # 새 trace
+    (link,) = span.links
+    assert (link.context.trace_id, link.context.span_id) == (int(run_trace, 16), int(run_span, 16))
+    assert link.attributes["aiops.link.reason"] == "resume-after-approval"
+
+
+def test_resume_without_stored_ref_has_no_link():
+    """구버전 체크포인트(좌표 없음)로 재개해도 실패하지 않는다 — link 만 없다."""
+    exporter = _exporter()
+    runtime = GraphRuntime(_SpanCapturingGraph())
+
+    asyncio.run(runtime.resume("inc-otel-004"))
+
+    span = next(s for s in exporter.get_finished_spans() if s.attributes.get("incident.id") == "inc-otel-004")
+    assert span.links == ()
+
+
+def test_start_with_parent_context_joins_upstream_trace():
+    """Kafka 헤더에서 복원한 상류 컨텍스트가 있으면 워크플로 스팬이 그 trace 의 자식이 된다."""
+    from app.events.propagation import extract_parent_context, inject_headers
+
+    exporter = _exporter()
+    tracer = trace.get_tracer("test")
+    with tracer.start_as_current_span("control-plane webhook") as upstream:
+        headers = inject_headers()  # 발행 측이 레코드에 싣는 헤더
+    assert any(key == "traceparent" for key, _ in headers)
+
+    graph = _SpanCapturingGraph()
+    asyncio.run(GraphRuntime(graph).start(build_incident("latency-surge", "inc-otel-005"), parent_context=extract_parent_context(headers)))
+
+    span = next(s for s in exporter.get_finished_spans() if s.attributes.get("incident.id") == "inc-otel-005")
+    assert span.context.trace_id == upstream.get_span_context().trace_id
+    assert span.parent.span_id == upstream.get_span_context().span_id
+    assert extract_parent_context(None) is not None  # 헤더 없음 = 빈 컨텍스트 (예외 없음)
 
 
 def test_span_processor_is_absent_without_endpoint():
@@ -137,7 +193,7 @@ def test_child_spans_inherit_incident_attributes():
     asyncio.run(GraphRuntime(_ChildSpanGraph()).start(build_incident("latency-surge", "inc-otel-003")))
 
     by_name = {s.name: s for s in exporter.get_finished_spans() if s.attributes.get("incident.id") == "inc-otel-003"}
-    assert {"incident.run", "tool.call", "chat default"} <= by_name.keys()
+    assert {WORKFLOW, "tool.call", "chat default"} <= by_name.keys()
     for span in by_name.values():
         assert span.attributes["gen_ai.conversation.id"] == "inc-otel-003"
 
@@ -235,3 +291,108 @@ def test_metric_reader_targets_collector_metrics_path():
     assert isinstance(reader, PeriodicExportingMetricReader)
     assert reader._exporter._endpoint == "http://otel-collector:4318/v1/metrics"
     reader.shutdown()
+
+
+def test_agent_node_wrapper_emits_invoke_agent_span():
+    """노드 래퍼: `invoke_agent {노드}` INTERNAL 스팬 + gen_ai.agent.name·aiops.node, 세션 축은 루트에서 상속."""
+    from app.config.agent_spans import agent_node, plain_node
+
+    exporter = _exporter()
+
+    async def monitor(state):
+        return {"seen": state["incident"].id}
+
+    def approval(state):
+        return {}
+
+    class _NodeGraph:
+        async def ainvoke(self, inputs, **_kwargs):
+            await agent_node("monitor", monitor)(inputs)
+            plain_node("approval", approval)(inputs)
+
+    asyncio.run(GraphRuntime(_NodeGraph()).start(build_incident("latency-surge", "inc-otel-006")))
+
+    spans = {s.name: s for s in exporter.get_finished_spans() if s.attributes.get("incident.id") == "inc-otel-006"}
+    agent = spans["invoke_agent monitor"]
+    assert agent.kind == trace.SpanKind.INTERNAL
+    assert agent.attributes["gen_ai.operation.name"] == "invoke_agent"
+    assert agent.attributes["gen_ai.agent.name"] == "monitor"
+    assert agent.attributes["aiops.node"] == "monitor"
+    assert agent.attributes["gen_ai.conversation.id"] == "inc-otel-006"
+    assert spans["approval"].attributes["aiops.node"] == "approval"
+    assert "gen_ai.operation.name" not in spans["approval"].attributes  # LLM 없는 노드는 GenAI 스팬 아님
+
+
+def test_instrumented_tool_emits_execute_tool_span_with_mcp_attributes():
+    """도구 래퍼: `execute_tool {도구}` + gen_ai.tool.name/type, MCP 도구는 mcp.method.name·server.* 동반.
+
+    NO_CONTENT 기본이라 인자·결과 속성은 없다. 원 도구의 이름·스키마·반환값은 그대로다.
+    """
+    from langchain_core.tools import tool
+
+    from app.config.agent_spans import instrumented_tool
+
+    exporter = _exporter()
+
+    @tool
+    def get_deployment_history(app: str) -> str:
+        """배포 이력."""
+        return f"history:{app}"
+
+    local = instrumented_tool(get_deployment_history)
+    remote = instrumented_tool(get_deployment_history, mcp_server_url="http://control-plane:8080/mcp")
+
+    assert local.invoke({"app": "target-app"}) == "history:target-app"
+    assert asyncio.run(remote.ainvoke({"app": "target-app"})) == "history:target-app"
+
+    local_span, remote_span = [s for s in exporter.get_finished_spans() if s.name == "execute_tool get_deployment_history"][-2:]
+    for span in (local_span, remote_span):
+        assert span.attributes["gen_ai.operation.name"] == "execute_tool"
+        assert span.attributes["gen_ai.tool.name"] == "get_deployment_history"
+        assert span.attributes["gen_ai.tool.type"] == "function"
+        assert "gen_ai.tool.call.arguments" not in span.attributes
+    assert "mcp.method.name" not in local_span.attributes
+    assert remote_span.attributes["mcp.method.name"] == "tools/call"
+    assert remote_span.attributes["server.address"] == "control-plane"
+    assert remote_span.attributes["server.port"] == 8080
+    assert remote_span.attributes["network.protocol.name"] == "http"
+
+
+def test_kafka_consumer_and_producer_spans_bridge_the_trace():
+    """소비 스팬(부모 = 헤더) 안에서 발행하면 발행 스팬이 그 자식이 되고, 동봉 헤더는 발행 스팬을 가리킨다.
+
+    control-plane `{topic} send` → agent-service `{topic} process` → `{topic} send` → control-plane `{topic} process`
+    사슬의 agent-service 몫을 고정한다 (Kafka 왕복 4스팬 중 가운데 2개).
+    """
+    from app.events.propagation import consumer_span, inject_headers
+    from app.events.publishing import make_publisher
+
+    exporter = _exporter()
+    tracer = trace.get_tracer("test")
+    with tracer.start_as_current_span("ops.incidents send", kind=trace.SpanKind.PRODUCER) as upstream:
+        incoming = inject_headers()
+
+    class _Producer:
+        def __init__(self) -> None:
+            self.headers: list = []
+
+        async def send_and_wait(self, topic, key, value, headers=None):
+            self.headers = headers or []
+
+    producer = _Producer()
+    publish = make_publisher(producer, "ops.analysis.results")
+
+    async def handle():
+        with consumer_span("ops.incidents", incoming):
+            await publish("inc-otel-007", {"incident_id": "inc-otel-007"})
+
+    asyncio.run(handle())
+
+    spans = {s.name: s for s in exporter.get_finished_spans() if s.name in ("ops.incidents process", "ops.analysis.results send")}
+    consume, send = spans["ops.incidents process"], spans["ops.analysis.results send"]
+    assert consume.kind == trace.SpanKind.CONSUMER and consume.parent.span_id == upstream.get_span_context().span_id
+    assert consume.attributes["messaging.destination.name"] == "ops.incidents"
+    assert send.kind == trace.SpanKind.PRODUCER and send.parent.span_id == consume.context.span_id
+    assert send.attributes["messaging.operation.type"] == "send"
+    traceparent = dict((k, v.decode()) for k, v in producer.headers)["traceparent"]
+    assert traceparent.split("-")[2] == format(send.context.span_id, "016x")  # 동봉 헤더 = 발행 스팬
