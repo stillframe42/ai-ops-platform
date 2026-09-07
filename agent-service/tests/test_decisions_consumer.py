@@ -37,7 +37,7 @@ class FakeRuntime:
     async def get_result(self, incident_id: str) -> dict | None:
         return {"incident_id": incident_id, "status": "completed"}
 
-    async def resume_with_decision(self, incident_id: str, decision: dict) -> None:
+    async def resume_with_decision(self, incident_id: str, decision: dict, parent_context=None) -> None:
         self.resumed.append((incident_id, decision))
         if self.resume_error is not None:
             raise self.resume_error

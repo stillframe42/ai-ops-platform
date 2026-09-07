@@ -39,7 +39,8 @@ async def consume_batches(consumer, process, *, max_records: int, label: str) ->
         if not messages:
             continue
         outcomes = await asyncio.gather(
-            *(process(msg.value) for msg in messages), return_exceptions=True
+            # 헤더는 트레이스 전파용 (traceparent, DAY 43) — 처리기가 부모 컨텍스트로 복원한다
+            *(process(msg.value, msg.headers) for msg in messages), return_exceptions=True
         )
         failures = [o for o in outcomes if isinstance(o, BaseException)]
         if failures:

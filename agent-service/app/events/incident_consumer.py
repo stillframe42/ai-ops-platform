@@ -18,6 +18,7 @@ from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 
 from app.config.settings import Settings
 from app.events.consumer_loop import consume_batches, start_with_backoff
+from app.events.propagation import KafkaHeaders, consumer_span
 from app.events.publishing import make_publisher
 from app.supervisor.runtime import INCIDENT_PRESETS, GraphRuntime
 from app.supervisor.state import IncidentInfo
@@ -53,7 +54,12 @@ class IncidentEventProcessor:
         # 같은 인시던트의 동시 처리 방지 — 배치 재수신·수동 트리거와의 겹침 대비
         self._active: set[str] = set()
 
-    async def process(self, raw: bytes) -> str:
+    async def process(self, raw: bytes, headers: KafkaHeaders | None = None) -> str:
+        # `ops.incidents process` CONSUMER 스팬 (DAY 43) — 부모는 control-plane 발행 헤더, 워크플로·후속 발행이 자식
+        with consumer_span(TOPIC_INCIDENTS, headers):
+            return await self._process(raw)
+
+    async def _process(self, raw: bytes) -> str:
         event = self._parse(raw)
         if event is None:
             return "skipped:malformed"
@@ -87,6 +93,7 @@ class IncidentEventProcessor:
         async with self._semaphore:
             try:
                 if state is None:
+                    # 현재 스팬 = 소비 스팬(상류 웹훅 trace) — 워크플로가 그 아래 붙는다
                     await self.runtime.start(self._to_incident(event))
                 else:
                     # 미완 체크포인트 = 처리 중 다운 후 재전달 — 완료 노드를 반복하지 않는

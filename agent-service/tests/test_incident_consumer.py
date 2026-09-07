@@ -51,12 +51,12 @@ class FakeRuntime:
     async def get_pending_approval(self, incident_id: str) -> dict | None:
         return self.pending_approval
 
-    async def start(self, incident) -> None:
+    async def start(self, incident, parent_context=None) -> None:
         self.started.append(incident)
         if self.start_error is not None:
             raise self.start_error
 
-    async def resume(self, incident_id: str) -> None:
+    async def resume(self, incident_id: str, parent_context=None) -> None:
         self.resumed.append(incident_id)
 
 

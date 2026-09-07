@@ -15,6 +15,7 @@ from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 
 from app.config.settings import Settings
 from app.events.consumer_loop import consume_batches, start_with_backoff
+from app.events.propagation import KafkaHeaders, consumer_span
 from app.events.publishing import make_publisher
 from app.events.incident_consumer import TOPIC_ANALYSIS_RESULTS
 from app.supervisor.runtime import GraphRuntime
@@ -39,7 +40,12 @@ class DecisionEventProcessor:
         self.runtime = runtime
         self.publish_result = publish_result  # async (key: str, payload: dict) -> None
 
-    async def process(self, raw: bytes) -> str:
+    async def process(self, raw: bytes, headers: KafkaHeaders | None = None) -> str:
+        # `ops.actions.decisions process` CONSUMER 스팬 (DAY 43) — 부모는 승인 API → control-plane 발행 헤더
+        with consumer_span(TOPIC_ACTIONS_DECISIONS, headers):
+            return await self._process(raw)
+
+    async def _process(self, raw: bytes) -> str:
         try:
             event = json.loads(raw)
         except (json.JSONDecodeError, UnicodeDecodeError):
@@ -70,6 +76,7 @@ class DecisionEventProcessor:
             return "skipped:not-waiting"
 
         try:
+            # 현재 스팬 = 소비 스팬(승인 API trace) — 재개 워크플로가 그 아래 붙고 원 실행은 link
             await self.runtime.resume_with_decision(incident_id, event)
         except Exception:
             # 재개 실패는 삼킨다 — 부분 보고서 발행(DAY 13 관례)으로 이어간다

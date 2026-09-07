@@ -7,6 +7,8 @@ producer 인스턴스는 소유하지 않는다 — 그 수명은 각 컨슈머 
 
 import json
 
+from app.events.propagation import inject_headers, producer_span
+
 
 def make_publisher(producer, topic: str):
     """(key, payload) → topic 발행 클로저 — 직렬화 규약(key utf-8, value JSON)을 한 곳이 소유한다.
@@ -15,6 +17,10 @@ def make_publisher(producer, topic: str):
     """
 
     async def publish(key: str, payload: dict) -> None:
-        await producer.send_and_wait(topic, key=key.encode(), value=json.dumps(payload).encode())
+        # `{topic} send` 스팬 + traceparent 헤더 동봉 (DAY 43) — control-plane 리스너(observation)가 같은 trace 를 잇는다
+        with producer_span(topic):
+            await producer.send_and_wait(
+                topic, key=key.encode(), value=json.dumps(payload).encode(), headers=inject_headers()
+            )
 
     return publish
