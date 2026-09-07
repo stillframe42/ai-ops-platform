@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.config.logging_setup import configure_logging
-from app.config.otel import setup_tracing
+from app.config.otel import setup_telemetry
 from app.events.decisions_consumer import run_decisions_consumer
 from app.events.incident_consumer import run_incident_consumer
 from app.supervisor.runtime import build_incident, open_runtime
@@ -25,10 +25,10 @@ configure_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    # 트레이스 전파는 Langfuse 핸들러 생성(open_runtime, 같은 OTel 기반)보다 앞서 전역 provider 를 잡는다.
-    # OTLP 전송은 설정 키-게이트 — 엔드포인트 미설정(로컬 기본)이면 전파만. import 시점이 아닌 여기서 읽는 이유:
+    # 전역 provider + 계측(httpx·openai)은 그래프 조립(open_runtime → create_llm)보다 앞서야 한다.
+    # OTLP 전송은 설정 키-게이트 — 엔드포인트 미설정(로컬 기본)이면 전파·계측만. import 시점이 아닌 여기서 읽는 이유:
     # Settings 는 AUTH_CLIENT_SECRET 필수라 모듈 import 만으로 조립하면 .env 없는 환경(CI)에서 깨진다
-    setup_tracing(settings.otel_exporter_otlp_endpoint)
+    setup_telemetry(settings.otel_exporter_otlp_endpoint)
     # 체크포인터 수명 = 앱 수명 — 연결을 열고 setup(멱등) 후 그래프를 조립한다
     async with open_runtime(settings) as runtime:
         app.state.runtime = runtime
@@ -72,13 +72,9 @@ def health() -> dict:
         "status": "ok",
         "llm_model": settings.llm_model,
         "prometheus_url": settings.prometheus_url,
-        # 트레이싱 활성 여부 — 키 존재만 노출 (키 값은 절대 노출하지 않는다)
-        "langfuse_enabled": bool(
-            settings.langfuse_host
-            and settings.langfuse_public_key
-            and settings.langfuse_secret_key
-        ),
-        # Kafka 컨슈머 활성 여부 (DAY 18) — 설정됨 ≠ 접속 성공 (langfuse_enabled 와 같은 한계)
+        # OTLP 전송 활성 여부 — 설정됨 ≠ Collector 도달 성공
+        "otlp_enabled": bool(settings.otel_exporter_otlp_endpoint),
+        # Kafka 컨슈머 활성 여부 (DAY 18) — 설정됨 ≠ 접속 성공 (otlp_enabled 와 같은 한계)
         "kafka_enabled": bool(settings.kafka_bootstrap_servers),
     }
 
