@@ -56,9 +56,12 @@ services:
       PROMETHEUS_URL: http://prometheus:9090
       LOKI_URL: http://loki:3100
       CHECKPOINT_DB_URL: postgresql://${POSTGRES_USER:-aiops}:${POSTGRES_PASSWORD:-aiops}@postgres:5432/aiops
-      LANGFUSE_HOST: http://langfuse-server:3000
-      # OTLP 트레이스 전송 (DAY 42) — Collector 주소만 안다. 백엔드(Tempo·Langfuse)는 otel/collector.yml 소관
+      # OTLP 트레이스·메트릭 전송 (DAY 42) — Collector 주소만 안다. 백엔드(Tempo·Langfuse·Prometheus)는 otel/collector.yml 소관
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      # 프롬프트/응답 본문 캡처 (DAY 43, docs/otel-genai-mapping.md §6) — 로컬 compose 전용. 캡처 지점이 게이트웨이 입력
+      # 마스킹보다 앞이라 원문(마스킹 전)이 `gen_ai.input/output.messages` 스팬 속성으로 나간다 → Langfuse 입출력 표시용.
+      # Tempo 경로는 Collector transform 이 삭제한다. 운영(K8s)은 미설정 = NO_CONTENT
+      OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: SPAN_ONLY
       # MCP 도구 서버 (DAY 16, ADR-0010) — 컨테이너 내부 네트워크 기준, 로컬 기본값(localhost:8081)을 덮어쓴다.
       # control-plane 에 depends_on 을 걸지 않는다 — 발견 실패 시 로컬 도구 강등(부분 진행)이 설계 경로
       MCP_SERVER_URL: http://control-plane:8080/mcp
