@@ -396,3 +396,18 @@ def test_kafka_consumer_and_producer_spans_bridge_the_trace():
     assert send.attributes["messaging.operation.type"] == "send"
     traceparent = dict((k, v.decode()) for k, v in producer.headers)["traceparent"]
     assert traceparent.split("-")[2] == format(send.context.span_id, "016x")  # 동봉 헤더 = 발행 스팬
+
+
+def test_resource_identifies_service_instance():
+    """Resource 에 service.instance.id — 복제본 구분 (없으면 Collector prometheus exporter 에서 복제본 메트릭이 겹친다)."""
+    from opentelemetry.sdk.trace import TracerProvider
+
+    from app.config.otel import build_resource
+
+    setup_telemetry()
+    provider = trace.get_tracer_provider()
+    assert isinstance(provider, TracerProvider)
+    attrs = provider.resource.attributes
+    assert attrs["service.name"] == "agent-service"
+    assert attrs["service.instance.id"]  # 비어 있지 않은 문자열 (HOSTNAME 또는 호스트명)
+    assert build_resource().attributes["service.instance.id"] == attrs["service.instance.id"]

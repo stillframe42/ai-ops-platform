@@ -11,6 +11,7 @@
 
 import logging
 import os
+import socket
 
 from opentelemetry import metrics, trace
 from opentelemetry.sdk.metrics import MeterProvider
@@ -28,6 +29,16 @@ logger = logging.getLogger(__name__)
 SEMCONV_OPT_IN_ENV = "OTEL_SEMCONV_STABILITY_OPT_IN"
 SEMCONV_OPT_IN_VALUE = "gen_ai_latest_experimental"
 METRIC_EXPORT_INTERVAL_MS = 15_000  # Prometheus scrape 주기와 동일 — 실측 대기 시간 최소화
+
+
+def build_resource() -> Resource:
+    """service.name + service.instance.id — 인스턴스 id 는 컨테이너/pod 의 HOSTNAME(없으면 호스트명).
+
+    인스턴스 id 가 없으면 복제본 여럿의 누적 히스토그램이 Collector prometheus exporter 에서 같은 시리즈로 겹쳐
+    덮어쓴다(토큰 합계 오류). Tempo 에서도 어느 복제본인지 가를 수 없다. OTEL_RESOURCE_ATTRIBUTES 는 SDK 가 병합한다.
+    """
+    instance_id = os.environ.get("HOSTNAME") or socket.gethostname()
+    return Resource.create({"service.name": "agent-service", "service.instance.id": instance_id})
 
 
 def build_span_processor(otlp_endpoint: str | None) -> SpanProcessor | None:
@@ -65,7 +76,7 @@ def setup_telemetry(otlp_endpoint: str | None = None) -> None:
     if isinstance(trace.get_tracer_provider(), TracerProvider):
         return
     os.environ.setdefault(SEMCONV_OPT_IN_ENV, SEMCONV_OPT_IN_VALUE)
-    resource = Resource.create({"service.name": "agent-service"})
+    resource = build_resource()
 
     provider = TracerProvider(resource=resource)
     enricher = GenAiSpanEnricher()
