@@ -57,7 +57,7 @@ spec:
             - name: CHECKPOINT_DB_URL
               value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/aiops"
           envFrom:
-            # ANTHROPIC_API_KEY·AUTH_CLIENT_SECRET — LANGFUSE 미반입 = 트레이싱 비활성
+            # ANTHROPIC_API_KEY·AUTH_CLIENT_SECRET. 콘텐츠 캡처 env 는 두지 않는다 — 운영 형상 = NO_CONTENT (docs/otel-genai-mapping.md §6)
             - secretRef:
                 name: {{ .Values.existingSecret }}
           readinessProbe:

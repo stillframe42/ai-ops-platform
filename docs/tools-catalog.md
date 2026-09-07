@@ -58,7 +58,7 @@
 - Spring AI 2.0.0 MCP 모듈에는 내장 관측이 없다 (실측 — jar 전체에 Micrometer 클래스 부재) → 명시적 계측 (`McpToolMetrics.record` 로 각 도구 메서드를 감쌈 — 관측 용도에 AOP/위버 의존을 추가하지 않는 선택, 신규 도구의 계측 누락은 배선 테스트가 강제)
 - 메트릭: `mcp_tool_calls_seconds_*{tool, outcome}` — outcome 은 success / **degraded**(error 필드 강등 응답 — 프로토콜 수준만 보면 실패율이 항상 0 이라 분리) / failure(예외)
 - Grafana: `MCP 도구 호출 (control-plane)` 대시보드 (호출 빈도·평균 응답 시간·outcome 분포·비정상 비율)
-- 로컬 도구는 별도 계측 없음 — LangChain 콜백 경유로 Langfuse 스팬에 기록됨 (DAY 14)
+- 로컬 도구는 별도 계측 없음 — LLM 호출은 OTel gen_ai 클라이언트 스팬으로 기록되고(DAY 43, `docs/otel-genai-mapping.md`), 도구 단위 스팬(`execute_tool`)은 예정
 
 ## 검토 기록
 
