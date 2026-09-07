@@ -17,7 +17,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
 from app.config.settings import Settings
-from app.config.tracing import build_langfuse_handler
+from app.config.otel_genai import incident_attributes
 from app.supervisor.graph import DONE, GRAPH_RECURSION_LIMIT, build_graph
 from app.supervisor.state import (
     ActionExecution,
@@ -91,29 +91,22 @@ def build_incident(scenario: Scenario, incident_id: str | None = None) -> Incide
 class GraphRuntime:
     """컴파일된 그래프 + 인시던트 단위 실행 관리. 백그라운드 태스크는 여기서 소유한다."""
 
-    def __init__(self, graph, tracer=None) -> None:
+    def __init__(self, graph) -> None:
         self.graph = graph
-        self.tracer = tracer  # Langfuse 콜백 핸들러 — None 이면 트레이싱 비활성
         self._tasks: dict[str, asyncio.Task] = {}
 
     def _config(self, incident_id: str) -> dict:
         # scripts/run_graph.py 와 동일 관례 — recursion_limit 은 방문 카운터의 이중 방어
-        config: dict = {
+        return {
             "configurable": {"thread_id": incident_id},
             "recursion_limit": GRAPH_RECURSION_LIMIT,
         }
-        if self.tracer is not None:
-            # 세션 연결 규약: langfuse_session_id = thread_id — 인시던트 1건의
-            # 전체 LLM 호출이 Langfuse 세션 하나로 묶인다 (비용 집계 단위)
-            config["callbacks"] = [self.tracer]
-            config["metadata"] = {"langfuse_session_id": incident_id}
-        return config
 
     async def start(self, incident: IncidentInfo) -> None:
-        # 인시던트 루트 스팬 — 이 실행의 모든 게이트웨이 호출이 같은 traceId 로 전파된다
-        # (langfuse_session_id=incident id 규약의 trace 판). 승인 대기로 끊긴 재개는 새 trace —
-        # 실행 구간 간 스팬 연결은 추후 심화 소관
-        with _tracer.start_as_current_span("incident.run", attributes={"incident.id": incident.id}):
+        # 인시던트 루트 스팬 — 이 실행의 모든 게이트웨이 호출이 같은 traceId 로 전파되고, 세션 축
+        # gen_ai.conversation.id(=incident id)는 하위 스팬 전부에 상속된다 (otel_genai — 인시던트 1건의 LLM 호출·
+        # 비용이 Langfuse 세션 하나로 묶이는 근거). 승인 대기로 끊긴 재개는 새 trace — 구간 연결은 추후 심화 소관
+        with _tracer.start_as_current_span("incident.run", attributes=incident_attributes(incident.id)):
             await self.graph.ainvoke(
                 {"incident": incident, "messages": []}, config=self._config(incident.id)
             )
@@ -124,7 +117,7 @@ class GraphRuntime:
         승인 대기(interrupt) 상태에서 호출되면 approval 노드가 재실행되며 다시 interrupt
         로 멈춘다 — 결정 없는 재개는 대기를 갱신할 뿐이다 (반복 알림 재전달 경로).
         """
-        with _tracer.start_as_current_span("incident.resume", attributes={"incident.id": incident_id}):
+        with _tracer.start_as_current_span("incident.resume", attributes=incident_attributes(incident_id)):
             await self.graph.ainvoke(None, config=self._config(incident_id))
 
     async def resume_with_decision(self, incident_id: str, decision: dict) -> None:
@@ -133,7 +126,7 @@ class GraphRuntime:
         결정 페이로드 검증은 두 겹: 소비 측(DecisionEventProcessor)이 status 를 걸러 넣고,
         approval 노드가 다시 정규화한다 (알 수 없는 값은 안전 측 거부).
         """
-        with _tracer.start_as_current_span("incident.resume", attributes={"incident.id": incident_id}):
+        with _tracer.start_as_current_span("incident.resume", attributes=incident_attributes(incident_id)):
             await self.graph.ainvoke(Command(resume=decision), config=self._config(incident_id))
 
     def start_background(self, incident: IncidentInfo) -> None:
@@ -281,5 +274,4 @@ async def open_runtime(settings: Settings):
     ) as pool:
         checkpointer = AsyncPostgresSaver(pool, serde=build_checkpoint_serializer())
         await checkpointer.setup()
-        tracer = build_langfuse_handler(settings)  # 키 없으면 None — 트레이싱 비활성
-        yield GraphRuntime(build_graph(checkpointer=checkpointer), tracer=tracer)
+        yield GraphRuntime(build_graph(checkpointer=checkpointer))

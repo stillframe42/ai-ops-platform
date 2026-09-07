@@ -31,7 +31,9 @@ def create_llm(settings: Settings, task_type: str | None = None) -> BaseChatMode
         # 동기(라우터 invoke)·비동기(에이전트 ainvoke) 양쪽 다 토큰 경로 — 한쪽만 주면 나머지는 SDK 기본 클라이언트(무토큰)
         http_client=httpx.Client(auth=auth, timeout=GATEWAY_TIMEOUT),
         http_async_client=httpx.AsyncClient(auth=auth, timeout=GATEWAY_TIMEOUT),
-        # 게이트웨이 판정 헤더(X-Gateway-Cache/Fallback/Downgrade)를 response_metadata 로 흡수 —
-        # Langfuse 재활성 시 핸들러가 그대로 수집한다. 헤더는 평범한 dict 라 체크포인트 직렬화 안전
+        # 게이트웨이 판정 헤더(X-Gateway-Cache/Guardrail/Downgrade/Fallback)를 response_metadata 로 흡수 —
+        # 상태·체크포인트에서 판정을 볼 수 있는 경로.
+        # 트레이스 쪽은 otel_genai 의 httpx 훅이 같은 헤더를 `chat` 스팬 속성(gateway.*)으로 승격한다.
+        # - 헤더는 평범한 dict 라 체크포인트 직렬화 안전
         include_response_headers=True,
     )

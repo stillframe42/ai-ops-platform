@@ -1,8 +1,7 @@
-"""create_llm 게이트웨이 계약 테스트 — Langfuse 태깅 배선의 계약 고정.
+"""create_llm 게이트웨이 계약 테스트 — 판정 헤더 흡수·라우팅 헤더·인증 배선의 계약 고정.
 
-게이트웨이 판정 3종(캐시 X-Gateway-Cache / 폴백 X-Gateway-Fallback / 다운그레이드
-X-Gateway-Downgrade)은 전부 응답 헤더로 도착한다 — 헤더를 response_metadata 로 흡수하면
-Langfuse 핸들러가 재활성 시 그대로 수집한다. 여기서는 그 배선 계약만 고정한다.
+게이트웨이 판정(캐시·가드레일·다운그레이드·폴백)은 전부 응답 헤더로 도착한다 — 헤더를 response_metadata 로
+흡수하면 상태·체크포인트에서 판정을 볼 수 있다 (스팬 승격은 test_otel 몫). 여기서는 그 배선 계약만 고정한다.
 """
 
 import httpx

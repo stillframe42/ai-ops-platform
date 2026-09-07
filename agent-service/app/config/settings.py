@@ -33,14 +33,10 @@ class Settings(BaseSettings):
     # LangGraph 체크포인트 저장소 (ADR-0009)
     checkpoint_db_url: str | None = None
 
-    # OTLP 전송 — Collector 주소(스킴+호스트+포트, 경로 없음). 미설정이면 스팬 생성만 하고 전송하지 않는다.
-    # 백엔드(Tempo·Langfuse)는 Collector 설정 소관 (docs/otel-genai-mapping.md §2)
+    # OTLP 전송 — Collector 주소(스킴+호스트+포트, 경로 없음). 미설정이면 스팬·메트릭 생성만 하고 전송하지 않는다.
+    # 백엔드(Tempo·Langfuse·Prometheus)는 Collector 설정 소관 (docs/otel-genai-mapping.md §2). Langfuse 도 이 경로로만
+    # 받는다 — 앱은 Langfuse 키를 모른다
     otel_exporter_otlp_endpoint: str | None = None
-
-    # Langfuse — 미설정이면 트레이싱 비활성
-    langfuse_host: str | None = None
-    langfuse_public_key: str | None = None
-    langfuse_secret_key: str | None = None
 
     @property
     def llm_model(self) -> str:
