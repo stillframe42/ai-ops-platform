@@ -54,6 +54,12 @@ spring:
       # 커밋 부재 시에만 발동하는 시작 위치 대비책 — 그룹 생성 전 발행분(control-plane 다운 중
       # 결과 발행)을 건너뛰지 않는다 (agent-service 컨슈머와 같은 근거, 노트 20260725 파생)
       auto-offset-reset: earliest
+    # Kafka 구간 트레이스 전파 (DAY 43): 발행 시 레코드 헤더에 traceparent 를 싣고(agent-service 가 부모로 복원),
+    # 수신 시 agent-service 발행분의 헤더로 같은 trace 를 잇는다 — 웹훅 → 그래프 → 보고서가 한 trace
+    template:
+      observation-enabled: true
+    listener:
+      observation-enabled: true
 
   jpa:
     hibernate:

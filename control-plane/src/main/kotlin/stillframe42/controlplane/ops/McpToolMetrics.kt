@@ -2,6 +2,9 @@ package stillframe42.controlplane.ops
 
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
+import io.opentelemetry.api.trace.SpanKind
+import io.opentelemetry.api.trace.StatusCode
+import io.opentelemetry.api.trace.Tracer
 import org.springframework.stereotype.Component
 import tools.jackson.databind.json.JsonMapper
 
@@ -18,21 +21,44 @@ import tools.jackson.databind.json.JsonMapper
  * - success: 정상 응답
  * - degraded: error 필드 응답 (호출은 성공, 내용이 실패를 알림)
  * - failure: 예외 전파 (관례 밖의 예상 밖 실패)
+ *
+ * 트레이스 (DAY 43): 같은 지점에 MCP 서버 스팬 `tools/call {tool}` 을 연다 (docs/otel-genai-mapping.md §3 MCP 서버 행).
+ * Micrometer Observation 이 아닌 OTel API 를 쓰는 이유 — Observation 은 이름이 곧 메트릭명이라 기존 `mcp.tool.calls`
+ * 타이머와 이중이 된다. 스팬 kind 는 INTERNAL: 같은 요청의 SERVER 스팬은 MVC `http post /mcp` 가 이미 담당한다.
+ * tracer 가 없으면(단위 테스트) 스팬 없이 타이머만 기록한다.
  */
 @Component
-class McpToolMetrics(private val meterRegistry: MeterRegistry) {
+class McpToolMetrics(
+    private val meterRegistry: MeterRegistry,
+    private val tracer: Tracer? = null,
+) {
 
     private val mapper = JsonMapper.builder().build()
 
     fun <T> record(tool: String, call: () -> T): T {
+        val span = tracer?.spanBuilder("tools/call $tool")
+            ?.setSpanKind(SpanKind.INTERNAL)
+            ?.setAttribute("mcp.method.name", "tools/call")
+            ?.setAttribute("gen_ai.operation.name", "execute_tool")
+            ?.setAttribute("gen_ai.tool.name", tool)
+            ?.startSpan()
+        val scope = span?.makeCurrent()
         val sample = Timer.start(meterRegistry)
         try {
             val result = call()
-            sample.stop(timer(tool, outcomeOf(result)))
+            val outcome = outcomeOf(result)
+            sample.stop(timer(tool, outcome))
+            span?.setAttribute("aiops.outcome", outcome)
             return result
         } catch (e: Throwable) {
             sample.stop(timer(tool, "failure"))
+            span?.recordException(e)
+            span?.setStatus(StatusCode.ERROR)
+            span?.setAttribute("error.type", e.javaClass.name)
             throw e
+        } finally {
+            scope?.close()
+            span?.end()
         }
     }
 

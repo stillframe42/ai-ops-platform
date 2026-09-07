@@ -3,6 +3,7 @@ package stillframe42.controlplane.approval.execute
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.task.TaskExecutor
+import org.springframework.core.task.support.ContextPropagatingTaskDecorator
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor
 
 /**
@@ -19,6 +20,8 @@ class ActionExecutionConfig {
         maxPoolSize = 2
         queueCapacity = 8
         setThreadNamePrefix("action-exec-")
+        // 승인 API 요청의 trace 를 실행·decisions 발행까지 잇는다 (DAY 43) — AsyncContextPropagationConfig 와 같은 데코레이터
+        setTaskDecorator(ContextPropagatingTaskDecorator())
         initialize()
     }
 
