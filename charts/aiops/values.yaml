@@ -239,6 +239,8 @@ opentelemetry-collector:
           - context: span
             statements:
               - set(attributes["gen_ai.provider.name"], attributes["gen_ai.system"]) where attributes["gen_ai.system"] != nil and attributes["gen_ai.provider.name"] == nil
+              # Spring AI 는 finish_reasons 를 JSON 문자열('["tool_use"]')로 발신 — Python 계측(배열)과 타입을 맞춘다. 값 어휘는 프로바이더 원어 유지 (§5)
+              - set(attributes["gen_ai.response.finish_reasons"], ParseJSON(attributes["gen_ai.response.finish_reasons"])) where IsString(attributes["gen_ai.response.finish_reasons"]) and IsMatch(attributes["gen_ai.response.finish_reasons"], "^\\[")
       # 운영 형상은 캡처 자체를 끄지만(§6) 규칙은 compose 와 동일하게 둔다 — 설정 대칭
       transform/strip-content:
         error_mode: ignore
@@ -283,6 +285,24 @@ tempo:
   tempo:
     reportingEnabled: false
     retention: 48h
+    # TraceQL 메트릭 (DAY 44) — 스팬에서 지연·비율을 직접 산출 (대시보드 genai-observability). compose tempo.yml 과 대칭.
+    # local-blocks 만 켠다 — remoteWriteUrl 은 차트 템플릿이 항상 렌더하는 필수 항목이라 클러스터 Prometheus 를 적되 실제 전송은 없다
+    # (span_metrics·service_graphs 미사용, Prometheus remote-write 수신도 미설정)
+    metricsGenerator:
+      enabled: true
+      remoteWriteUrl: http://monitoring-kube-prometheus-prometheus:9090/api/v1/write
+      processor:
+        local_blocks:
+          filter_server_spans: false
+          flush_to_storage: true
+      storage:
+        path: /var/tempo/generator/wal
+      traces_storage:
+        path: /var/tempo/generator/traces
+    overrides:
+      defaults:
+        metrics_generator:
+          processors: [local-blocks]
     receivers:
       jaeger: null
       opencensus: null

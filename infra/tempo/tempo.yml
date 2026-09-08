@@ -23,5 +23,22 @@ compactor:
     # 데모·검증 범위 — 이틀치면 인시던트 재현·비교에 충분
     block_retention: 48h
 
+# TraceQL 메트릭 (DAY 44) — 스팬에서 지연·비율을 직접 산출한다 (대시보드 genai-observability 의 execute_tool·invoke_agent 지연 패널).
+# local-blocks 프로세서만 켠다 — remote write 대상 없음 (span_metrics·service_graphs 미사용)
+metrics_generator:
+  processor:
+    local_blocks:
+      filter_server_spans: false
+      flush_to_storage: true
+  storage:
+    path: /var/tempo/generator/wal
+  traces_storage:
+    path: /var/tempo/generator/traces
+
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [local-blocks]
+
 usage_report:
   reporting_enabled: false

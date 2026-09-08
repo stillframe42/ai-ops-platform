@@ -32,6 +32,8 @@ processors:
       - context: span
         statements:
           - set(attributes["gen_ai.provider.name"], attributes["gen_ai.system"]) where attributes["gen_ai.system"] != nil and attributes["gen_ai.provider.name"] == nil
+          # Spring AI 는 finish_reasons 를 JSON 문자열('["tool_use"]')로 발신 — Python 계측(배열)과 타입을 맞춘다. 값 어휘는 프로바이더 원어 유지 (§5)
+          - set(attributes["gen_ai.response.finish_reasons"], ParseJSON(attributes["gen_ai.response.finish_reasons"])) where IsString(attributes["gen_ai.response.finish_reasons"]) and IsMatch(attributes["gen_ai.response.finish_reasons"], "^\\[")
   # 프롬프트·응답 본문은 Tempo 에 남기지 않는다 — 캡처 지점이 게이트웨이 마스킹보다 앞이라 원문이다 (§6). Langfuse 경로만 유지
   transform/strip-content:
     error_mode: ignore

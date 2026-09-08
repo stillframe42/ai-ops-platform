@@ -23,6 +23,11 @@ scrape_configs:
     metrics_path: /actuator/prometheus
     static_configs:
       - targets: ["control-plane:8080"]
+  # 게이트웨이 메트릭(gateway.* + Spring AI gen_ai.client.*) — K8s 는 차트 ServiceMonitor 가 담당, compose 는 이 잡 (DAY 44 추가)
+  - job_name: llm-gateway
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["llm-gateway:8090"]
 
   # OTel Collector prometheus exporter (DAY 42) — gen_ai_client_token_usage 등 표준 GenAI 메트릭 (pull 모델 일관)
   - job_name: otel-collector
