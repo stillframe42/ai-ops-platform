@@ -13,6 +13,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import httpx
+from types import SimpleNamespace
 from opentelemetry import trace
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
@@ -270,6 +271,44 @@ def test_openai_chat_span_carries_genai_and_gateway_attributes():
     assert attrs["gateway.guardrail_stage"] == "pattern"
     assert attrs["gateway.downgrade"] == "haiku"
     assert "gateway.fallback" not in attrs  # 헤더가 없는 판정은 속성도 없다
+
+
+def test_gateway_header_hook_ignores_non_recording_spans():
+    """샘플링 제외·SDK off 요청의 httpx 스팬은 NonRecordingSpan — 훅이 예외 없이 건너뛰어야 LLM 호출이 살아남는다.
+
+    httpx 계측은 response_hook 의 예외를 삼키지 않아, 훅이 `span.parent` 로 죽으면 openai SDK 가 APIConnectionError 를 낸다.
+    """
+    from opentelemetry.trace import INVALID_SPAN_CONTEXT, NonRecordingSpan
+
+    from app.config.otel_genai import GenAiSpanEnricher, build_gateway_header_hooks
+
+    promote, _ = build_gateway_header_hooks(GenAiSpanEnricher())
+    request = SimpleNamespace(headers=httpx.Headers({"x-task-type": "monitoring-summary"}))
+    response = SimpleNamespace(headers=httpx.Headers({"x-gateway-cache": "miss"}))
+
+    promote(NonRecordingSpan(INVALID_SPAN_CONTEXT), request, response)  # 예외 없이 반환
+
+
+def test_genai_attribute_inventory_matches_baseline():
+    """계측 라이브러리 pin 점검 — 스팬 이름·kind·scope별 속성 키 목록이 baseline 스냅샷과 같아야 한다.
+
+    openai-v2·util-genai·semconv·SDK 버전을 올리면 여기서 diff 가 난다 → docs/otel-genai-mapping.md §3 표를 갱신하고
+    `scripts/genai_attribute_inventory.py --json` 출력으로 baseline 을 교체한다 (§7 절차). 값이 아닌 키만 비교한다.
+    """
+    import importlib.util
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location("genai_attribute_inventory", root / "scripts" / "genai_attribute_inventory.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    exporter = _exporter()
+    exporter.clear()
+    current = module.collect_inventory(exporter)
+    baseline = json.loads((root / "tests" / "resources" / "genai_attribute_inventory.json").read_text(encoding="utf-8"))
+    # 이 프로세스의 다른 테스트가 남긴 스팬은 섞이지 않는다 — clear 후 인벤토리 경로만 실행
+    assert current == baseline
 
 
 def test_metric_reader_is_absent_without_endpoint():

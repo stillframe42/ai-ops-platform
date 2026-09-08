@@ -1,0 +1,62 @@
+{
+  "POST [CLIENT] scope=opentelemetry.instrumentation.httpx": {
+    "attributes": [
+      "gen_ai.conversation.id",
+      "http.method",
+      "http.status_code",
+      "http.url",
+      "incident.id"
+    ]
+  },
+  "chat default [CLIENT] scope=opentelemetry.util.genai.handler": {
+    "attributes": [
+      "gateway.cache",
+      "gateway.guardrail",
+      "gateway.task_type",
+      "gen_ai.conversation.id",
+      "gen_ai.operation.name",
+      "gen_ai.provider.name",
+      "gen_ai.request.model",
+      "gen_ai.response.finish_reasons",
+      "gen_ai.response.id",
+      "gen_ai.response.model",
+      "gen_ai.usage.input_tokens",
+      "gen_ai.usage.output_tokens",
+      "incident.id",
+      "server.address",
+      "server.port"
+    ]
+  },
+  "execute_tool sample_tool [INTERNAL] scope=opentelemetry.util.genai.handler": {
+    "attributes": [
+      "gen_ai.conversation.id",
+      "gen_ai.operation.name",
+      "gen_ai.tool.description",
+      "gen_ai.tool.name",
+      "gen_ai.tool.type",
+      "incident.id",
+      "mcp.method.name",
+      "network.protocol.name",
+      "server.address",
+      "server.port"
+    ]
+  },
+  "invoke_agent inventory [INTERNAL] scope=opentelemetry.util.genai.handler": {
+    "attributes": [
+      "aiops.node",
+      "gen_ai.agent.name",
+      "gen_ai.conversation.id",
+      "gen_ai.operation.name",
+      "incident.id"
+    ]
+  },
+  "invoke_workflow incident-response [INTERNAL] scope=agent-service": {
+    "attributes": [
+      "aiops.resumed",
+      "gen_ai.conversation.id",
+      "gen_ai.operation.name",
+      "gen_ai.workflow.name",
+      "incident.id"
+    ]
+  }
+}
