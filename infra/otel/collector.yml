@@ -43,12 +43,23 @@ processors:
           - delete_key(attributes, "gen_ai.input.messages")
           - delete_key(attributes, "gen_ai.output.messages")
           - delete_key(attributes, "gen_ai.system_instructions")
-  # Langfuse 는 agent-service 스팬만 받는다 — 같은 LLM 호출이 게이트웨이(Spring AI) 스팬으로도 나오므로 비용 이중 집계 방지 (§5)
+  # Langfuse 는 agent-service 스팬만 받는다 — 같은 LLM 호출이 게이트웨이(Spring AI) 스팬으로도 나오므로 비용 이중 집계 방지 (§5).
+  # Kafka 소비·발행 스팬({topic} process/send)도 제외 — LLM 관점 밖이고, 아래 루트 승격 뒤 부모 없는 고아 trace 로 남는다
   filter/agent-only:
     error_mode: ignore
     traces:
       span:
         - resource.attributes["service.name"] != "agent-service"
+        - IsMatch(name, "^ops\\..* (process|send)$")
+  # Langfuse 는 trace 이름·세션(gen_ai.conversation.id)을 **루트 스팬**에서 읽는다. Kafka 전파 이후 워크플로 스팬의 부모는
+  # control-plane(미수신)이라 Langfuse 가 루트 없는 trace 로 취급해 세션이 비었다 (2026-09-08 실측). Langfuse 경로에서만
+  # 워크플로 스팬의 부모를 지워 루트로 만든다 — Tempo 경로는 원본 그대로 (한 traceId 유지)
+  transform/langfuse-root:
+    error_mode: ignore
+    trace_statements:
+      - context: span
+        statements:
+          - set(parent_span_id, SpanID(0x0000000000000000)) where name == "invoke_workflow incident-response"
 
 exporters:
   otlp/tempo:
@@ -69,6 +80,15 @@ exporters:
 
 service:
   extensions: [health_check, basicauth/langfuse]
+  # Collector 자체 메트릭(수신·전송 실패·큐 드롭 카운터) — 기본은 컨테이너 안 localhost:8888 이라 밖에서 못 읽는다. 차트 판(MY_POD_IP)과 대칭
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
   pipelines:
     traces/tempo:
       receivers: [otlp]
@@ -76,7 +96,7 @@ service:
       exporters: [otlp/tempo]
     traces/langfuse:
       receivers: [otlp]
-      processors: [memory_limiter, filter/agent-only, batch]
+      processors: [memory_limiter, filter/agent-only, transform/langfuse-root, batch]
       exporters: [otlphttp/langfuse]
     metrics:
       receivers: [otlp]
