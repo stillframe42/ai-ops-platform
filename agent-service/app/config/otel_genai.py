@@ -61,8 +61,14 @@ class GenAiSpanEnricher(SpanProcessor):
         self._live_genai_spans.pop(span.context.span_id, None)
 
     def genai_parent_of(self, span: Span) -> Span | None:
-        """httpx 스팬의 부모가 열려 있는 gen_ai 스팬이면 그 스팬 — 아니면 None (게이트웨이 외 호출)."""
-        parent = span.parent
+        """httpx 스팬의 부모가 열려 있는 gen_ai 스팬이면 그 스팬 — 아니면 None (게이트웨이 외 호출).
+
+        샘플링에서 빠졌거나 SDK 가 꺼진 요청의 스팬은 `NonRecordingSpan` 이라 `parent` 가 없다 — 훅에서 예외가 나면
+        httpx 계측이 그대로 전파해 **LLM 호출 자체가 실패**하므로(2026-09-08 실측) 기록 중이 아니면 조용히 건너뛴다.
+        """
+        if not span.is_recording():
+            return None
+        parent = getattr(span, "parent", None)
         return self._live_genai_spans.get(parent.span_id) if parent is not None else None
 
 
