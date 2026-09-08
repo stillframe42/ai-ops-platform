@@ -51,7 +51,9 @@ flowchart TB
         loki["Loki<br/>로그 저장·조회"]
         alloy["Alloy<br/>로그 수송 (컨테이너 stdout 수집)"]
         pg["PostgreSQL (pgvector)<br/>LangGraph 체크포인트 (ADR-0009)<br/>vector_store · incident_reports (Flyway)"]
-        lf["Langfuse v3<br/>LLM 관측·비용 추적<br/>(웹+worker · ClickHouse · MinIO · Redis)"]
+        col["OTel Collector (contrib)<br/>OTLP 수신 · 정규화/콘텐츠 삭제/필터<br/>백엔드 라우팅은 여기서만 (ADR-0018)"]
+        tempo["Tempo<br/>트레이스 저장·조회<br/>TraceQL 메트릭 (도구·노드 지연)"]
+        lf["Langfuse v3 — compose 전용<br/>LLM 세션·비용 UI (OTLP 수신)<br/>(웹+worker · ClickHouse · MinIO · Redis)"]
         auth["auth-server<br/>OAuth2 토큰 발급 (Client Credentials)<br/>JWKS 공개 (ADR-0016)"]
     end
 
@@ -92,14 +94,18 @@ flowchart TB
     graf -->|"LogQL (HTTP)"| loki
     agents -->|"LogQL 조회 (HTTP)<br/>분석 에이전트 도구 (ADR-0004 2단계 확정)"| loki
     agents -->|"체크포인트 저장/조회 (SQL)<br/>Durable Execution (ADR-0009)"| pg
-    agents -->|"트레이스 전송 (OTel)<br/>키 미설정 시 비활성"| lf
+    agents & cp & gw -->|"OTLP (스팬·gen_ai 메트릭)<br/>표준 어휘로만 계측 (ADR-0018)"| col
+    col -->|"트레이스 (콘텐츠 삭제 후)"| tempo
+    col -.->|"agent-service 스팬만 (compose 전용 exporter)<br/>세션 = gen_ai.conversation.id"| lf
+    prom -->|"scrape — gen_ai 표준 메트릭 (8889)"| col
+    graf -->|"TraceQL (HTTP)<br/>트레이스↔로그 traceId 상관"| tempo
     cp -->|"승인 조치 실행 대행 (ADR-0005)<br/>CIRCUIT_BREAK: chaos/reset HTTP<br/>(RESTART_APP 은 수동 조치 안내 — 자동 실행 제외)"| target
 
     classDef person fill:#08427b,color:#fff,stroke:#052e56
     classDef container fill:#1168bd,color:#fff,stroke:#0b4884
     classDef external fill:#999,color:#fff,stroke:#6b6b6b
     class operator person
-    class cp,agents,gw,redis,kafka,prom,graf,am,loki,alloy,pg,lf,auth container
+    class cp,agents,gw,redis,kafka,prom,graf,am,loki,alloy,pg,col,tempo,lf,auth container
     class target,slack,llm external
 ```
 
@@ -163,13 +169,14 @@ flowchart LR
 | target-app → Alloy → Loki | 컨테이너 stdout 수집 + Loki push API — compose 는 docker discovery, K8s 는 DaemonSet + K8s discovery (service 라벨 = pod `app` 라벨) | 확정 ([ADR-0004](adr/0004-loki-adoption.md) 추가 사항 — Promtail 은 EOL 로 제외, K8s 판은 [ADR-0013](adr/0013-k8s-migration.md)) |
 | agent-service → Loki | LogQL 조회 | 확정 — 분석 에이전트 도구 ([ADR-0004](adr/0004-loki-adoption.md) 2단계, 2026-07-18) |
 | agent-service → PostgreSQL | SQL (커넥션 풀) | 확정 — LangGraph 체크포인트 ([ADR-0009](adr/0009-postgres-checkpointer.md)) + pgvector 유사 인시던트 검색 |
-| agent-service → Langfuse | OTel (HTTP) | 확정 — 자체 compose 스택 (v3, thread_id = 세션), 키 미설정 시 비활성. K8s 형상에는 미배포 (한시 비활성 — 2026-09 Observability 재검토) |
+| agent-service·control-plane·llm-gateway → OTel Collector | OTLP/HTTP (스팬 + agent-service 의 gen_ai 메트릭) — 앱은 Collector 주소만 안다 (`OTEL_EXPORTER_OTLP_ENDPOINT`·`management.opentelemetry.tracing.export.otlp.endpoint`, 미설정 = 전송 없음) | 확정 ([ADR-0018](adr/0018-observability-vendor-neutral.md) — 2026-09-03 exporter 장착, 백엔드 교체 = Collector 설정 변경 실증) |
+| OTel Collector → Tempo / Prometheus / Langfuse | Tempo 는 OTLP gRPC (프롬프트 본문 삭제 후) / Prometheus 는 Collector `prometheus` exporter 스크레이프 (`gen_ai.client.token.usage`·`operation.duration`) / Langfuse 는 OTLP/HTTP Basic — **agent-service 스팬만, compose 전용** (세션 = `gen_ai.conversation.id` = 인시던트 id, Langfuse 콜백 제거) | 확정 (ADR-0018 — 2026-09-03 개통, 2026-09-07 콜백 제거) |
 | 승인 왕복 (`ops.actions.pending`/`decisions`) | agent-service 가 pending 발행 + interrupt 대기 → control-plane 소비·카드 발송·결정 → decisions 발행 (approved 는 실행 결과 포함) → agent-service 소비·재개 | 확정 ([ADR-0005](adr/0005-action-executor.md) — 2026-08-01 배선, 08-04 실행 결과 포함) |
 | 조치 실행 | control-plane 대행 — 자동 실행은 CIRCUIT_BREAK(target-app `chaos/reset` HTTP)뿐, RESTART_APP 은 수동 조치 안내로 전환 (docker socket 마운트 제거) | 확정 ([ADR-0005](adr/0005-action-executor.md) 추가 사항 — 2026-08-04 실측 후 조정) |
-| 분산 추적 — Trace Context 전파 | W3C traceparent (agent-service → llm-gateway·control-plane → 프로바이더 방향 주입) + 로그 traceId 상관 (agent-service 로그 필터·게이트웨이 ECS JSON 필드) | 확정 (2026-08-22 — exporter 미장착: 스팬 전송 없음) |
-| 분산 추적 — 수집·시각화 (OTLP → Tempo) | OTLP | 로드맵 2026-09 — 전파는 위 행으로 선행 확정, 수집 도입 시 Level 2 갱신 |
+| 분산 추적 — Trace Context 전파 | W3C traceparent — HTTP(agent-service → llm-gateway·control-plane → 프로바이더) + **Kafka 헤더**(control-plane Spring Kafka observation ↔ agent-service 수동 스팬) + control-plane `@Async` 경계(전용 풀 + `ContextPropagatingTaskDecorator`) + 로그 traceId 상관 | 확정 (2026-08-22 HTTP, 2026-09-07 Kafka·@Async — 인시던트 1건이 웹훅부터 LLM 까지 하나의 traceId, 승인 전후는 span link, [ADR-0011](adr/0011-kafka-trigger.md) 추가 사항) |
+| 분산 추적 — 어휘·시각화 | OTel GenAI 시맨틱 컨벤션 — Client Spans(`chat`)·Agent Spans(`invoke_workflow`/`invoke_agent`/`execute_tool`)·MCP 속성(`mcp.method.name` 등) + Grafana Tempo 데이터소스(로그↔트레이스 양방향) + `genai-observability` 대시보드(표준 메트릭·TraceQL 메트릭) | 확정 ([docs/otel-genai-mapping.md](otel-genai-mapping.md) §3·§4 실측 트리 — 2026-09-07~08) |
 
-> OTLP/Tempo 는 현재 컨테이너 목록에 없다. [README 로드맵](../README.md#로드맵)의 2026-09(Observability) 단계에서 도입하며, 그 시점에 이 다이어그램을 갱신한다. 전파 계층(traceparent·로그 상관)이 2026-08-22 에 먼저 확정되어, 수집 단계는 exporter 장착부터 시작한다.
+> 관측 파이프라인(앱 → OTLP → Collector → Tempo | Prometheus | Langfuse)의 두 형상 차이와 정규화 규칙은 [docs/otel-genai-mapping.md](otel-genai-mapping.md) §2·§5, 결정 배경은 [ADR-0018](adr/0018-observability-vendor-neutral.md).
 
 ## 보안 아키텍처
 

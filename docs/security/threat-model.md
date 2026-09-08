@@ -104,6 +104,7 @@ llm-gateway `gateway_request`(client_id·scope·path·task_type·cache), 승인 
 - 공급망 (LLM03) — 의존성 버전 고정 관례로 대체
 - 학습 데이터 오염 (LLM04 원형) — 학습 없음, RAG 오염(③)으로 축소 해석
 - 사용자 인증 — 사람 로그인 없음 (승인자는 Slack Socket Mode)
+- 관측 백엔드로 나가는 프롬프트 본문 — 캡처(`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=SPAN_ONLY`)는 compose 전용이고, 캡처 지점이 게이트웨이 입력 마스킹보다 **앞**이라 본문은 마스킹 전 원문이다. 운영(K8s)은 캡처 없음(`NO_CONTENT`), Tempo 경로는 Collector 가 본문 속성을 삭제한다. 캡처를 켠 환경의 Langfuse 는 신뢰 경계 안 저장소로 취급한다 — 저장된 본문이 LLM 입력으로 되돌아가는 경로가 없어 재주입 고리는 아니다 ([ADR-0018](../adr/0018-observability-vendor-neutral.md), `docs/otel-genai-mapping.md` §6)
 - 네트워크 경계 (NetworkPolicy·서비스 메시) — 미도입. 클러스터 내부는 HTTP 평문이라 bearer(공유 시크릿·JWT·토큰 요청의 Basic)를 볼 수 있는 위치의 공격자는 재사용 가능 (RFC 6750 은 TLS 전제) — 인증 계층이 막는 범위 밖, 보강 순서는 NetworkPolicy(수신 제한) → 시크릿 회전 → mTLS
 
 ## 6. 레드팀 케이스 인덱스 (2026-08-30 확정 — 데이터셋 `redteam/cases.yaml`, 러너 `agent-service/scripts/run_redteam.py`, 결정론 회귀 테스트 2026-09-02 — `redteam/README.md` 표)

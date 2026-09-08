@@ -49,6 +49,18 @@ resume(Durable Execution)이 흡수한다. 수동 트리거 `POST /incidents/tri
   덮어씀. **빈 값이면 컨슈머 비활성** (수동 트리거만으로 동작). 브로커 다운 시 앱은 뜨고
   컨슈머만 백오프 재시도
 
+## 관측 — OTel GenAI 표준 어휘 (ADR-0018, `docs/otel-genai-mapping.md`)
+
+LLM 호출·에이전트 노드·도구 호출을 OTel GenAI 시맨틱 컨벤션으로 계측한다 (`app/config/otel.py`·`otel_genai.py`·`agent_spans.py`) —
+`chat {model}` Client Span(contrib openai-v2, 토큰·모델·finish_reasons + 게이트웨이 판정 헤더 `gateway.*` 승격) /
+`invoke_workflow incident-response`·`invoke_agent {노드}`·`execute_tool {도구}` Agent Spans(util-genai, MCP 도구는 `mcp.method.name` 등 동반) /
+`gen_ai.client.token.usage`·`operation.duration` 메트릭. 세션 축은 `gen_ai.conversation.id` = incident id (하위 스팬 상속), 승인 대기 전후 실행은 span link.
+Kafka 소비·발행은 `traceparent` 헤더로 control-plane 과 한 trace 다. 벤더 SDK(Langfuse 콜백) 의존은 없다 — Langfuse 는 Collector 가 라우팅하는 백엔드 중 하나.
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` — Collector 주소 (compose 는 `http://otel-collector:4318`, 호스트 실행은 `http://localhost:4318`). **미설정 = 전파만 하고 전송 없음**, 메트릭도 함께 꺼진다
+- `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` — 프롬프트/응답 본문 캡처. 미설정 = `NO_CONTENT`(운영). compose 는 `SPAN_ONLY`(Langfuse 표시용) — 캡처 본문은 게이트웨이 마스킹 **전** 원문이라 Tempo 경로는 Collector 가 삭제한다
+- `/health` 의 `otlp_enabled` 로 전송 여부 확인. 속성 계약 테스트는 `tests/test_otel.py`
+
 ## MCP 도구 (DAY 16, ADR-0010)
 
 운영 도구(배포 이력·유사 인시던트 검색·앱 설정)는 control-plane MCP 서버에서 프로토콜로

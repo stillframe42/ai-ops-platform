@@ -32,7 +32,8 @@ C4 다이어그램(System Context / Container / agent-service 내부)과 컨테�
 | 메트릭 수집 | Prometheus | Alertmanager 룰 기반 웹훅 ([ADR-0003](docs/adr/0003-alertmanager-webhook.md)) |
 | 로그 | Loki + Alloy | 분석 에이전트 조회 도구 ([ADR-0004](docs/adr/0004-loki-adoption.md)) |
 | 대시보드 | Grafana | |
-| LLM 관측·비용 | Langfuse v3 (자가 호스팅) | 세션 = 인시던트 |
+| 관측 파이프라인 | OTel Collector (contrib) + Tempo | 앱은 OTel GenAI 표준 어휘(`gen_ai.*`·`mcp.*`)로만 계측, 백엔드는 Collector exporter 설정 ([ADR-0018](docs/adr/0018-observability-vendor-neutral.md)) |
+| LLM 관측·비용 | Langfuse v3 (자가 호스팅, compose 전용) | Collector 경유 OTLP 수신 — 세션 = 인시던트 (`gen_ai.conversation.id`), 벤더 SDK 의존 없음 |
 | 알림/승인 채널 | Slack | 분석 보고 알림은 incoming webhook, 승인은 Slack App — Block Kit 버튼 + Socket Mode 수신 ([ADR-0006](docs/adr/0006-slack-approval-ux.md)) |
 | 로컬 실행 | docker-compose | `infra/` 단일 통합 지점 ([ADR-0001](docs/adr/0001-monorepo.md)) |
 
@@ -175,6 +176,6 @@ helm upgrade aiops charts/aiops -n aiops -f charts/aiops/values-local.yaml --set
 
 | 마일스톤 | 산출물 |
 |----------|--------|
-| 분산 추적 | OTel 계측(Spring Boot 자동 / Python 수동), 레이어 간 Trace Context 전파, Grafana Tempo E2E 시각화 |
+| 분산 추적 (완료 — 9/3~9/8) | OTel GenAI 표준 어휘 계측 — Client/Agent/MCP Spans (Python contrib openai-v2 + util-genai, Spring AI 자동 관측 + MCP 서버 스팬) + 전용 OTel Collector 파이프라인 (Tempo·Prometheus·Langfuse 는 exporter 설정, [ADR-0018](docs/adr/0018-observability-vendor-neutral.md)) — 인시던트 1건이 웹훅→Kafka→에이전트 노드→MCP→게이트웨이→LLM 까지 **하나의 traceId** (승인 전후 span link, Loki 감사 로그 상관), Langfuse 콜백 제거(OTLP 수신으로 세션·비용 유지), 표준 메트릭·TraceQL 메트릭 대시보드, "백엔드 교체 = Collector 설정 변경" 실증 (exporter on/off 4회 재배포 0), 매핑 문서 [`docs/otel-genai-mapping.md`](docs/otel-genai-mapping.md) |
 | AI 전용 메트릭 | LLM-as-a-Judge 품질 평가, 에이전트 성공률/스텝 수 추적, 비용 대비 품질 대시보드 |
 | 성능 최적화 | 비동기 배치 처리, 에이전트 병렬 실행, 응답 스트리밍(SSE), 부하 테스트 + 병목 개선 리포트 |
