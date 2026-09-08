@@ -476,6 +476,36 @@
           "legendFormat": "{{name}} {{state}} — {{pod}}{{instance}}"
         }
       ]
+    },
+    {
+      "id": 14,
+      "type": "timeseries",
+      "title": "입력 가드레일 판정 (5분 창) — 단계·판정별",
+      "description": "pattern=정규식·휴리스틱 1차, classifier=LLM 2차(SUSPECT 만), policy=차단 스위치. flagged 는 통과했으나 관측된 요청 (mode=flag)",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 30
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "noValue": "폴백 없음"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (stage, verdict) (increase(gateway_guardrail_total[5m]))",
+          "legendFormat": "{{stage}} / {{verdict}}"
+        }
+      ]
     }
   ]
 }
