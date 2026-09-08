@@ -124,7 +124,8 @@ Collector `transform` 규칙:
 | `gen_ai.system` → `gen_ai.provider.name` 복제 | llm-gateway 스팬 (Spring AI 2.0.0) | 세대 차이 정규화 — 원본 키는 유지 (2026-09-08 실측: 복제 확인) |
 | `gen_ai.response.finish_reasons` 문자열 → 배열 (`ParseJSON`) | llm-gateway 스팬 (Spring AI 는 `'["tool_use"]'` 문자열로 발신) | Python 계측(배열)과 타입 정합 — 값 어휘는 정규화하지 않는다 (아래) |
 | `gen_ai.input.messages`·`gen_ai.output.messages`·`gen_ai.system_instructions` 삭제 | Tempo exporter 경로 | 콘텐츠는 Langfuse 경로만 (§6) |
-| `service.name == agent-service` 만 통과 (`filter`) | Langfuse exporter 경로 | 같은 LLM 호출이 agent-service(클라이언트)·llm-gateway(Spring AI) 두 스팬으로 나오므로 비용 이중 집계 방지 |
+| `service.name == agent-service` 만 통과 + Kafka `ops.* process/send` 스팬 제외 (`filter`) | Langfuse exporter 경로 | 같은 LLM 호출이 agent-service(클라이언트)·llm-gateway(Spring AI) 두 스팬으로 나오므로 비용 이중 집계 방지. Kafka 스팬은 LLM 관점 밖이고 아래 루트 승격 뒤 고아가 된다 |
+| `invoke_workflow incident-response` 의 `parent_span_id` 를 0 으로 (`transform/langfuse-root`) | Langfuse exporter 경로만 | Langfuse 는 trace 이름·세션(`gen_ai.conversation.id`)을 **루트 스팬**에서 읽는데, Kafka 전파 이후 워크플로 스팬의 부모가 control-plane(미수신)이라 세션이 비었다 (2026-09-08 실측 — E2E 세션 전부 누락). Langfuse 경로에서만 워크플로를 루트로 만든다. Tempo 경로는 원본 그대로라 한 traceId 가 유지된다 |
 
 **`finish_reasons` 값 어휘는 두 축이다** — agent-service(OpenAI 호환 응답) `tool_calls`/`stop`, llm-gateway(Anthropic 원어) `tool_use`/`end_turn`. 규격은 프로바이더 원어를 허용하므로 보정하지 않고, Tempo 질의는 계층별로 한다 (클라이언트 스팬 = `stop|tool_calls`, 게이트웨이 스팬 = `end_turn|tool_use`).
 
@@ -145,9 +146,14 @@ Collector `transform` 규칙:
 
 `EVENT_ONLY`(로그 이벤트 `gen_ai.client.inference.operation.details`)가 규격이 권장하는 형태이나, Tempo 와 Langfuse 모두 OTLP 로그를 소비하지 않아(Langfuse logs 엔드포인트 없음 — 실측 404) 채택하지 않는다. Loki 로 보내는 대안은 필요가 생길 때 판단한다. Spring AI 의 `spring.ai.chat.observations.log-prompt/log-completion` 은 로그 출력 방식이며 기본 false 를 유지한다.
 
-## 7. 갱신 절차
+## 7. 갱신 절차 (컨벤션 pin 점검)
 
-1. pin 표의 버전을 바꾸기 전에 `agent-service/tests/test_otel.py` 의 속성 계약 테스트가 GREEN 인지 확인한다.
-2. 버전을 올린 뒤 스크래치 실측(목 게이트웨이 + InMemory exporter)으로 발신 속성 목록을 뽑아 §3 표와 diff 한다.
-3. 이름이 바뀐 속성은 Collector `transform` 에 구키→신키 복제 규칙을 두고, 대시보드 쿼리를 신키로 옮긴 뒤 규칙을 제거한다 (이중 발신 기간 운영).
-4. 변경 내용을 이 문서와 ADR-0018 추가 사항에 날짜와 함께 기록한다.
+컨벤션이 Development 상태라 계측 라이브러리를 올리면 속성 이름이 바뀔 수 있다. 점검은 스냅샷 테스트가 기계적으로 하고, 사람은 diff 만 읽는다.
+
+1. **옵트인 고정 확인** — `agent-service/app/config/otel.py` 가 `OTEL_SEMCONV_STABILITY_OPT_IN=gen_ai_latest_experimental` 을 `setdefault` 로 고정한다 (환경변수로 다른 값을 주면 그 값이 이긴다 — 배포 env 에 이 변수를 두지 않는다). openai-v2·util-genai 는 이 값이 있어야 `gen_ai.provider.name`·스팬 속성 캡처 모드·핸들러 경로가 된다.
+2. **버전을 올리기 전** `uv run pytest tests/test_otel.py` 가 GREEN 인지 확인한다 — 속성 계약 테스트 + **스냅샷 테스트** `test_genai_attribute_inventory_matches_baseline` (스팬 이름·kind·scope 별 속성 **키** 목록을 `tests/resources/genai_attribute_inventory.json` 과 비교).
+3. **버전을 올린 뒤** 같은 테스트를 돌린다. 스냅샷이 깨지면 `uv run python scripts/genai_attribute_inventory.py` 로 현재 인벤토리(루프백 게이트웨이 + InMemory exporter — 네트워크·실서비스 없이 `chat`·`invoke_agent`·`execute_tool`(MCP 속성)·`invoke_workflow`·httpx 스팬)를 출력해 §3 표와 대조한다. 이름이 바뀐 속성은 §3 표·§5 규칙·대시보드 쿼리를 갱신하고, `--json > tests/resources/genai_attribute_inventory.json` 으로 baseline 을 교체한다.
+4. 이름이 바뀐 속성은 Collector `transform` 에 구키→신키 복제 규칙을 두고, 대시보드 쿼리를 신키로 옮긴 뒤 규칙을 제거한다 (이중 발신 기간 운영). Spring AI 쪽(`gen_ai.system`·`finish_reasons` 문자열)은 이미 이 방식으로 흡수돼 있다 — Spring AI 를 올려 세대가 바뀌면 §5 규칙 2개를 제거한다.
+5. 변경 내용을 이 문서 §1 pin 표와 ADR-0018 추가 사항에 날짜와 함께 기록한다.
+
+JVM 측은 스냅샷 테스트가 없다 — Spring AI 관측 속성은 자동 계측이라 버전 업 후 compose 에서 인시던트 1건을 돌려 Tempo 의 `chat claude-*` 스팬 속성을 §3 행과 대조한다 (2026-09-08 실측 목록이 기준).
