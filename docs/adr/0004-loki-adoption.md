@@ -19,7 +19,7 @@
 - 2단계 (에이전트 day): 분석 에이전트의 LogQL 조회 도구 — 별도 결정으로 미룬다. 부담 시 1단계에서 멈추는 퇴로를 허용하며, 그 경우 보고서의 로그 근거는 Grafana 링크로 대체한다.
   - (2026-07-18 추가 사항) **2단계 진행 확정** — 분석 에이전트의 LogQL 도구 `get_app_logs` 를 구현했다 (`agent-service/app/tools/loki_tools.py`). 필터는 1단계에서 검증한 `{service="target-app"} | json | log_level=...` 를 그대로 사용. 퇴로(1단계 멈춤)는 사용하지 않았다.
 
-로그 수송 방식: **Grafana Alloy** (2026-07-14 추가 사항, infra 구현 시 확정). 당초 후보였던 Promtail 은 2026-03 EOL(Alloy 로 대체)이라 신규 채택에서 제외했고, loki-docker-driver 는 호스트 Docker 에 플러그인 설치라는 compose 밖 수동 단계가 필요해 "단일 명령 기동" 기준에 어긋나 기각. Alloy 는 docker discovery 로 컨테이너 stdout 을 수집하며, 9월 Observability 단계에서 OTel collector 역할을 겸할 수 있어 확장성도 유리하다.
+로그 수송 방식: **Grafana Alloy** (2026-07-14 추가 사항, infra 구현 시 확정). 당초 후보였던 Promtail 은 2026-03 EOL(Alloy 로 대체)이라 신규 채택에서 제외했고, loki-docker-driver 는 호스트 Docker 에 플러그인 설치라는 compose 밖 수동 단계가 필요해 "단일 명령 기동" 기준에 어긋나 기각. Alloy 는 docker discovery 로 컨테이너 stdout 을 수집하며, 2026-09 Observability 작업에서 OTel collector 역할을 겸할 수 있어 확장성도 유리하다.
 
 히스토리 저장소: 데모 범위(시나리오 3 의 30분 관측 창)는 Prometheus 기본 보존으로 충분하므로 **별도 저장소는 보류**한다. "과거 유사 장애 검색"으로 확장할 때 재검토.
 
@@ -35,3 +35,7 @@
 - 쉬워지는 것: 시나리오 1 보고서에 로그 근거 확보, 마스킹 작업 대상 마련, LGTM 스택 단계 완성 (2026-09 Tempo 와 연결).
 - 어려워지는 것: compose 서비스 증가(Loki + 수송), target-app 에 JSON 구조화 로깅 요구, 에이전트 day 에 LogQL 도구 결정이 하나 늘어남.
 - 되돌리기: compose 에서 Loki·수송 서비스 제거 + scenarios.md 에 시나리오 1 산출물 축소를 명시하면 됨. 애플리케이션 코드 의존이 없어(로깅은 stdout) 제거 비용 낮음.
+
+## 추가 사항 (2026-09-08 — Alloy 의 OTel collector 역할 겸임은 채택하지 않음)
+
+결정 본문이 예고한 "Alloy 가 OTel collector 역할을 겸할 수 있다"는 관측 표준화 작업(2026-09-03~08)에서 **채택하지 않았다** — 트레이스·GenAI 메트릭 수신은 전용 `otel-collector-contrib` 가 맡는다 ([ADR-0018](0018-observability-vendor-neutral.md) 검토 대안 표). 근거: 현행 Alloy 설정은 로그 전용 34줄이라 재사용 절감이 작고, 전용 Collector 의 표준 YAML·OTTL 규칙(콘텐츠 삭제·속성 정규화·백엔드 필터)이 재현성·서사에 유리하다. **Alloy 는 로그 수송(컨테이너 stdout → Loki)으로 역할을 한정**하며, 두 형상(compose docker discovery / K8s DaemonSet) 배치는 그대로다. Loki 는 Grafana 데이터소스 `derivedFields`(traceId → Tempo) 와 Tempo `tracesToLogsV2` 로 트레이스와 양방향 상관된다 — 감사 로그의 `traceId` 필드가 상관 키.

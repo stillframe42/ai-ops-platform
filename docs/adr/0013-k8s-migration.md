@@ -52,4 +52,10 @@ namespace 는 aiops 단일, K8s Service 명 = compose 컨테이너명으로 맞�
 - 개발 루프 가치는 지속: 단위 테스트는 CI(GitHub Actions, 2026-09-02 신설)가 담당하지만, 레드팀 E2E 러너·파이프라인 실측은 여전히 실행 스택이 필요하고 kind(helm upgrade + kind load)보다 compose 반복이 빠르다.
 - 되돌리기 부담: 폐기는 즉시 되돌릴 수 없다(README 로컬 가이드 재작성·compose 파일 삭제). 유지의 한계 비용이 낮고 폐기의 이득(단일 형상)이 데모 규모에서 작다.
 
-다음 재검토 조건: 사본 동기가 반복 부채로 커지거나(대시보드·부하 스크립트 대량 변경), 9월 Observability 작업에서 관측 스택 구성이 두 형상 간 갈라질 때.
+다음 재검토 조건: 사본 동기가 반복 부채로 커지거나(대시보드·부하 스크립트 대량 변경), 2026-09 Observability 작업에서 관측 스택 구성이 두 형상 간 갈라질 때.
+
+## 추가 사항 (2026-09-08): 관측 스택도 두 형상 동시 반영 — 재검토 조건 미도달
+
+관측 표준화([ADR-0018](0018-observability-vendor-neutral.md))에서 OTel Collector·Tempo 를 **compose(`compose.monitoring.yml`)와 umbrella 차트(`opentelemetry-collector`·`tempo` 외부 의존 pin) 양쪽에 같은 파이프라인**으로 넣었다. 두 형상의 차이는 Langfuse exporter 유무 하나(compose 전용 백엔드 — K8s 미반입 승계)이고, 이 차이가 "백엔드 교체 = Collector 설정 변경"의 실증이기도 하다. 따라서 위 재검토 조건("관측 스택이 두 형상 간 갈라질 때")에는 도달하지 않았고 **compose 유지 결정은 그대로**다.
+
+사본 동기 의무는 늘었다: Grafana 대시보드 4종(`genai-observability` 추가)·Collector 설정(`infra/otel/collector.yml` ↔ values `alternateConfig`)·Tempo 설정(`infra/tempo/tempo.yml` ↔ values `tempo.*`)·Prometheus 스크레이프(compose 잡 ↔ ServiceMonitor). compose 의 llm-gateway 스크레이프 잡이 빠져 있던 드리프트(게이트웨이 대시보드가 compose 에서 비어 있었음)와 차트 대시보드 사본의 패널 누락 1건을 2026-09-08 에 발견·정정했다 — 사본 동기는 "변경 시" 뿐 아니라 실측 시점에 대조가 필요하다.

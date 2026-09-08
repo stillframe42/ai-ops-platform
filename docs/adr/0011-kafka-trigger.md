@@ -51,3 +51,8 @@ Alertmanager → control-plane webhook → **Kafka** (`ops.incidents`) → agent
 
 - "서버 다운이 새 실패 지점" 단점은 Kafka 고유가 아니라 중개 계층 도입 공통 비용 (ADR-0010 보정과 같은 구조)
 - 토픽 명세 (파티션·보존·key)는 DAY 17 결정 — raw(1, groupKey) / incidents·analysis.results(3, incident_id) / actions.pending(1, 자리만), 보존 7일, auto-create 비활성
+
+## 추가 사항 (2026-09-07 — Kafka 구간 트레이스 전파 + @Async 경계)
+
+- **Kafka 경계에서 trace 가 이어진다**: control-plane `spring.kafka.template/listener.observation-enabled` (발행 `{topic} send` PRODUCER 스팬 + `traceparent` 헤더, 소비 `{topic} process` CONSUMER 스팬) / agent-service 는 aiokafka 계측 대신 수동 스팬(`app/events/propagation.py` — 배치 `getmany` 소비라 메시지 단위 계측기가 맞지 않음): 소비 시 헤더에서 부모 컨텍스트를 추출해 워크플로 스팬의 부모로, 발행 시 헤더를 동봉. 결과: 웹훅 SERVER 스팬 → `ops.incidents send` → `invoke_workflow` 가 한 traceId, 승인 API → `ops.actions.decisions send` → 재개 워크플로가 한 traceId (원 실행과는 span link). 실측·트리는 [ADR-0018](0018-observability-vendor-neutral.md)·`docs/otel-genai-mapping.md` §4
+- **@Async 경계가 끊는다 — 전용 풀 + `ContextPropagatingTaskDecorator`**: 웹훅 수신 → 인시던트 발행이 `@Async` 로 넘어가는데, 애플리케이션에 커스텀 `Executor` 빈(`actionExecutionExecutor`)이 있으면 Boot 의 `applicationTaskExecutor` 자동구성이 해제되어 `@Async` 가 `SimpleAsyncTaskExecutor`(컨텍스트 없음·무제한 스레드)로 떨어진다(실측 — 발행 스팬이 부모 없는 루트). `AsyncConfigurer` 로 전용 `ThreadPoolTaskExecutor`(core/max 8, **큐 500·AbortPolicy** — 포화 시 웹훅 500 으로 Alertmanager 재시도에 맡김)에 데코레이터를 달고, 조치 실행 풀에도 같은 데코레이터를 달아 두 경계 모두 trace·MDC 가 이어진다. 풀 상태는 Micrometer `executor.*` 메트릭

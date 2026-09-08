@@ -20,3 +20,4 @@
 | [0015](0015-llm-gateway.md) | LLM 게이트웨이 도입 방식 | 별도 서비스 직접 구현 (Spring Boot + Spring AI, OpenAI 호환 노출) — 승인됨 (LiteLLM/Bifrost 비교표·실측 병기, 2026-08-22 확정) | 2026-08-17 |
 | [0016](0016-mcp-authentication.md) | MCP 인증 | 별도 auth-server 발급(Client Credentials) + 리소스 서버별 동일 issuer 검증(control-plane·llm-gateway), 스코프 ops:read/ops:approve/llm:invoke, 인증 항상 필수, 감사 로그·Secret 관리 확정 — 승인됨 (2026-08-28 확정) | 2026-08-25 |
 | [0017](0017-prompt-injection-defense.md) | Prompt Injection 계층 방어 | 계층 4종(구조적 분리·입력 가드레일·도구 인자 검증·출력/저장 스캔+마스킹) + 플래깅 우선 정책, 레드팀 20/20(baseline 8→0), 결정론 회귀 CI — 승인됨 | 2026-09-02 |
+| [0018](0018-observability-vendor-neutral.md) | 관측성 벤더 중립 전략 | OTel GenAI 표준 어휘(Client/Agent/MCP Spans·Metrics)로만 계측 + 전용 Collector 중심 파이프라인 — 백엔드(Tempo·Prometheus·Langfuse)는 exporter 설정, Langfuse 콜백 제거·compose 전용 백엔드로 강등. 실증 3건(exporter on/off 재배포 0·한 traceId E2E·표준 메트릭 대시보드) — 승인됨 (2026-09-08 확정) | 2026-09-03 |
