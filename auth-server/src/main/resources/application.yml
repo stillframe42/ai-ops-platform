@@ -37,6 +37,16 @@ spring:
               scopes: [ops:approve, ops:read]
             token:
               access-token-time-to-live: 15m
+          evaluation-service:
+            registration:
+              client-id: evaluation-service
+              client-secret: "{noop}${AUTH_CLIENT_SECRET_EVALUATION_SERVICE}"
+              client-authentication-methods: [client_secret_basic]
+              authorization-grant-types: [client_credentials]
+              # Judge 호출(게이트웨이)만 — MCP·승인 API 는 구조적으로 미보유 (ADR-0019, 평가는 응답 경로 밖)
+              scopes: [llm:invoke]
+            token:
+              access-token-time-to-live: 15m
 
 server:
   port: 8091

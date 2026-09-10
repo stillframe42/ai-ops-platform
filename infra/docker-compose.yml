@@ -82,9 +82,30 @@ services:
         condition: service_healthy
     logging: *default-logging
 
+  evaluation-service:
+    # 용도: 보고서 품질 지속 검증 (ADR-0019) — ops.analysis.results 를 별도 컨슈머 그룹으로 읽어 샘플링 → 시간창 재조회 →
+    # LLM-as-a-Judge(게이트웨이 경유) → ops.evaluation.results. 응답 경로 밖이라 depends_on 을 두지 않는다 —
+    # 브로커·관측 스택 미가동은 컨슈머 백오프·근거 없음 처리로 흡수 (agent-service 와 같은 부분 기능 관례)
+    build: ../evaluation-service
+    container_name: evaluation-service
+    environment:
+      LLM_BASE_URL: http://llm-gateway:8090/v1
+      PROMETHEUS_URL: http://prometheus:9090
+      LOKI_URL: http://loki:3100
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      AUTH_TOKEN_URL: http://auth-server:8091/oauth2/token
+      # 게이트웨이 호출용 클라이언트 시크릿 (ADR-0016) — auth-server 등록값과 같은 원천(infra/.env), 미설정이면 compose 자체가 실패
+      AUTH_CLIENT_SECRET: ${AUTH_CLIENT_SECRET_EVALUATION_SERVICE:?infra/.env 의 AUTH_CLIENT_SECRET_EVALUATION_SERVICE 필요}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      # 샘플링 프로파일 (docs/quality-evaluation.md §3) — 로컬 데모는 전수 평가
+      EVAL_SAMPLE_PROFILE: experiment
+    ports:
+      - "8001:8000"
+    logging: *default-logging
+
   auth-server:
     # 용도: 서비스 간 OAuth 2.1 토큰 발급 (Client Credentials, ADR-0016) — 리소스 서버(control-plane·llm-gateway)의 issuer.
-    # 인증 항상 필수 결정에 따라 로컬(compose)도 이 서비스를 전제한다. 시크릿 3종은 infra/.env pass-through, 미설정 = 기동 실패
+    # 인증 항상 필수 결정에 따라 로컬(compose)도 이 서비스를 전제한다. 시크릿 4종은 infra/.env pass-through, 미설정 = 기동 실패
     build: ../auth-server
     container_name: auth-server
     environment:
@@ -93,6 +114,7 @@ services:
       AUTH_CLIENT_SECRET_AGENT_SERVICE:
       AUTH_CLIENT_SECRET_CONTROL_PLANE:
       AUTH_CLIENT_SECRET_OPS_ADMIN:
+      AUTH_CLIENT_SECRET_EVALUATION_SERVICE:
     ports:
       - "8091:8091"
 

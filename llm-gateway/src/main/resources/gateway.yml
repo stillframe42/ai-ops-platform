@@ -28,6 +28,8 @@ gateway:
     daily-limit-usd: 5.0
     service-daily-limit-usd:
       agent-service: 4.0
+      # Judge 호출 (ADR-0019) — 건당 약 0.011 USD (2026-09-09 실측), 샘플링이 상한이지만 폭주 대비 별도 한도
+      evaluation-service: 1.0
     downgrade:
       provider: anthropic
       model: claude-haiku-4-5
@@ -72,6 +74,19 @@ gateway:
         max-tokens: 5
       # 교차 검증 — 타 프로바이더 (호출자 없음, 모델·경로는 폴백 실측으로 검증됨 — 단가 등록 동반)
       - task: code-review-critical
+        provider: openai
+        model: gpt-5.6-terra
+      # 조치 계획·라우팅 판단 — 호출자(agent-service action_agent·router)는 있었으나 규칙이 없어 default-rule 로 흘렀다.
+      # 동작 등가(sonnet-5)로 명시 등록 (2026-09-10) — 실험 variant 오버라이드·비용 라벨의 태스크 축을 확정하기 위함 (ADR-0019)
+      - task: action-planning
+        provider: anthropic
+        model: claude-sonnet-5
+      - task: routing-decision
+        provider: anthropic
+        model: claude-sonnet-5
+      # LLM-as-a-Judge (ADR-0019) — 평가 대상(root-cause-analysis = sonnet-5)과 다른 프로바이더로 자기 선호 편향 회피.
+      # 요청은 temperature 미지정 + X-Cache-Control: no-cache (evaluation-service 몫)
+      - task: evaluation-judge
         provider: openai
         model: gpt-5.6-terra
     # 미등록 태스크·무헤더 무모델 요청 — 기존 동작 등가(sonnet-5), 다운그레이드는 예산 소관

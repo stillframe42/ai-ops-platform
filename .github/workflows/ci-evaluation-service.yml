@@ -1,0 +1,29 @@
+# evaluation-service 단위 테스트 CI (2026-09-10) — 샘플링·컨슈머·재조회 계약 (스택·LLM 무의존).
+# 골든셋 회귀(실 Judge 호출)는 비용·비결정성 때문에 CI 제외 — 도입 시 workflow_dispatch/schedule 로 분리 (docs/quality-evaluation.md §7)
+name: ci-evaluation-service
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "evaluation-service/**"
+      - ".github/workflows/ci-evaluation-service.yml"
+  pull_request:
+    paths:
+      - "evaluation-service/**"
+      - ".github/workflows/ci-evaluation-service.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: evaluation-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "evaluation-service/uv.lock"
+      - run: uv sync --frozen
+      - run: uv run pytest tests

@@ -14,6 +14,7 @@
 |----------|------|------|
 | `control-plane/` | 관제/API/게이트웨이, human-in-the-loop 승인 | Spring Boot 4.x + Kotlin |
 | `agent-service/` | 모니터링/분석/실행 멀티 에이전트 | Python + LangGraph (uv) |
+| `evaluation-service/` | 보고서 품질 평가 (샘플링 소비·시간창 재조회·LLM-as-a-Judge), 골든셋 자산 | Python (uv) |
 | `target-app/` | 모니터링 대상 데모 앱 (fault-injection 제공) | Spring Boot |
 | `infra/` | docker-compose, Prometheus, Grafana | - |
 | `docs/` | 시나리오·C4 아키텍처·ADR | Markdown + Mermaid |
@@ -45,4 +46,4 @@
 
 ## 작업 체크리스트
 
-날짜별 작업 로그는 `plans/` (로컬 전용, git 미추적) 에서 관리한다. 주 단위 마스터 plan(`weekly-plan.md`)에서 매일 착수 시점에 당일 파일(`tasks_YYYYMMDD.md`)을 분리 생성해 진행을 체크한다. 현재 체크리스트: `plans/202609-1w/tasks_20260908.md`
+날짜별 작업 로그는 `plans/` (로컬 전용, git 미추적) 에서 관리한다. 주 단위 마스터 plan(`weekly-plan.md`)에서 매일 착수 시점에 당일 파일(`tasks_YYYYMMDD.md`)을 분리 생성해 진행을 체크한다. 현재 체크리스트: `plans/202609-2w/tasks_20260910.md`

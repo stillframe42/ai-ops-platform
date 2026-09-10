@@ -44,8 +44,9 @@ services:
     logging: *default-logging
 
   kafka-init:
-    # 용도: 토픽 5종 1회성 생성 (파티션·보존 명세는 DAY 17 토픽 설계 표 기준).
-    # ops.analysis.results 는 DAY 19, ops.actions.pending·decisions 는 승인 왕복 (ADR-0005)
+    # 용도: 토픽 6종 1회성 생성 (파티션·보존 명세는 DAY 17 토픽 설계 표 기준).
+    # ops.analysis.results 는 DAY 19, ops.actions.pending·decisions 는 승인 왕복 (ADR-0005),
+    # ops.evaluation.results 는 품질 평가 결과 (DAY 46, ADR-0019 — evaluation-service 발행 → control-plane 소비)
     image: apache/kafka:4.3.1
     container_name: kafka-init
     depends_on:
@@ -65,6 +66,7 @@ services:
         create ops.analysis.results 3
         create ops.actions.pending 1
         create ops.actions.decisions 1
+        create ops.evaluation.results 1
         echo "토픽 생성 완료:" && /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
     restart: "no"
     logging: *default-logging

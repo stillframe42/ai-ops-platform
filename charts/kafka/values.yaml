@@ -18,6 +18,8 @@ topics:
     partitions: 1
   - name: ops.actions.decisions
     partitions: 1
+  - name: ops.evaluation.results  # 품질 평가 결과 (ADR-0019) — compose kafka-init 과 동일 명세
+    partitions: 1
 retentionMs: "604800000"   # 7일
 
 resources:

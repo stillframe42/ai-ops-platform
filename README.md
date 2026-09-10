@@ -14,6 +14,7 @@
 | [`agent-service/`](agent-service/) | 멀티 에이전트 — Supervisor 그래프가 모니터링(감지)/분석(원인 조사)/실행(조치 제안) 에이전트를 조율, 승인 대기(interrupt)·회복 확인 노드 포함 |
 | [`llm-gateway/`](llm-gateway/) | LLM 게이트웨이 — 모든 LLM 호출의 단일 통과점 (OpenAI 호환 API): 태스크별 모델 라우팅, 2단계 시맨틱 캐싱, 비용 집계·예산 통제(초과 시 다운그레이드), Rate Limiting, 프로바이더 폴백 체인 ([ADR-0015](docs/adr/0015-llm-gateway.md)) |
 | [`auth-server/`](auth-server/) | 인가 서버 — 서비스 간 OAuth 2.1 토큰 발급 (Client Credentials, 스코프 `ops:read`/`ops:approve`/`llm:invoke`), control-plane·llm-gateway 의 issuer ([ADR-0016](docs/adr/0016-mcp-authentication.md)) |
+| [`evaluation-service/`](evaluation-service/) | 품질 평가 — 종결 보고서를 샘플링 소비해 시간창 재조회 근거와 함께 LLM-as-a-Judge 로 3차원 채점, 골든셋(사람 라벨)으로 Judge 자체를 검증 ([ADR-0019](docs/adr/0019-llm-quality-continuous-evaluation.md), [설계](docs/quality-evaluation.md)) |
 | [`target-app/`](target-app/) | 모니터링 대상 데모 앱 — fault-injection(지연/에러율/메모리 누수) 제공 |
 | [`infra/`](infra/) | 로컬 실행 인프라 — docker-compose 단일 진입점 (Prometheus·Alertmanager·Grafana·Loki·OTel Collector·Tempo·Kafka·Langfuse·PostgreSQL) |
 
@@ -48,7 +49,7 @@ C4 다이어그램(System Context / Container / agent-service 내부)과 컨테�
 | `agent-service/.env` | `ANTHROPIC_API_KEY` | **필수** — 분석 LLM 호출 |
 | `infra/.env` | `SLACK_WEBHOOK_URL` / `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` / `SLACK_APPROVAL_CHANNEL` | 선택 — 없으면 Slack 알림·승인 카드만 조용히 비활성 (승인 API 는 항상 유효) |
 | `infra/.env` | `OPENAI_API_KEY` (임베딩 전용) | 선택 — 없으면 유사 인시던트 검색만 비활성 |
-| `infra/.env` | `AUTH_CLIENT_SECRET_AGENT_SERVICE` / `AUTH_CLIENT_SECRET_CONTROL_PLANE` / `AUTH_CLIENT_SECRET_OPS_ADMIN` | **필수** — auth-server 클라이언트 시크릿 (ADR-0016), agent-service 는 첫 값을 `AUTH_CLIENT_SECRET` 으로 받는다 |
+| `infra/.env` | `AUTH_CLIENT_SECRET_AGENT_SERVICE` / `AUTH_CLIENT_SECRET_CONTROL_PLANE` / `AUTH_CLIENT_SECRET_OPS_ADMIN` / `AUTH_CLIENT_SECRET_EVALUATION_SERVICE` | **필수** — auth-server 클라이언트 시크릿 (ADR-0016), agent-service·evaluation-service 는 각자 값을 `AUTH_CLIENT_SECRET` 으로 받는다 |
 | `infra/.env` | `ALERTMANAGER_WEBHOOK_SECRET` | **필수** — control-plane 웹훅 공유 시크릿. compose 관측 스택은 `infra/alertmanager/webhook-secret` 파일로도 같은 값 필요 |
 
 선택 항목은 기능 단위로 조용히 비활성되는 키-게이트 관례. 인증 관련 키는 예외로 **항상 필수** — 미설정이면 해당 서비스가 기동하지 않는다 (조용한 무인증 상태를 두지 않는 결정, ADR-0016).

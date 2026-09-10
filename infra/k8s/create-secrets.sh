@@ -72,9 +72,15 @@ args_from "$AGENT_ENV" ANTHROPIC_API_KEY
 args_from "$INFRA_ENV" OPENAI_API_KEY SLACK_WEBHOOK_URL
 make_secret llm-gateway-secrets
 
-# auth-server (ADR-0016) — 클라이언트 시크릿 3종. 인증 항상 필수라 빈 값이면 pod 가 기동 실패로 드러난다
+# auth-server (ADR-0016) — 클라이언트 시크릿 4종 (evaluation-service 는 ADR-0019). 인증 항상 필수라 빈 값이면 pod 가 기동 실패로 드러난다
 LITERALS=()
-args_from "$INFRA_ENV" AUTH_CLIENT_SECRET_AGENT_SERVICE AUTH_CLIENT_SECRET_CONTROL_PLANE AUTH_CLIENT_SECRET_OPS_ADMIN
+args_from "$INFRA_ENV" AUTH_CLIENT_SECRET_AGENT_SERVICE AUTH_CLIENT_SECRET_CONTROL_PLANE AUTH_CLIENT_SECRET_OPS_ADMIN \
+  AUTH_CLIENT_SECRET_EVALUATION_SERVICE
 make_secret auth-server-secrets
+
+# evaluation-service (ADR-0019) — 게이트웨이 호출용 클라이언트 시크릿, 앱이 읽는 키 이름으로 반입 (agent-service 와 같은 방식)
+LITERALS=()
+v="$(getv "$INFRA_ENV" AUTH_CLIENT_SECRET_EVALUATION_SERVICE)"; [ -n "$v" ] && LITERALS+=("--from-literal=AUTH_CLIENT_SECRET=$v")
+make_secret evaluation-service-secrets
 
 echo "완료 — 확인: kubectl -n $NS get secrets"

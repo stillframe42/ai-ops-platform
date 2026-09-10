@@ -25,6 +25,7 @@ import kotlin.test.assertTrue
         "AUTH_CLIENT_SECRET_AGENT_SERVICE=agent-secret",
         "AUTH_CLIENT_SECRET_CONTROL_PLANE=cp-secret",
         "AUTH_CLIENT_SECRET_OPS_ADMIN=admin-secret",
+        "AUTH_CLIENT_SECRET_EVALUATION_SERVICE=eval-secret",
     ],
 )
 @AutoConfigureMockMvc
