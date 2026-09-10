@@ -12,6 +12,7 @@ import logging
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage
 
+from app.agents.tool_errors import ToolErrorFeedback
 from app.config import get_settings
 from app.config.agent_spans import instrumented_tool
 from app.config.llm import create_llm
@@ -94,6 +95,8 @@ async def get_analysis_agent():
         tools=[instrumented_tool(tool) for tool in LOCAL_ANALYSIS_TOOLS] + mcp_tools,
         system_prompt=ANALYSIS_SYSTEM_PROMPT,
         response_format=AnalysisResult,
+        # 비일시적 도구 오류(화이트리스트 거부·4xx)는 모델 피드백으로 — 노드 실패 대신 재시도 기회 (DAY 46)
+        middleware=[ToolErrorFeedback()],
     )
     if discovered:
         _cached_agent = agent

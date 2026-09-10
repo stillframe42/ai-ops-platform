@@ -10,6 +10,7 @@ from functools import lru_cache
 from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 
+from app.agents.tool_errors import ToolErrorFeedback
 from app.config import get_settings
 from app.config.agent_spans import instrumented_tool
 from app.config.llm import create_llm
@@ -59,6 +60,8 @@ def get_monitor_agent():
         model=create_llm(settings, task_type="monitoring-summary"),
         tools=[instrumented_tool(tool) for tool in MONITOR_TOOLS],  # execute_tool 스팬 (DAY 43)
         system_prompt=MONITOR_SYSTEM_PROMPT,
+        # 비일시적 도구 오류(화이트리스트 거부·4xx)는 모델 피드백으로 — 노드 실패 대신 재시도 기회 (DAY 46)
+        middleware=[ToolErrorFeedback()],
     )
 
 

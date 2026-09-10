@@ -6,8 +6,6 @@
 
 from datetime import UTC, datetime
 
-import httpx
-import openai
 from langchain_core.messages import AIMessage
 from langgraph.errors import NodeError, NodeTimeoutError
 from langgraph.graph import END, START, StateGraph
@@ -22,6 +20,8 @@ from app.supervisor import router
 from app.supervisor.approval import approval_node
 from app.supervisor.recovery import recovery_node
 from app.supervisor.state import AIOpsState, NodeFailure
+# 재시도 판정은 도구 오류 미들웨어(agents)와 공유 — 이 이름은 그대로 노출한다 (테스트·RetryPolicy 참조)
+from app.supervisor.transient import retry_on_transient
 
 # Supervisor 라우팅 결정값
 MONITOR = "monitor"
@@ -49,33 +49,6 @@ GRAPH_RECURSION_LIMIT = 25
 # 분석은 도구 호출 루프가 길어 여유를 준다 (DAY 12 실측: 정상 노드 8~31초).
 # recovery 는 내부 폴링 예산(수동 조치 포함 시 600s)보다 크게 — 내부 예산이 1차, 노드 타임아웃이 2차 방어
 NODE_TIMEOUTS: dict[str, float] = {MONITOR: 60.0, ANALYSIS: 180.0, ACTION: 120.0, RECOVERY: 660.0}
-
-
-def retry_on_transient(exc: Exception) -> bool:
-    """일시적 오류만 재시도한다 — 허용 목록 방식.
-
-    langgraph 기본 정책(default_retry_on)은 "모르는 예외는 재시도"라서 NodeTimeoutError 도
-    재시도 대상이 된다 — 타임아웃 재시도는 대기를 반복할 뿐이라 (분석 180s × 3회) 명시적으로
-    제외한다. 프로그래밍 오류(ValueError 등)는 재시도해도 결과가 같으므로 목록에 없다.
-    """
-    if isinstance(exc, NodeTimeoutError):
-        return False
-    # MCP Streamable HTTP 의 연결 실패는 anyio TaskGroup 이 ExceptionGroup 으로 감싸서
-    # 전파된다 (DAY 16 실측: ExceptionGroup(ConnectError)) — 풀어서 말단까지 판정한다.
-    # 전원 일시적일 때만 재시도 — 비일시적 오류가 섞였으면 재시도해도 결과가 같다
-    if isinstance(exc, BaseExceptionGroup):
-        return all(
-            isinstance(sub, Exception) and retry_on_transient(sub) for sub in exc.exceptions
-        )
-    if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code >= 500  # 서버 측 오류만 — 4xx 는 요청 자체의 문제
-    # LLM 게이트웨이 호출 실패는 openai SDK 예외로 전파된다 (httpx 계열 아님 — 실측).
-    # 연결 실패(순단·pod 교체)와 5xx·429(Retry-After) 만 — 4xx 는 요청 자체의 문제
-    if isinstance(exc, openai.APIConnectionError):
-        return True
-    if isinstance(exc, openai.APIStatusError):
-        return exc.status_code >= 500 or exc.status_code == 429
-    return isinstance(exc, (ConnectionError, httpx.RequestError))
 
 
 # 에이전트 노드 공통 재시도 — 지수 백오프 기본값 (0.5s 시작, 배수 2.0, 최대 3회 시도)
