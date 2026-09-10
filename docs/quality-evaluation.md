@@ -1,6 +1,6 @@
 # LLM 품질 평가 체계 — 골든셋 · 온라인 Judge · 실험
 
-> 초안 (2026-09-09, DAY 45 선행 결정). 파이프라인 구현과 함께 확정한다. 결정 배경은 [ADR-0019](adr/0019-llm-quality-continuous-evaluation.md).
+> 초안 (2026-09-09, DAY 45 선행 결정 · 2026-09-10 DAY 46 컨슈머·샘플링·재조회 구현 반영). 파이프라인 구현과 함께 확정한다. 결정 배경은 [ADR-0019](adr/0019-llm-quality-continuous-evaluation.md), 코드는 [`evaluation-service/`](../evaluation-service/README.md).
 
 ## 1. 목적과 3층 구조
 
@@ -57,14 +57,24 @@
 
 미샘플도 `sampled_reason=skipped` 로 1행 기록해 커버리지를 계산한다. `sampled_reason` 값: `p1` · `critical` · `approval` · `random` · `skipped`. `status=partial` 보고서는 분석 블록이 없을 수 있어 평가하지 않고 `skipped` 로 남긴다.
 
+구현 (`evaluation-service/evaluation/sampling.py`, 2026-09-10):
+
+- 판정 순서 = partial 제외 → P1 → critical → approval → 프로파일 비율. 보조 조건은 판정보다 먼저 보므로 프로파일 비율은 warning 규칙(latency)·승인 없음 케이스에만 실제로 적용된다.
+- 결과 페이로드에 Alert 라벨이 없다 (`IncidentInfo` 가 severity 를 싣지 않음). critical 판정은 `alert_name` 으로 하며, 집합은 `infra/prometheus/rules/target-app-alerts.yml` 의 `labels.severity: critical` 규칙(에러율·heap)과 같게 유지한다. 페이로드에 Alert severity 를 싣는 agent-service 변경은 후보로만 둔다 (평가 때문에 응답 경로를 바꾸지 않는다).
+- "approval 존재" = `approval.status` 가 approved·rejected·expired (사람 결정을 요청한 경우). `skipped` 는 NOTIFY_ONLY 뿐이라 요청이 없었다.
+- 해시는 `sha256(incident_id)` 앞 8바이트 → [0, 1). 10k 표본에서 비율 오차 ±2% 이내를 테스트로 고정.
+- 결정은 소비 스팬(`ops.analysis.results process`) 속성 `aiops.evaluation.sampled` · `sampled_reason` · `sample_rate` · `sample_profile` 과 INFO 로그 한 줄로 남는다. 저장(DB 1행)은 control-plane 연동 시.
+
 ## 4. 평가 입력 — 보고서 + 시간창 재조회
 
 보고서 페이로드에는 도구 호출 원본이 없다 (`monitoring.evidences` 는 실행한 질의 문자열, `analysis.evidence` 는 LLM 이 요약한 문장). Faithfulness 판정에는 원본이 필요하므로 evaluation-service 가 인시던트 시간창으로 Prometheus·Loki 를 다시 조회한다.
 
-- 시간창: `incident_id` 의 타임스탬프(발화 시각) 5분 전 ~ 페이로드 `completed_at`. `incident_reports.created_at` 은 수신 시각이라 창의 시작으로 쓰지 않는다.
-- Prometheus 질의 4종: 5xx 비율 · status 별 요청률 · p95 · heap 비율 (30s step, `query_range`). `monitoring.evidences` 의 PromQL 을 그대로 재실행하는 확장은 이후 과제.
-- Loki: `{service="target-app"} | json | log_level="ERROR"` 와 WARN, 창 안 50줄까지.
-- 보존 한계: Prometheus 10d, Loki 는 2026-08-28 이후 — 보존 밖 인시던트는 재조회 없이 보고서 내부 정합만 판정하고 시트에 표기한다.
+- 시간창: `incident_id` 의 타임스탬프(발화 시각) 5분 전 ~ min(페이로드 `completed_at`, 발화 + 5분). `incident_reports.created_at` 은 수신 시각이라 창의 시작으로 쓰지 않는다. 끝에 상한을 두는 이유: 에이전트의 관측(monitor 60s + analysis 180s 상한)은 발화 후 5분 안에 끝나지만 `completed_at` 은 승인 대기·만료(최장 60분)까지 밀리고, 그대로 쓰면 뒤이은 다른 인시던트의 chaos 가 근거에 섞인다 (2026-09-10 실측 — memory 케이스 창에 7분 뒤 회차 error-rate 의 5xx 가 들어옴).
+- Prometheus 질의 4종: 5xx 비율 · status 별 요청률 · p95 · heap 비율 (30s step, `query_range`). 전부 `job="target-app"` 으로 한정한다 — Alert 규칙과 같은 조건이고, 다른 JVM 앱(control-plane·llm-gateway)의 요청이 비율을 희석하지 않게 하기 위해서다 (2026-09-09 실측 스크립트는 무필터였다). `monitoring.evidences` 의 PromQL 을 그대로 재실행하는 확장은 이후 과제.
+- Loki: `{service="target-app"} | json | log_level="ERROR"` 와 WARN, 창 안 50줄까지 (`direction=forward` — 상한에 걸려도 발화 직후 구간이 남는다).
+- 보존 한계: Prometheus 10d, Loki 는 2026-08-28 이후 — 보존 밖 인시던트는 재조회 없이 보고서 내부 정합만 판정하고 시트에 표기한다. 재조회 결과가 전부 비면(시리즈 0·로그 0) 같은 취급이다.
+- 재조회 실패(Prometheus·Loki 접속 불가)는 커밋 보류 사유가 아니다 — 근거 없음(`aiops.evaluation.evidence=unavailable`)으로 Judge 에 넘긴다. 근거 없이도 내부 정합 판정은 가능하고, 관측 스택 장애가 평가 토픽 소비를 멈추면 안 된다.
+- 구현: `evaluation-service/evaluation/evidence.py` — 온라인 경로와 라벨링 시트 생성기가 같은 질의·창·요약 문장을 쓴다 (사람과 Judge 가 같은 근거를 읽는다).
 
 2026-09-09 실측: 2026-09-02 에러율 인시던트는 창 안 5xx 비율 최대 0.497(주입 50%) + ERROR 로그 50건으로 보고서 근거와 대조 가능, 2026-09-08 합성 발화 인시던트는 5xx 0·로그 0 으로 "근거 없음" 판정의 정답이 된다.
 
@@ -82,7 +92,9 @@ flowchart LR
   O --> T[Tempo · Prometheus · Loki]
 ```
 
-응답 경로(인시던트 처리)에는 영향이 없다. evaluation-service 는 별도 컨슈머 그룹으로 같은 토픽을 읽는다.
+응답 경로(인시던트 처리)에는 영향이 없다. evaluation-service 는 별도 컨슈머 그룹(`evaluation-service`)으로 같은 토픽을 읽는다.
+
+구현 상태 (2026-09-10): 소비 → 샘플링 → 시간창 재조회까지 동작하고 Judge 는 스텁(`PendingJudge`, 판정 없이 정상 종료)이다. 소비 스팬 `ops.analysis.results process` 는 agent-service 발행 헤더를 부모로 삼아 인시던트 trace 에 붙고 `incident.id`·`gen_ai.conversation.id` 를 세운다 — 이후 Judge 스팬·게이트웨이 호출이 이 축을 상속한다. 커밋 규약은 agent-service 컨슈머와 같다 (배치 수동 커밋, 평가 발행 실패만 커밋 보류, 건너뜀은 정상 종료). `ops.evaluation.results` 페이로드 계약은 `app/judge.py` 의 `Evaluation.to_payload()` — `incident_id` · `scores{차원: {score, reason}}` · `failure_mode` · `low_quality` · `judge_model` · `prompt_version` · `evidence_available` · `evaluated_at`.
 
 ## 6. 어휘 — 표준과 확장의 경계
 
@@ -105,7 +117,8 @@ flowchart LR
 
 ## 8. 골든셋 라벨링 절차
 
-1. `evaluation-service/scripts/make_labeling_sheets.py` 가 인시던트 보고서 + 재조회 결과에서 케이스당 시트 1파일을 만든다 (`evaluation-service/golden/labeling/<incident_id>.md`). 시트에는 confidence 와 Judge 점수를 넣지 않는다.
+1. `evaluation-service/scripts/make_labeling_sheets.py` 가 인시던트 보고서 + 재조회 결과에서 케이스당 시트 1파일을 만든다 (`evaluation-service/golden/labeling/<incident_id>.md`). 재조회 파일이 없으면 `--prometheus-url/--loki-url` 로 온라인 경로와 같은 `EvidenceCollector` 를 써서 직접 조회한다. 시트에는 confidence 와 Judge 점수를 넣지 않는다.
 2. 사람이 §2 앵커로 세 차원 점수 + 실패 유형 + 한 줄 사유를 기입한다. 판단 기준은 "주입한 장애와 재조회 수치에 비춰 맞는가" 이다.
 3. 먼저 5건을 라벨해 Judge 모델 예비 실측에 쓰고, 앵커가 애매하면 §2 문장을 고친 뒤 나머지를 진행한다. 끝나면 앞의 2건을 다시 보지 않고 재라벨해 자기 일관성을 확인한다.
-4. `evaluation-service/scripts/build_golden.py` 가 기입란을 읽어 `golden/v1.jsonl` 로 만든다. 승격된 저품질 케이스도 같은 형식으로 이어 붙인다.
+4. `evaluation-service/scripts/build_golden.py` 가 기입란을 읽어 `golden/v1.jsonl` 로 만든다 — 한 행 = 케이스 1건 (`incident_id` · `scenario` · `alert_name` · `severity` · `ground_truth` · `report`(confidence 제외 평가 대상 블록) · `evidence`(재조회 원본, 보존 밖은 null) · `human_scores` · `failure_mode` · `note` · `labeled_at`). 앵커 밖 점수·실패 유형 규약 위반·`사용자 검수 대기` 시트는 제외하고 사유를 출력한다. 승격된 저품질 케이스는 `--append` 로 같은 형식으로 이어 붙인다.
+5. 원천 확보: 기존 보고서 중 재조회 가능한 것은 Prometheus 보존(10d) 안의 것뿐이라, 부족한 시나리오는 chaos 재주입으로 만든다. 승인이 필요한 조치(RESTART_APP 등)는 사람 결정 또는 만료(`ops.approval.expire-after`, 기본 60분) 뒤에야 보고서가 발행되므로 수집 루프는 분석 완료(`action_approvals` 행)까지만 기다리고 시트는 보고서 도착분부터 만든다.
