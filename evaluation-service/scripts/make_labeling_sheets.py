@@ -1,23 +1,30 @@
 """골든셋 라벨링 시트 생성기 (DAY 45) — 인시던트 보고서 + 시간창 재조회 결과 → 케이스당 마크다운 1파일.
 
 입력: --reports-dir 에 `<incident_id>.json` (incident_reports.report 원문) 과
-      `<incident_id>.requery.json` (Prometheus·Loki 재조회 결과, 없으면 "보존 밖" 표기)
+      `<incident_id>.requery.json` (Prometheus·Loki 재조회 결과). 재조회 파일이 없고 --prometheus-url/--loki-url 을
+      주면 evaluation/evidence.py 의 EvidenceCollector 로 직접 재조회해 저장한다 (DAY 46 — 온라인 경로와 같은 질의·창)
 출력: --out 디렉토리에 `<incident_id>.md`
 
 시트에 넣지 않는 것: `analysis.confidence` (에이전트 자기 평가), Judge 점수 — 라벨링 앵커링 방지.
 앵커 4단계·실패 유형은 docs/quality-evaluation.md §2 와 동일 문장을 쓴다.
 
-사용: python scripts/make_labeling_sheets.py --reports-dir <dir> --out golden/labeling
+사용: python scripts/make_labeling_sheets.py --reports-dir <dir> --out golden/labeling \
+        [--prometheus-url http://127.0.0.1:19090 --loki-url http://127.0.0.1:13100]
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import re
+import sys
 from pathlib import Path
 
-# 시나리오별 표준 주입값 (infra/scripts/e2e-scenario.sh 기준 — 회차별 실제 값은 일일 파일 참조)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from evaluation.evidence import EvidenceCollector, is_empty, render_evidence  # noqa: E402
+
+# 시나리오별 표준 주입값 (infra/scripts/e2e-scenario.sh 기준 — 회차별 실제 값은 ground-truth-overrides.json)
 GROUND_TRUTH = {
     "error-rate-surge": "POST /chaos/error-rate?percent=50 — 요청의 50% 를 5xx 로 실패시킴",
     "latency-surge": "POST /chaos/latency?ms=3500&percent=100 — 전 요청에 3.5초 지연",
@@ -44,6 +51,9 @@ failure_mode:      # A | B | C | D | 없음
 note:              # 한 줄 사유
 ```"""
 
+# judge_preview.py 가 같은 이름으로 import 한다 — 온라인 경로(evaluation/evidence.py)의 문장을 그대로 쓴다
+_requery_section = render_evidence
+
 
 def _ts_from_id(incident_id: str) -> str | None:
     """incident_id 의 발화 타임스탬프(YYYYMMDDHHMMSS) → ISO 문자열."""
@@ -56,39 +66,6 @@ def _ts_from_id(incident_id: str) -> str | None:
 
 def _bullets(items: list[str] | None) -> str:
     return "\n".join(f"- {x}" for x in items or []) or "- (없음)"
-
-
-def _series_summary(series: list[dict]) -> str:
-    """query_range 결과를 min/max/마지막 값으로 요약."""
-    if not series:
-        return "결과 없음 (시리즈 0)"
-    rows = []
-    for s in series:
-        vals = [v[1] for v in s["values"]]
-        label = ", ".join(f"{k}={v}" for k, v in s["metric"].items()) or "(합계)"
-        rows.append(f"  - {label}: min {min(vals)} · max {max(vals)} · 마지막 {vals[-1]} ({len(vals)}점)")
-    return "\n".join(rows)
-
-
-def _requery_section(requery: dict | None) -> str:
-    if requery is None:
-        return "재조회 불가 — 보존 기간 밖 (Prometheus 10d · Loki 2026-08-28 이후). 보고서 내부 정합과 주입 사실만으로 판정한다."
-    prom = requery["prometheus"]
-    lines = [
-        f"시간창: {requery['window'][0]} ~ {requery['window'][1]} (발화 5분 전 ~ 종결)",
-        "",
-        "Prometheus (30s step):",
-        f"- 5xx 비율 `sum(rate 5xx) / sum(rate all)`:\n{_series_summary(prom['error_ratio'])}",
-        f"- status 별 요청률:\n{_series_summary(prom['rate_by_status'])}",
-        f"- p95 (초):\n{_series_summary(prom['p95_seconds'])}",
-        f"- heap 사용 비율:\n{_series_summary(prom['heap_ratio'])}",
-        "",
-        f"Loki `{{service=\"target-app\"}}` ERROR {len(requery['loki']['ERROR'])}건 · WARN {len(requery['loki']['WARN'])}건 (창 안 50줄 상한)",
-    ]
-    for level in ("ERROR", "WARN"):
-        for line in requery["loki"][level][:5]:
-            lines.append(f"  - [{level}] {line[:200]}")
-    return "\n".join(lines)
 
 
 def render(report: dict, requery: dict | None, ground_truth: str | None = None) -> str:
@@ -137,7 +114,7 @@ def render(report: dict, requery: dict | None, ground_truth: str | None = None) 
 
 ## 4. 재조회 근거 (evaluation 이 독립 조회한 실측)
 
-{_requery_section(requery)}
+{render_evidence(requery)}
 
 ## 5. 기입란
 
@@ -145,6 +122,19 @@ def render(report: dict, requery: dict | None, ground_truth: str | None = None) 
 
 {FILL_IN}
 """
+
+
+def load_requery(reports_dir: Path, report: dict, collector: EvidenceCollector | None) -> dict | None:
+    """`<id>.requery.json` 이 있으면 읽고, 없고 collector 가 있으면 재조회해 저장한다. 전부 비면 None (보존 밖)."""
+    path = reports_dir / f"{report['incident_id']}.requery.json"
+    if path.exists():
+        requery = json.loads(path.read_text())
+    elif collector is not None:
+        requery = asyncio.run(collector.collect(report["incident_id"], report.get("completed_at")))
+        path.write_text(json.dumps(requery, ensure_ascii=False, indent=1))
+    else:
+        return None
+    return None if is_empty(requery) else requery
 
 
 def main() -> None:
@@ -156,12 +146,15 @@ def main() -> None:
         type=Path,
         help="incident_id → 실제 정답 문장 JSON (합성 발화·레드팀 회차처럼 시나리오 표준 주입값이 맞지 않을 때)",
     )
+    parser.add_argument("--prometheus-url", help="재조회 파일이 없을 때 직접 재조회 (loki-url 과 함께)")
+    parser.add_argument("--loki-url")
     parser.add_argument("--force", action="store_true", help="이미 있는 시트도 덮어쓴다 (기입란이 지워지므로 기본은 건너뜀)")
     args = parser.parse_args()
 
     overrides: dict[str, str] = {}
     if args.ground_truth_override:
         overrides = {k: v for k, v in json.loads(args.ground_truth_override.read_text()).items() if not k.startswith("_")}
+    collector = EvidenceCollector(args.prometheus_url, args.loki_url) if args.prometheus_url and args.loki_url else None
 
     args.out.mkdir(parents=True, exist_ok=True)
     count = 0
@@ -169,15 +162,15 @@ def main() -> None:
         if path.name.endswith(".requery.json"):
             continue
         report = json.loads(path.read_text())
-        requery_path = path.with_name(f"{path.stem}.requery.json")
-        requery = json.loads(requery_path.read_text()) if requery_path.exists() else None
-        # 재조회는 했으나 시리즈가 전부 비면 보존 밖으로 취급
-        if requery and not any(requery["prometheus"].values()) and not any(requery["loki"].values()):
-            requery = None
+        if report.get("status") != "completed":
+            # partial 은 분석 블록이 없거나 불완전 — 평가 대상이 아니다 (샘플링도 skipped, docs §3)
+            print(f"{report['incident_id']} 건너뜀 (status={report.get('status')} — 평가 대상 아님)")
+            continue
         target = args.out / f"{report['incident_id']}.md"
         if target.exists() and not args.force:
             print(f"{target} 건너뜀 (이미 있음 — 라벨 보존, 덮어쓰려면 --force)")
             continue
+        requery = load_requery(args.reports_dir, report, collector)
         target.write_text(render(report, requery, overrides.get(report["incident_id"])))
         count += 1
         print(f"{target} ({'재조회 포함' if requery else '보존 밖'})")

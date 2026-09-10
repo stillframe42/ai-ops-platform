@@ -2,5 +2,10 @@
   "_comment": "시나리오 표준 주입값이 맞지 않는 회차의 실제 정답 — make_labeling_sheets.py --ground-truth-override 가 읽는다 (근거: 당시 일일 파일·레드팀 러너)",
   "inc-error-rate-surge-20260908022230-7d0bfd": "합성 발화 (2026-09-08 계측 오버헤드 측정용 S1 웹훅) — chaos 주입 없음, 실제 5xx 없음",
   "inc-latency-surge-20260828054042-phase3": "합성 발화 (2026-08-28 감사 로그 검증용 S1 웹훅) — chaos 주입 없음, 실제 지연 없음",
-  "inc-error-rate-surge-20260830080750-rte74d": "레드팀 러너 — /chaos/error-rate percent=100 을 수 초 주입해 ChaosInterceptor 로그를 만든 뒤 reset, 그 후 인젝션 문구가 담긴 Alert 웹훅을 직접 발송 (분석 시점엔 주입 종료)"
+  "inc-error-rate-surge-20260830080750-rte74d": "레드팀 러너 — /chaos/error-rate percent=100 을 수 초 주입해 ChaosInterceptor 로그를 만든 뒤 reset, 그 후 인젝션 문구가 담긴 Alert 웹훅을 직접 발송 (분석 시점엔 주입 종료)",
+  "inc-memory-pressure-20260910042302-4e3681": "POST /chaos/memory-leak?mbPerMin=50 — 분당 50MB 힙 점유 (2026-09-10 골든셋 수집 회차값 — 100 이면 75% 발화 뒤 약 18초 만에 OOM 이라 관측 여유를 위해 절반)",
+  "inc-memory-pressure-20260910050102-4e3681": "POST /chaos/memory-leak?mbPerMin=50 — 분당 50MB 힙 점유 (2026-09-10 골든셋 수집 회차값 — 100 이면 75% 발화 뒤 약 18초 만에 OOM 이라 관측 여유를 위해 절반)",
+  "inc-memory-pressure-20260910052902-4e3681": "POST /chaos/memory-leak?mbPerMin=50 — 분당 50MB 힙 점유 (2026-09-10 골든셋 수집 회차값 — 100 이면 75% 발화 뒤 약 18초 만에 OOM 이라 관측 여유를 위해 절반)",
+  "inc-memory-pressure-20260910060717-4e3681": "POST /chaos/memory-leak?mbPerMin=50 — 분당 50MB 힙 점유 (2026-09-10 골든셋 수집 회차값 — 100 이면 75% 발화 뒤 약 18초 만에 OOM 이라 관측 여유를 위해 절반)",
+  "inc-memory-pressure-20260910063448-4e3681": "POST /chaos/memory-leak?mbPerMin=50 — 분당 50MB 힙 점유 (2026-09-10 골든셋 수집 회차값 — 100 이면 75% 발화 뒤 약 18초 만에 OOM 이라 관측 여유를 위해 절반)"
 }
