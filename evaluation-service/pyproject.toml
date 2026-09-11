@@ -18,3 +18,8 @@ dependencies = [
 dev = [
     "pytest>=8",
 ]
+
+[tool.pytest.ini_options]
+# 골든셋 회귀(실 Judge 호출·비용)는 기본 제외 — `uv run pytest -m golden tests/test_golden_regression.py` 로 명시 실행 (docs/quality-evaluation.md §7)
+markers = ["golden: 실 게이트웨이 Judge 호출로 골든셋 baseline 대비 회귀를 본다 (기본 제외)"]
+addopts = "-m 'not golden'"

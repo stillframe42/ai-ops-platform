@@ -51,8 +51,6 @@ failure_mode:      # A | B | C | D | 없음
 note:              # 한 줄 사유
 ```"""
 
-# judge_preview.py 가 같은 이름으로 import 한다 — 온라인 경로(evaluation/evidence.py)의 문장을 그대로 쓴다
-_requery_section = render_evidence
 
 
 def _ts_from_id(incident_id: str) -> str | None:

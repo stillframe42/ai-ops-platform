@@ -1,0 +1,850 @@
+{
+ "measured_at": "2026-09-11T11:01:53+00:00",
+ "golden": "golden/v1.jsonl",
+ "golden_cases": 20,
+ "judge_prompt_version": "v2",
+ "with_ground_truth": false,
+ "gateway": "compose llm-gateway (evaluation-judge → gpt-5.6-terra)",
+ "summary": {
+  "cases": 20,
+  "calls": 60,
+  "ok": 60,
+  "failed": 0,
+  "per_dimension": {
+   "faithfulness": {
+    "mae": 0.26,
+    "exact_match": 0.35,
+    "spearman": 0.145,
+    "false_pass": 0,
+    "false_fail": 5
+   },
+   "actionability": {
+    "mae": 0.06,
+    "exact_match": 0.8,
+    "spearman": 0.754,
+    "false_pass": 0,
+    "false_fail": 0
+   },
+   "severity_accuracy": {
+    "mae": 0.045,
+    "exact_match": 0.9,
+    "spearman": 0.819,
+    "false_pass": 1,
+    "false_fail": 1
+   }
+  },
+  "overall": {
+   "mae": 0.122,
+   "exact_match": 0.683,
+   "false_pass": 1,
+   "false_fail": 6,
+   "gate_agreement": 0.7,
+   "failure_mode_match": 0.65
+  },
+  "repeat": {
+   "reps": 3,
+   "stdev_mean": {
+    "faithfulness": 0.066,
+    "actionability": 0.014,
+    "severity_accuracy": 0.007
+   },
+   "unstable": [
+    {
+     "incident_id": "inc-error-rate-surge-20260908022230-7d0bfd",
+     "dimension": "faithfulness",
+     "values": [
+      0.4,
+      0.4,
+      1.0
+     ]
+    },
+    {
+     "incident_id": "inc-error-rate-surge-20260910043332-9999da",
+     "dimension": "actionability",
+     "values": [
+      0.7,
+      0.7,
+      0.4
+     ]
+    },
+    {
+     "incident_id": "inc-error-rate-surge-20260910064502-9999da",
+     "dimension": "faithfulness",
+     "values": [
+      0.7,
+      0.7,
+      1.0
+     ]
+    },
+    {
+     "incident_id": "inc-error-rate-surge-20260910064502-9999da",
+     "dimension": "actionability",
+     "values": [
+      0.7,
+      1.0,
+      0.7
+     ]
+    },
+    {
+     "incident_id": "inc-error-rate-surge-20260910070817-9999da",
+     "dimension": "faithfulness",
+     "values": [
+      1.0,
+      0.7,
+      1.0
+     ]
+    },
+    {
+     "incident_id": "inc-latency-surge-20260828054042-phase3",
+     "dimension": "severity_accuracy",
+     "values": [
+      0.7,
+      1.0,
+      1.0
+     ]
+    },
+    {
+     "incident_id": "inc-latency-surge-20260910055147-4ab789",
+     "dimension": "faithfulness",
+     "values": [
+      0.4,
+      1.0,
+      1.0
+     ]
+    },
+    {
+     "incident_id": "inc-latency-surge-20260910065747-4ab789",
+     "dimension": "faithfulness",
+     "values": [
+      0.0,
+      0.4,
+      0.0
+     ]
+    },
+    {
+     "incident_id": "inc-memory-pressure-20260910042302-4e3681",
+     "dimension": "faithfulness",
+     "values": [
+      1.0,
+      0.7,
+      0.7
+     ]
+    },
+    {
+     "incident_id": "inc-memory-pressure-20260910063448-4e3681",
+     "dimension": "faithfulness",
+     "values": [
+      0.7,
+      1.0,
+      1.0
+     ]
+    }
+   ]
+  },
+  "judge_models": [
+   "gpt-5.6-terra"
+  ]
+ },
+ "cases": [
+  {
+   "incident_id": "inc-error-rate-surge-20260830080750-rte74d",
+   "scenario": "error-rate-surge",
+   "human": {
+    "faithfulness": 1.0,
+    "actionability": 0.7,
+    "severity_accuracy": 0.4,
+    "failure_mode": "D"
+   },
+   "judge": [
+    {
+     "faithfulness": 1.0,
+     "actionability": 1.0,
+     "severity_accuracy": 0.4,
+     "failure_mode": "D"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 1.0,
+     "severity_accuracy": 0.4,
+     "failure_mode": "D"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 1.0,
+     "severity_accuracy": 0.4,
+     "failure_mode": "D"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "ChaosInterceptor의 500 주입 로그와 일시적 500/5xx 관측을 원인으로 해석한 것은 재조회 근거와 일치한다.",
+    "actionability": "앱 내부 fault injection 상태에 대해 RESTART_APP을 우선 완화로 제시했고, NOTIFY_ONLY도 보안 공유 목적이 명확하며 카탈로그 내 조치다.",
+    "severity_accuracy": "관측된 최대 5xx 비율은 2.54%로 10% 임계에 크게 못 미치고 p95·heap도 정상인 국지적 단기 버스트이므로 P2가 아니라 P3가 적절하다."
+   }
+  },
+  {
+   "incident_id": "inc-error-rate-surge-20260902055408-e2eaf4",
+   "scenario": "error-rate-surge",
+   "human": {
+    "faithfulness": 1.0,
+    "actionability": 1.0,
+    "severity_accuracy": 1.0,
+    "failure_mode": "없음"
+   },
+   "judge": [
+    {
+     "faithfulness": 0.7,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 0.7,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 0.7,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "chaos error-rate fault가 /products 계열에 500을 주입했다는 핵심 원인은 로그 및 5xx 급증과 일치하지만, 현재 전체 5xx 2.16% 및 /products 5.18%라는 수치는 재조회 창의 15.78~49.7%(마지막 33.17%)와 모순된다.",
+    "actionability": "앱 내부 chaos 상태로 인한 500 주입에 대해 RESTART_APP을 우선 실행하고 담당자 통지를 병행하는 계획은 카탈로그 내의 구체적이고 증상에 비례한 조치다.",
+    "severity_accuracy": "5xx가 최대 약 49.7%로 높지만 200 응답도 지속되고 전면 실패는 아니므로 부분 영향 P2 판정이 적절하다."
+   }
+  },
+  {
+   "incident_id": "inc-error-rate-surge-20260908022230-7d0bfd",
+   "scenario": "error-rate-surge",
+   "human": {
+    "faithfulness": 0.7,
+    "actionability": 0.7,
+    "severity_accuracy": 0.4,
+    "failure_mode": "D"
+   },
+   "judge": [
+    {
+     "faithfulness": 0.4,
+     "actionability": 1.0,
+     "severity_accuracy": 0.4,
+     "failure_mode": "D"
+    },
+    {
+     "faithfulness": 0.4,
+     "actionability": 1.0,
+     "severity_accuracy": 0.4,
+     "failure_mode": "D"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 1.0,
+     "severity_accuracy": 0.4,
+     "failure_mode": "D"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "재조회 창이 알림 시각을 포함하는데도 알림 시점 메트릭이 윈도우 밖으로 유실됐다고 하며, 실측되지 않은 일시적 5xx 스파이크를 원인으로 판단했다.",
+    "actionability": "현재 증상이 없고 자연 해소됐다고 판단한 전제에서 NOTIFY_ONLY와 원본 데이터 재조회·재발 시 대응 계획은 실행 가능하고 비례한다.",
+    "severity_accuracy": "재조회 창에서 5xx는 없고 p95와 heap도 매우 낮으며 요청 대부분이 성공했으므로 P2는 임계 미만 국지적 또는 미관측 상황에 과대하다."
+   }
+  },
+  {
+   "incident_id": "inc-error-rate-surge-20260910043332-9999da",
+   "scenario": "error-rate-surge",
+   "human": {
+    "faithfulness": 1.0,
+    "actionability": 0.7,
+    "severity_accuracy": 1.0,
+    "failure_mode": "없음"
+   },
+   "judge": [
+    {
+     "faithfulness": 0.7,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 0.7,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 0.7,
+     "actionability": 0.4,
+     "severity_accuracy": 1.0,
+     "failure_mode": "C"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "ChaosInterceptor의 500 반환 로그와 높은 5xx·정상 지연 패턴을 원인으로 연결한 핵심은 실측과 일치하나, p95가 3ms 미만이었다는 수치는 실측 최대 5.6ms와 다르다.",
+    "actionability": "카탈로그 내 RESTART_APP·CIRCUIT_BREAK·NOTIFY_ONLY를 포함해 실행 가능하지만, 앱 내부 fault 주입에는 RESTART_APP이 우선 완화여야 하는데 CIRCUIT_BREAK를 1순위로 두었다.",
+    "severity_accuracy": "최대 47.83%의 5xx가 발생했으나 200 응답도 지속되고 영향이 제품 API 계열에 국한되어 보이므로 부분 영향 P2가 적절하다."
+   }
+  },
+  {
+   "incident_id": "inc-error-rate-surge-20260910053932-9999da",
+   "scenario": "error-rate-surge",
+   "human": {
+    "faithfulness": 1.0,
+    "actionability": 0.7,
+    "severity_accuracy": 1.0,
+    "failure_mode": "없음"
+   },
+   "judge": [
+    {
+     "faithfulness": 1.0,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "5xx가 최대 42.75% 및 마지막 38.41%로 지속되고, 창 내 로그가 Chaos error-rate fault의 /products 500 주입을 직접 명시하므로 핵심 원인 판단이 실측과 일치한다.",
+    "actionability": "RESTART_APP을 포함한 카탈로그 내 실행 가능한 조치이나, 앱 내부의 명시적 오류 주입 상황에서 CIRCUIT_BREAK를 우선 배치한 것은 과잉 완화 조치다.",
+    "severity_accuracy": "5xx가 10% 임계를 크게 초과해 지속되지만 200 응답도 상당수 유지되어 부분 영향에 해당하는 P2가 적절하다."
+   }
+  },
+  {
+   "incident_id": "inc-error-rate-surge-20260910064502-9999da",
+   "scenario": "error-rate-surge",
+   "human": {
+    "faithfulness": 1.0,
+    "actionability": 0.7,
+    "severity_accuracy": 1.0,
+    "failure_mode": "없음"
+   },
+   "judge": [
+    {
+     "faithfulness": 0.7,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 0.7,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "ChaosInterceptor 오류 로그, 높은 5xx 비율 및 정상 p95를 근거로 한 오류 주입 원인 판단은 일치하나, 제시한 현재 5xx 수치(18.7%)는 재조회 창의 최대·마지막 값과 다르다.",
+    "actionability": "카탈로그 내 CIRCUIT_BREAK·RESTART_APP·NOTIFY_ONLY를 포함하고 재시작도 제시했으나, 앱 내부 오류 주입에는 RESTART_APP보다 CIRCUIT_BREAK를 우선해 사용자 접근을 추가로 제한하는 과잉 조치가 섞였다.",
+    "severity_accuracy": "5xx 비율이 최대 약 46% 및 마지막 약 43%로 지속되지만 200 응답도 유지되어, 전면 장애가 아닌 부분 영향 P2 판정이 적절하다."
+   }
+  },
+  {
+   "incident_id": "inc-error-rate-surge-20260910070817-9999da",
+   "scenario": "error-rate-surge",
+   "human": {
+    "faithfulness": 1.0,
+    "actionability": 0.4,
+    "severity_accuracy": 1.0,
+    "failure_mode": "C"
+   },
+   "judge": [
+    {
+     "faithfulness": 1.0,
+     "actionability": 0.4,
+     "severity_accuracy": 1.0,
+     "failure_mode": "C"
+    },
+    {
+     "faithfulness": 0.7,
+     "actionability": 0.4,
+     "severity_accuracy": 1.0,
+     "failure_mode": "C"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 0.4,
+     "severity_accuracy": 1.0,
+     "failure_mode": "C"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "다중 /products 요청에서 chaos error-rate fault가 HTTP 500을 반환했다는 로그와 최대 43.07%·마지막 39.42%의 5xx 비율이 핵심 가설과 일치한다.",
+    "actionability": "앱 내부의 주입된 오류 상태에는 RESTART_APP이 우선 완화 조치여야 하나, 이를 배제하고 사용자 요청을 차단하는 CIRCUIT_BREAK와 통지만 계획했다.",
+    "severity_accuracy": "5xx가 10% 임계를 크게 초과하지만 200 응답도 계속 존재하므로 부분 영향에 해당하는 P2가 적절하다."
+   }
+  },
+  {
+   "incident_id": "inc-latency-surge-20260828054042-phase3",
+   "scenario": "latency-surge",
+   "human": {
+    "faithfulness": 0.7,
+    "actionability": 0.7,
+    "severity_accuracy": 0.4,
+    "failure_mode": "D"
+   },
+   "judge": [
+    {
+     "faithfulness": 1.0,
+     "actionability": 1.0,
+     "severity_accuracy": 0.7,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "재조회 근거가 없어 보고서 내부 정합으로 판단할 때, latency-surge 시나리오에 따른 일시적 지연이라는 가설과 정상화·증거 한계의 명시가 서로 모순되지 않는다.",
+    "actionability": "이미 해소된 것으로 판단한 상태에서 카탈로그 내 NOTIFY_ONLY를 선택하고, 재발·검증을 위한 구체적 메트릭·트레이스 조회 후속 조치를 제시했다.",
+    "severity_accuracy": "고지연 알림과 일시적 영향이라는 서술에 P2는 대체로 부합하나, 스파이크의 실제 크기와 지속시간이 확인되지 않아 등급 근거는 제한적이다."
+   }
+  },
+  {
+   "incident_id": "inc-latency-surge-20260910044547-4ab789",
+   "scenario": "latency-surge",
+   "human": {
+    "faithfulness": 1.0,
+    "actionability": 1.0,
+    "severity_accuracy": 1.0,
+    "failure_mode": "없음"
+   },
+   "judge": [
+    {
+     "faithfulness": 1.0,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "현재 창의 p95 3.56초 급등과 5xx 0%·정상 heap·ERROR/WARN 부재를 정확히 반영했으며, 이전 500 흔적은 현재 원인이 아닌 주입 기능의 활성 이력으로 제한해 해석했다.",
+    "actionability": "앱 내부 latency fault 가설에 비례해 RESTART_APP을 직접 완화 조치로 우선 배치했고, NOTIFY_ONLY도 구성 및 주입 이력 확인을 위한 실행 가능한 보조 조치다.",
+    "severity_accuracy": "5xx 없이 일부 엔드포인트의 p95가 3초를 넘는 지연 영향이므로 전면 장애 P1이나 미미한 영향 P3가 아닌 P2 판정이 적절하다."
+   }
+  },
+  {
+   "incident_id": "inc-latency-surge-20260910051332-4ab789",
+   "scenario": "latency-surge",
+   "human": {
+    "faithfulness": 1.0,
+    "actionability": 1.0,
+    "severity_accuracy": 1.0,
+    "failure_mode": "없음"
+   },
+   "judge": [
+    {
+     "faithfulness": 0.7,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 0.7,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 0.7,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "p95 3.56초 급등·5xx 0%·정상 수준의 heap이라는 핵심 증상 해석은 일치하나, heap 사용률 약 42.5%라는 수치는 재조회 최대치 39.2%와 다르다.",
+    "actionability": "앱 내부 상태성 지연 가능성에 대해 RESTART_APP을 우선 완화로 두고 NOTIFY_ONLY로 구체 조사 항목을 병행하게 한 계획은 카탈로그 내에서 실행 가능하고 비례적이다.",
+    "severity_accuracy": "5xx 없이 일부 엔드포인트의 p95가 3초를 넘는 국소적 성능 저하이므로, 대부분 요청은 성공하는 부분 영향 P2 판단이 적절하다."
+   }
+  },
+  {
+   "incident_id": "inc-latency-surge-20260910055147-4ab789",
+   "scenario": "latency-surge",
+   "human": {
+    "faithfulness": 1.0,
+    "actionability": 0.7,
+    "severity_accuracy": 1.0,
+    "failure_mode": "없음"
+   },
+   "judge": [
+    {
+     "faithfulness": 0.4,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "p95 약 3.5초의 지속 지연과 5xx 0%는 맞게 반영했지만, 창 밖 05:39~05:40의 error-rate 로그를 근거로 현재 latency chaos fault가 활성화됐다고 단정했다.",
+    "actionability": "내부 상태성 지연에 대해 RESTART_APP을 우선 제시했고, 조건부 CIRCUIT_BREAK 및 NOTIFY_ONLY도 카탈로그 내의 실행 가능한 조치다.",
+    "severity_accuracy": "p95가 약 3.5초로 3초 임계값을 5분 이상 지속하고 요청은 성공하므로 부분 영향 P2 판정이 적절하다."
+   }
+  },
+  {
+   "incident_id": "inc-latency-surge-20260910061947-4ab789",
+   "scenario": "latency-surge",
+   "human": {
+    "faithfulness": 0.4,
+    "actionability": 0.7,
+    "severity_accuracy": 1.0,
+    "failure_mode": "B"
+   },
+   "judge": [
+    {
+     "faithfulness": 0.4,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    },
+    {
+     "faithfulness": 0.4,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    },
+    {
+     "faithfulness": 0.4,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "p95 3.52~3.56초 지속과 5xx 0%는 맞지만, 현재 원인을 창 밖 06:08 OOM 로그로 단정하고 창 내 heap 최대 37.7%를 OOM 직전 힙 압박으로 해석한 것은 실측으로 뒷받침되지 않는다.",
+    "actionability": "RESTART_APP은 앱 내부 메모리 누수 가설에 대한 우선 완화로 구체적이고 실행 가능하나, 단일 인스턴스 누수에 SCALE_OUT을 함께 즉시 조치로 둔 것은 과잉 조치다.",
+    "severity_accuracy": "5xx는 0%이나 p95가 약 3.55초로 5분 이상 지속되어 대부분 요청 성공 상태의 지속 지연인 P2와 일치한다."
+   }
+  },
+  {
+   "incident_id": "inc-latency-surge-20260910065747-4ab789",
+   "scenario": "latency-surge",
+   "human": {
+    "faithfulness": 0.4,
+    "actionability": 0.4,
+    "severity_accuracy": 1.0,
+    "failure_mode": "A"
+   },
+   "judge": [
+    {
+     "faithfulness": 0.0,
+     "actionability": 0.4,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    },
+    {
+     "faithfulness": 0.4,
+     "actionability": 0.4,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    },
+    {
+     "faithfulness": 0.0,
+     "actionability": 0.4,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "현재 창의 5xx·ERROR 로그가 모두 0인데 창 밖 06:45~06:46의 500 흔적을 현재 원인으로 단정해 실측과 모순된다.",
+    "actionability": "지속 중인 앱 지연 증상에 RESTART_APP을 배제하고 CIRCUIT_BREAK로 요청만 차단하는 계획이라 즉시 완화 조치가 부적절하다.",
+    "severity_accuracy": "p95가 약 3.46~3.56초로 3초 임계치를 창 내 지속 초과하고 요청은 성공하므로 P2가 적절하다."
+   }
+  },
+  {
+   "incident_id": "inc-latency-surge-20260910072032-4ab789",
+   "scenario": "latency-surge",
+   "human": {
+    "faithfulness": 1.0,
+    "actionability": 0.7,
+    "severity_accuracy": 1.0,
+    "failure_mode": "없음"
+   },
+   "judge": [
+    {
+     "faithfulness": 0.4,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    },
+    {
+     "faithfulness": 0.4,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    },
+    {
+     "faithfulness": 0.4,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "현재 창의 지속적 p95 3.52~3.56초와 5xx 0%는 맞게 해석했으나, 발화 이전 07:08~07:09의 500 로그를 현재 지연의 핵심 원인인 chaos fault 전환으로 추정해 현재 원인으로 삼았다.",
+    "actionability": "지속 지연과 앱 내부 상태 가능성에 RESTART_APP을 포함한 것은 적절하고 모든 계획 조치가 카탈로그 내에 있으나, 단일 인스턴스라는 정보만으로 SCALE_OUT을 함께 제시한 것은 주입성 앱 지연에 대한 과잉 조치일 수 있다.",
+    "severity_accuracy": "p95가 3초 임계를 창 전체에서 지속 초과하고 5xx는 0%로 대부분 요청이 성공하므로 부분 성능 영향인 P2가 적절하다."
+   }
+  },
+  {
+   "incident_id": "inc-memory-pressure-20260820044950-smoke-",
+   "scenario": "memory-pressure",
+   "human": {
+    "faithfulness": 0.7,
+    "actionability": 1.0,
+    "severity_accuracy": 1.0,
+    "failure_mode": "없음"
+   },
+   "judge": [
+    {
+     "faithfulness": 1.0,
+     "actionability": 1.0,
+     "severity_accuracy": 0.4,
+     "failure_mode": "D"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 1.0,
+     "severity_accuracy": 0.4,
+     "failure_mode": "D"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 1.0,
+     "severity_accuracy": 0.4,
+     "failure_mode": "D"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "재조회 근거가 불가한 상황에서 주입된 memory-pressure 시나리오와 heap 지속 상승·GC 후 기준선 상승에 근거한 메모리 누수 가설이 내부적으로 정합적이다.",
+    "actionability": "메모리 누수성 앱 내부 상태에 대해 RESTART_APP을 우선 실행 조치로 제시했고, 카탈로그 내 조치이며 재기동 전 heap dump 확보 등 구체적 후속 조치도 제시했다.",
+    "severity_accuracy": "보고서상 heap 사용률은 11.3%로 85% 임계에 크게 못 미치고 명시된 요청 실패·지연 영향도 없어 P2는 과대 평가다."
+   }
+  },
+  {
+   "incident_id": "inc-memory-pressure-20260910042302-4e3681",
+   "scenario": "memory-pressure",
+   "human": {
+    "faithfulness": 0.7,
+    "actionability": 0.7,
+    "severity_accuracy": 1.0,
+    "failure_mode": "없음"
+   },
+   "judge": [
+    {
+     "faithfulness": 1.0,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 0.7,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 0.7,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "heap 사용률이 창 내 최대 93.5%로 높았다는 핵심 증상과 메모리 압박·재기동 완화 가설이 부합하며, 요약과 직접 모순되는 관측은 없다.",
+    "actionability": "RESTART_APP을 우선 완화로 제시한 것은 적절하고 실행 가능하지만, 단일 인스턴스 메모리 누수에 SCALE_OUT을 함께 상태 변경 조치로 넣은 것은 과잉 조치다.",
+    "severity_accuracy": "heap 사용률이 85% 임계를 크게 초과했으나 5xx·지연 증거는 없어 전면 장애 P1이 아닌 부분 영향 P2 판단이 적절하다."
+   }
+  },
+  {
+   "incident_id": "inc-memory-pressure-20260910050102-4e3681",
+   "scenario": "memory-pressure",
+   "human": {
+    "faithfulness": 1.0,
+    "actionability": 0.7,
+    "severity_accuracy": 1.0,
+    "failure_mode": "없음"
+   },
+   "judge": [
+    {
+     "faithfulness": 0.4,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    },
+    {
+     "faithfulness": 0.4,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    },
+    {
+     "faithfulness": 0.4,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "heap 사용률이 최대 99.48%까지 치솟은 핵심 신호는 포착했지만, 창 내 유일한 ERROR는 scheduled task의 Unexpected error이며 ERROR 전량이 ChaosInterceptor 500이었다는 서술은 실측과 모순된다.",
+    "actionability": "메모리 압박에 대한 RESTART_APP은 적절하고 카탈로그 내 조치이나, 단일 인스턴스의 메모리 누수 의심 상황에서 SCALE_OUT은 근본 완화 효과가 제한적인 과잉 조치다.",
+    "severity_accuracy": "heap 사용률이 85% 임계를 크게 넘어 최대 99.48%에 이르렀으므로, 요청 실패나 지연은 없더라도 임계 초과 메모리 압박에 대한 P2 분류는 타당하다."
+   }
+  },
+  {
+   "incident_id": "inc-memory-pressure-20260910052902-4e3681",
+   "scenario": "memory-pressure",
+   "human": {
+    "faithfulness": 1.0,
+    "actionability": 1.0,
+    "severity_accuracy": 1.0,
+    "failure_mode": "없음"
+   },
+   "judge": [
+    {
+     "faithfulness": 0.4,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    },
+    {
+     "faithfulness": 0.4,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    },
+    {
+     "faithfulness": 0.4,
+     "actionability": 1.0,
+     "severity_accuracy": 1.0,
+     "failure_mode": "A"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "힙 사용률 99.8%의 심각한 메모리 압박 해석은 맞지만, 재조회 창에서 ERROR 로그가 0건인데 실제 OOM ERROR 로그를 관측했다고 핵심 근거로 서술했다.",
+    "actionability": "앱 내부 힙 상태 문제에 대해 RESTART_APP을 우선 배치했고, NOTIFY_ONLY 병행도 카탈로그 내의 실행 가능한 비례 조치다.",
+    "severity_accuracy": "heap 사용률이 85% 임계를 크게 초과해 99.8%까지 지속 상승했으나 요청 실패와 지연은 없어, 부분 영향으로 분류한 P2가 적절하다."
+   }
+  },
+  {
+   "incident_id": "inc-memory-pressure-20260910060717-4e3681",
+   "scenario": "memory-pressure",
+   "human": {
+    "faithfulness": 0.7,
+    "actionability": 0.7,
+    "severity_accuracy": 1.0,
+    "failure_mode": "없음"
+   },
+   "judge": [
+    {
+     "faithfulness": 0.7,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 0.7,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 0.7,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "heap이 창 내 42.1%에서 99.9%까지 급상승한 핵심 메모리 압박 해석은 일치하지만, 창 내 ERROR는 scheduled task 오류뿐이고 500/ChaosInterceptor 전량이라는 로그 서술은 실측과 맞지 않는다.",
+    "actionability": "임박한 heap 포화에 RESTART_APP을 우선 완화로 둔 것은 적절하나, 단일 인스턴스 메모리 누수 자체를 완화하지 않는 SCALE_OUT이 함께 포함된 과잉 조치이다.",
+    "severity_accuracy": "heap 사용률이 85% 임계를 크게 넘어 99.9%까지 지속 상승했으나 요청 실패와 지연은 없어 부분 영향 P2 판정이 적절하다."
+   }
+  },
+  {
+   "incident_id": "inc-memory-pressure-20260910063448-4e3681",
+   "scenario": "memory-pressure",
+   "human": {
+    "faithfulness": 0.7,
+    "actionability": 0.7,
+    "severity_accuracy": 1.0,
+    "failure_mode": "없음"
+   },
+   "judge": [
+    {
+     "faithfulness": 0.7,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    },
+    {
+     "faithfulness": 1.0,
+     "actionability": 0.7,
+     "severity_accuracy": 1.0,
+     "failure_mode": "없음"
+    }
+   ],
+   "judge_reasons": {
+    "faithfulness": "핵심인 심각한 heap 압박과 메모리 누수 가설은 98.83%까지 상승한 heap 실측과 부합하나, 보고서의 현재 heap 84.39% 수치는 실측 마지막 값 98.83%와 다르다.",
+    "actionability": "RESTART_APP은 앱 내부 메모리 압박의 적절한 즉시 완화 조치이나, 단일 인스턴스 누수에 선행 SCALE_OUT을 포함한 것은 다소 과잉 조치다.",
+    "severity_accuracy": "heap 사용률이 85% 임계를 크게 초과해 지속되고 있으나 요청 실패와 지연은 없어, 부분 영향/임계 초과로 보는 P2가 적절하다."
+   }
+  }
+ ]
+}

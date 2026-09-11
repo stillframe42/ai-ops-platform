@@ -1,0 +1,29 @@
+# 골든셋 Judge 회귀 (docs/quality-evaluation.md §7) — 실 게이트웨이 호출이라 비용·비결정성이 있어 push CI 와 분리.
+# 주 1회 + 수동. 러너에서 닿는 게이트웨이·auth-server 가 있어야 한다 — 시크릿 미설정이면 골든 테스트는 skip 으로 끝난다
+# (self-hosted 러너나 터널 없이는 실행 환경이 없다 — 로컬 실행: evaluation-service/README.md)
+name: golden-regression
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 21 * * 0"  # 매주 월요일 06:00 KST
+
+jobs:
+  golden:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: evaluation-service
+    env:
+      LLM_BASE_URL: ${{ secrets.EVAL_LLM_BASE_URL }}
+      AUTH_TOKEN_URL: ${{ secrets.EVAL_AUTH_TOKEN_URL }}
+      AUTH_CLIENT_SECRET: ${{ secrets.EVAL_AUTH_CLIENT_SECRET }}
+      EVAL_EVIDENCE_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "evaluation-service/uv.lock"
+      - run: uv sync --frozen
+      - run: uv run pytest -m golden tests/test_golden_regression.py -rs
