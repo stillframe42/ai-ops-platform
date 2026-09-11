@@ -125,7 +125,7 @@ def test_pending_judge_ends_without_publishing():
     publisher = RecordingPublisher()
     processor = EvaluationEventProcessor(Sampler("experiment"), PendingJudge(), publisher)
 
-    assert asyncio.run(processor.process(_report())) == "sampled:judge-pending"
+    assert asyncio.run(processor.process(_report())) == "sampled:judge-skipped"
     assert publisher.published == []
 
 

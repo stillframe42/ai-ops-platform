@@ -50,5 +50,5 @@ def health() -> dict:
         # 설정됨 ≠ 접속 성공 (agent-service 와 같은 한계)
         "kafka_enabled": bool(settings.kafka_bootstrap_servers),
         "otlp_enabled": bool(settings.otel_exporter_otlp_endpoint),
-        "judge": "pending",  # Judge 구현 전 — 샘플링·재조회 경로만 동작
+        "judge_prompt_version": settings.eval_judge_prompt_version,
     }

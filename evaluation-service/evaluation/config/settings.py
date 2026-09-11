@@ -30,6 +30,8 @@ class Settings(BaseSettings):
 
     # 샘플링 프로파일 (§3) — experiment 100% / production 층화 비율
     eval_sample_profile: SampleProfile = "experiment"
+    # Judge 프롬프트 버전 (§7) — `evaluation/prompts/judge/<version>.md`, 페이로드·메트릭·baseline 에 그대로 실린다
+    eval_judge_prompt_version: str = "v2"
     # 시간창 재조회 on/off — Prometheus·Loki 없는 환경(단위 테스트·스택 없는 로컬)에서 끈다
     eval_evidence_enabled: bool = True
 

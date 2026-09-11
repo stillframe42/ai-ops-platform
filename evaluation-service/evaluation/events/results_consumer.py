@@ -21,7 +21,8 @@ from evaluation.events.consumer_loop import consume_batches, start_with_backoff
 from evaluation.events.propagation import KafkaHeaders, consumer_span
 from evaluation.events.publishing import make_publisher
 from evaluation.evidence import EvidenceCollector, is_empty
-from evaluation.judge import Judge, PendingJudge
+from evaluation.judge import Judge
+from evaluation.judge_gateway import GatewayJudge
 from evaluation.sampling import Sampler, SamplingDecision
 
 logger = logging.getLogger(__name__)
@@ -95,7 +96,7 @@ class EvaluationEventProcessor:
             evidence = await self._collect_evidence(report, span)
             evaluation = await self.judge.evaluate(report, evidence)
         if evaluation is None:
-            return "sampled:judge-pending"
+            return "sampled:judge-skipped"  # 판정 없음 — Judge 실패(스팬 error.type)·구현 전 스텁
         # 발행 실패는 인프라 실패 — 예외 전파로 커밋을 보류한다
         await self.publish_evaluation(incident_id, evaluation.to_payload())
         logger.info("평가 발행 — %s failure_mode=%s low_quality=%s", incident_id, evaluation.failure_mode, evaluation.low_quality)
@@ -126,12 +127,15 @@ class EvaluationEventProcessor:
 
 
 def build_processor(settings: Settings, publish_evaluation, judge: Judge | None = None) -> EvaluationEventProcessor:
-    """설정 → 처리기 조립. Judge 미지정 = 스텁 (구현 전 경로 실측용)."""
+    """설정 → 처리기 조립. Judge 미지정 = 게이트웨이 Judge (프롬프트 버전은 설정)."""
     evidence = (
         EvidenceCollector(settings.prometheus_url, settings.loki_url) if settings.eval_evidence_enabled else None
     )
     return EvaluationEventProcessor(
-        Sampler(settings.eval_sample_profile), judge or PendingJudge(), publish_evaluation, evidence=evidence
+        Sampler(settings.eval_sample_profile),
+        judge or GatewayJudge(settings, prompt_version=settings.eval_judge_prompt_version),
+        publish_evaluation,
+        evidence=evidence,
     )
 
 
