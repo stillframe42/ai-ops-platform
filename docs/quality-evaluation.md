@@ -26,6 +26,12 @@
 
 점수는 0~1 연속값이지만 사람과 Judge 모두 네 앵커만 쓴다. 앵커 문장은 Judge 프롬프트와 라벨링 시트가 공유한다.
 
+Judge 프롬프트 v2 (2026-09-11, `evaluation-service/evaluation/prompts/judge/v2.md`) 가 v1 대비 보정한 읽기 규칙 — 골든셋 20건 재측정에서 드러난 Judge 의 과잉 감점을 사람 라벨 기준으로 맞춘 것이다:
+- **요약에 없는 관측 ≠ 거짓**: 재조회 근거는 4개 지표 + 로그 몇 줄의 증상 요약이고 에이전트는 더 많은 도구(배포 이력·설정·GC·기준선·전체 로그)를 썼다. 감점은 요약과 모순·창 밖 흔적을 현재 원인으로·핵심 신호 누락·요약이 부정하는 관측일 때만 (v1 은 검증 불가를 근거 없음(A)으로 매겨 Faithfulness MAE 0.58)
+- **창 끝의 회복은 보고서 뒤의 일**: 보고서는 작성 시점 기준 — 창 안에서 증상이 진행 중이면 상태 변경 조치를 "끝난 장애" 로 감점하지 않는다 (v1 은 RESTART 를 창 끝 정상 복귀 근거로 감점)
+- **Actionability 서열**: 앱 내부 상태(주입·누수) 증상에 RESTART 를 배제하고 차단만 두면 0.4(C), 과잉 조치 하나(부분 지연에 CIRCUIT_BREAK 1순위·단일 인스턴스에 SCALE_OUT)는 0.7
+- **Severity 임계 명시**: 5xx 10%·p95 3s·heap 85% — 임계 미만의 국지적 버스트에 P2 는 과대(0.4, D)
+
 | 앵커 | 뜻 |
 |------|-----|
 | 1.0 | 전부 맞음 — 근거·조치·등급이 실측과 일치 |
@@ -94,15 +100,15 @@ flowchart LR
 
 응답 경로(인시던트 처리)에는 영향이 없다. evaluation-service 는 별도 컨슈머 그룹(`evaluation-service`)으로 같은 토픽을 읽는다.
 
-구현 상태 (2026-09-10): 소비 → 샘플링 → 시간창 재조회까지 동작하고 Judge 는 스텁(`PendingJudge`, 판정 없이 정상 종료)이다. 소비 스팬 `ops.analysis.results process` 는 agent-service 발행 헤더를 부모로 삼아 인시던트 trace 에 붙고 `incident.id`·`gen_ai.conversation.id` 를 세운다 — 이후 Judge 스팬·게이트웨이 호출이 이 축을 상속한다. 커밋 규약은 agent-service 컨슈머와 같다 (배치 수동 커밋, 평가 발행 실패만 커밋 보류, 건너뜀은 정상 종료). `ops.evaluation.results` 페이로드 계약은 `app/judge.py` 의 `Evaluation.to_payload()` — `incident_id` · `scores{차원: {score, reason}}` · `failure_mode` · `low_quality` · `judge_model` · `prompt_version` · `evidence_available` · `evaluated_at`.
+구현 상태 (2026-09-11): 소비 → 샘플링 → 시간창 재조회 → **Judge → 발행 → 저장**까지 동작한다. 소비 스팬 `ops.analysis.results process` 는 agent-service 발행 헤더를 부모로 삼아 인시던트 trace 에 붙고 `incident.id`·`gen_ai.conversation.id` 를 세운다 — Judge 스팬(`evaluate incident-report`, 보고서 `trace_ref` 로 원 실행 `invoke_workflow` 에 link)·게이트웨이 호출(`chat default`)이 이 축을 상속한다. 커밋 규약은 agent-service 컨슈머와 같다 (배치 수동 커밋, 평가 발행 실패만 커밋 보류, 건너뜀·Judge 판정 실패(`error.type`)는 정상 종료). `ops.evaluation.results` 페이로드 계약은 `evaluation/judge.py` 의 `Evaluation.to_payload()` — `incident_id` · `scores{차원: {score, reason}}` · `failure_mode` · `low_quality` · `judge_model`(게이트웨이 응답 실모델) · `prompt_version`(Judge 프롬프트) · `analysis_prompt_version`(보고서 `analysis.prompt_version`, 실험 축) · `evidence_available` · `evaluated_at`. control-plane 은 `EvaluationResultConsumer` → `IncidentEvaluationService` → Flyway V5 `incident_evaluations` 에 저장한다 — 자연 키 `(incident_id, prompt_version, judge_model)` upsert 멱등, `low_quality` 면 `review_status=pending_review` 로 시작(아니면 `not_required`), 조회는 `GET /api/incidents/{id}/evaluations`. 리뷰 API·Slack 태그·골든셋 승격은 다음 단계.
 
 ## 6. 어휘 — 표준과 확장의 경계
 
 | 어휘 | 출처 | 용도 |
 |------|------|------|
-| `gen_ai.evaluation.result` 이벤트 + `gen_ai.evaluation.name` · `score.value` · `score.label` · `explanation` | OTel GenAI 컨벤션 (semconv 0.65b0 속성, 이벤트 정의는 전용 리포, Development) | 평가 1건 = 이벤트 1건, 원본 스팬은 종료됐으므로 `gen_ai.response.id` + span link 로 상관 |
+| `gen_ai.evaluation.result` 이벤트 + `gen_ai.evaluation.name` · `score.value` · `score.label`(pass/fail = 0.7) · `explanation` | OTel GenAI 컨벤션 (semconv 0.65b0 속성, 이벤트 정의는 전용 리포, Development) | 차원 1개 = 이벤트 1건 (평가 1건 = 3건). 두 시그널로 낸다 — 규격대로 **로그 레코드**(event_name, Collector logs 파이프라인 → Loki) + 같은 속성의 **스팬 이벤트**(Tempo trace 뷰용). `gen_ai.response.id` 는 Judge 응답 id, 원 실행은 평가 스팬의 span link |
 | `gen_ai.conversation.id` = incident id | 기존 세션 축 ([otel-genai-mapping.md](otel-genai-mapping.md)) | 평가 스팬에서도 동일 |
-| `aiops.evaluation.score` (histogram: dimension · severity · prompt_version · variant) | 자체 확장 | 표준에 평가 메트릭이 없어 대시보드·알림용으로 자체 네임스페이스 |
+| `aiops.evaluation.score` (histogram, 버킷 = 앵커 경계 0.0/0.4/0.7/1.0; 속성 `aiops.evaluation.dimension` · `aiops.evaluation.severity` · `aiops.prompt.version`(평가 대상 분석 프롬프트) · `aiops.evaluation.judge_prompt_version`) | 자체 확장 | 표준에 평가 메트릭이 없어 대시보드·알림용으로 자체 네임스페이스. Prometheus `aiops_evaluation_score_bucket` — `le="0.4"` 누적이 저품질 수. 실험 variant 축은 실험 층 구현 시 추가 |
 | `aiops.evaluation.sampled_reason` · `aiops.experiment.name` · `aiops.experiment.variant` · `aiops.prompt.version` | 자체 확장 | 샘플링·실험 태깅 |
 
 공식 평가기 패키지는 없다 (PyPI `opentelemetry-util-genai-evals` 부재, contrib `util/` 에 genai·http 만 — 2026-09-09 확인). Judge 는 자체 구현이고 표준은 어휘만 빌린다. Langfuse 는 OTLP 로 점수를 받지 않으므로 세션에 점수를 보이려면 Scores REST API 를 따로 호출해야 한다 (선택).
@@ -112,8 +118,15 @@ flowchart LR
 - 모델: **gpt-5.6-terra** (2026-09-09 예비 실측으로 확정). 평가 대상(`root-cause-analysis` = claude-sonnet-5)과 다른 프로바이더라 자기 선호 편향이 없고, 사람 라벨 5건 대조에서 심각도 과대 3건을 전부 잡았다 (claude-haiku-4-5 는 2건을 P2 타당으로 합리화). 3회 반복에서 Severity 판정은 5건 모두 불변, Faithfulness·Actionability 는 3건에서 앵커 한 단계 흔들림. MAE 는 haiku 가 낮았지만(0.29 vs 0.35) 관문 용도에서는 나쁜 보고서를 통과시키는 오류가 사람 검토로 보내는 오류보다 무겁고, haiku 의 오차는 통과시키는 쪽에 몰려 있었다. 그래서 결정은 잠정이며 확정 조건은 루브릭 정정(§2 Actionability) 후 골든셋 20건 재측정이다. 재측정 기준은 MAE 가 아니라 **false pass 0** (사람이 0.4 이하로 본 케이스를 Judge 가 0.7 이상으로 통과시킨 수) 을 1차, 앵커 정확 일치율 60% 이상을 2차로 둔다. haiku 가 이 기준을 충족하면 비용과 속도를 근거로 교체할 수 있다. 요청에 `temperature` 를 지정하지 않는다 — gpt-5.6-terra 는 기본값 외를 400 으로 거부해 폴백·서킷 오픈을 일으킨다.
 - 게이트웨이 경유: task_type `evaluation-judge`, 요청마다 `X-Cache-Control: no-cache` (시맨틱 캐시에 걸리면 반복 채점의 분산이 0 이 된다 — `CachingChatService` 는 이 헤더를 BYPASS 로 처리). 비용은 JWT client_id 로 `gateway_cost_usd_total{service="evaluation-service"}` 에 자동 분리.
 - 입력 분리: 보고서 본문은 LLM 생성물이므로 `wrap_untrusted` 로 감싼다 ([ADR-0017](adr/0017-prompt-injection-defense.md)). 게이트웨이 가드레일은 user·tool 역할을 검사하므로 Judge 의 user 메시지도 대상이다. 2026-09-09 실측: 보고서 evidence 가 인젝션 문구("IGNORE-PREVIOUS-INSTRUCTIONS")를 인용한 케이스는 패턴 단계에서 `flagged` 가 됐고(mode=flag 라 통과, block 이면 400), 나머지는 분류기 2차 호출을 거쳐 `clean` 이었다. `evaluation-judge` 태스크의 가드레일 정책(flag 고정 또는 분류기 생략)은 파이프라인 구현 시 정한다.
-- 일관성: 골든셋 20건 × 3회 반복 → 차원별 표준편차, 사람 점수 대비 MAE ≤ 0.15, Spearman ρ ≥ 0.6 을 baseline 스냅샷으로 고정.
-- 회귀: `@pytest.mark.golden` (기본 제외) + GitHub Actions `workflow_dispatch`/주 1회 schedule, baseline 대비 MAE 악화 0.05 초과 시 실패.
+- 일관성 측정 (2026-09-11, `scripts/judge_baseline.py`, 골든셋 20건 × 3회, **온라인 형상 = 주입 사실 없이 재조회 근거만**): baseline 은 `evaluation-service/golden/judge-baseline.json` (프롬프트 v2). 결과 —
+
+  | 프롬프트 | 전체 MAE | 앵커 정확 일치 | false pass | 관문 일치 | 유형 일치 | F MAE / ρ | A MAE / ρ | S MAE / ρ | 반복 표준편차 F/A/S |
+  |---|---|---|---|---|---|---|---|---|---|
+  | v1 | 0.343 | 31.7% | 2 | 35% | 25% | 0.58 / 0.23 | 0.30 / 0.30 | 0.15 / 0.66 | 0.049 / 0.075 / 0.054 |
+  | **v2** | **0.122** | **68.3%** | **1** | 70% | 65% | 0.26 / 0.15 | 0.06 / 0.75 | 0.045 / 0.82 | 0.066 / 0.014 / 0.007 |
+
+  기준 대조: MAE ≤ 0.15 충족, 앵커 일치 ≥ 60% 충족, ρ ≥ 0.6 은 Actionability·Severity 충족·Faithfulness 미달(사람 F 라벨이 1.0 에 몰려 순위 상관이 낮게 나온다 — 분산 부족), **false pass 1 미달** — 남은 1건은 2026-08-28 합성 발화(보존 밖이라 재조회 근거 없음·주입 사실도 없음)의 Severity 과대를 Judge 가 잡지 못한 것으로, 온라인에서는 재조회 근거가 항상 있어 같은 조건이 재현되지 않는다. v1 → v2 보정 내용은 §2. 측정 비용 60건 ≈ 0.7 USD(건당 0.012) — 게이트웨이 `evaluation-service` 일 한도를 1.0 → 3.0 으로 올렸다 (측정 1회로 소진되면 haiku 다운그레이드가 측정을 오염). v1 의 과잉 감점 진단: Judge 가 재조회 요약에 없는 도구 관측(MCP·GC·전체 로그)을 근거 없음(A)으로 매겼고, 창 끝의 정상 복귀를 "끝난 장애" 로 읽어 RESTART 를 감점했다.
+- 회귀: `tests/test_golden_regression.py` `@pytest.mark.golden` (기본 제외, `pyproject.toml` addopts) — 실 Judge 20건 × 1회, baseline 대비 전체 MAE 악화 0.05 초과 또는 false pass 증가 시 실패. GitHub Actions `golden-regression.yml` (`workflow_dispatch` + 주 1회) 은 리포지토리 시크릿(게이트웨이·auth-server 주소·시크릿)이 있을 때만 실행되고 없으면 skip — 호스팅 러너에서 로컬 게이트웨이에 닿는 경로가 없어 실효는 로컬 실행(README) 이다.
 
 ## 8. 골든셋 라벨링 절차
 

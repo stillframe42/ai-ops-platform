@@ -64,6 +64,8 @@ flowchart LR
 | Events (`gen-ai-events.md`) | 프롬프트·응답 본문 | `gen_ai.client.inference.operation.details` (로그 시그널) 또는 스팬 속성 `gen_ai.input.messages`·`gen_ai.output.messages`·`gen_ai.system_instructions` — 전부 **옵트인** | 구조화 형식 `{role, parts:[{type, content}]}` | openai-v2 계측, 캡처 모드 환경변수 (§6) |
 | Metrics (`gen-ai-metrics.md`) | LLM 호출 토큰·지연 | `gen_ai.client.token.usage` ({token}, histogram, `gen_ai.token.type=input\|output`) · `gen_ai.client.operation.duration` (s) | 필수 `gen_ai.operation.name`·`gen_ai.provider.name`(·`gen_ai.token.type`) / 조건부 `gen_ai.request.model`·`server.port` / 권장 `server.address` | openai-v2 계측 → OTel Metrics SDK → OTLP |
 | Metrics — MCP | MCP 호출 지연 | 규격 `mcp.client/server.operation.duration` 은 발신하지 않는다 — 클라이언트 = Tempo **TraceQL 메트릭**(`execute_tool` 스팬에서 `quantile_over_time(duration, .95) by (span.gen_ai.tool.name)`, local-blocks), 서버 = 기존 `mcp.tool.calls` 타이머(우리 확장) | `gen_ai.tool.name`·`mcp.method.name` | Tempo metrics-generator(두 형상) · control-plane Micrometer |
+| Evaluation (`gen-ai-events.md` `gen_ai.evaluation.result`, semconv 0.65b0 속성) | evaluation-service Judge 판정 1건 = 차원 3건 | 평가 스팬 `evaluate incident-report` INTERNAL (`aiops.operation=evaluate` — `gen_ai.operation.name` 의 표준 값이 아니라 자체 키) ▸ `chat default` CLIENT (직접 연다 — openai 계측기 없음) ▸ httpx `POST`. 이벤트는 **로그 레코드**(event_name) 와 같은 속성의 **스팬 이벤트** 두 시그널 | 이벤트 `gen_ai.evaluation.name`(faithfulness·actionability·severity_accuracy)·`gen_ai.evaluation.score.value`·`gen_ai.evaluation.score.label`(pass/fail = 0.7 임계)·`gen_ai.evaluation.explanation`·`gen_ai.response.id`(Judge 응답)·`gen_ai.conversation.id` / 평가 스팬은 원 실행 `invoke_workflow` 로 **link** (`aiops.link.reason=evaluation-of`, 좌표는 보고서 페이로드 `trace_ref`) | evaluation-service `judge_gateway.py`·`config/otel_evaluation.py` (docs/quality-evaluation.md §6) |
+| Metrics — 평가 | Judge 차원별 점수 | `aiops.evaluation.score` (histogram, 버킷 = 앵커 경계 0.0/0.4/0.7/1.0 — Prometheus `aiops_evaluation_score_bucket`) | `aiops.evaluation.dimension`·`aiops.evaluation.severity`·`aiops.prompt.version`(평가 대상 분석 프롬프트)·`aiops.evaluation.judge_prompt_version` | evaluation-service → OTLP → Collector prometheus exporter |
 | Provider (`openai.md`·`anthropic.md`) | 프로바이더별 확장 | `gen_ai.openai.*`·`gen_ai.usage.cache_*` 등 | Spring AI 가 발신하는 범위만 | 자동 |
 
 `gen_ai.conversation.id` 는 **인시던트 id** 다. 규격은 "라이브러리나 앱이 대화 식별자를 명시적으로 제공할 때만" 채우고 UUID·traceId 를 대체값으로 쓰지 말라고 하므로, LangGraph `thread_id`(= incident id)를 앱이 명시적으로 부여한다. Langfuse 는 이 속성을 세션으로 인식한다(2026-09-03 실측 — `session.id`·`langfuse.session.id` 도 인식하나 표준 이름만 쓴다).
@@ -93,6 +95,11 @@ http post /webhook/alertmanager                    control-plane · SERVER (Aler
          ├─ invoke_agent analysis · invoke_agent action   (동일 구조 — 로컬 도구·MCP 도구·chat)
          ├─ approval                                interrupt — 승인 대기, 여기서 trace 종료 · aiops.node=approval
          └─ ops.actions.pending send · ops.analysis.results send   agent-service · PRODUCER → control-plane `{topic} process` CONSUMER (같은 trace)
+            └─ ops.analysis.results process             evaluation-service · CONSUMER (별도 그룹, 같은 부모) · aiops.evaluation.sampled/sampled_reason/evidence
+               ├─ GET ×6                                httpx CLIENT → Prometheus query_range 4 · Loki 2 (시간창 재조회)
+               └─ evaluate incident-report              INTERNAL · aiops.operation=evaluate · **link → 위 invoke_workflow** (aiops.link.reason=evaluation-of) · 스팬 이벤트 gen_ai.evaluation.result ×3
+                  └─ chat default                       CLIENT · gen_ai.response.model=gpt-5.6-terra · gateway.task_type=evaluation-judge · gateway.cache=BYPASS
+                     └─ POST                            httpx CLIENT → llm-gateway (위와 같은 서버 측 구조)
 
 http post /api/incidents/{incidentId}/approve      control-plane · SERVER (승인 API) — 새 trace 루트
 └─ ops.actions.decisions send                       control-plane · PRODUCER (조치 실행 풀 → 데코레이터 전파)
@@ -101,6 +108,8 @@ http post /api/incidents/{incidentId}/approve      control-plane · SERVER (승�
          ├─ approval → recovery                     규칙 폴링 (LLM 없음) · aiops.node
          └─ invoke_agent supervisor
 ```
+
+평가 분기의 위치는 보고서가 **어느 실행에서 발행됐는가**를 따른다 — 승인 왕복이 있으면 보고서는 재개 실행(승인 API trace)에서 발행되므로 evaluation-service 스팬은 재개 trace 에 붙고, `evaluate incident-report` 의 link 가 원 실행 trace 의 `invoke_workflow`(`aiops.resumed=false`)를 가리킨다 (2026-09-11 compose 실측: 재개 trace 40 스팬 중 evaluation-service 12, link → 웹훅 루트 trace).
 
 `approval`·`recovery` 는 LLM 이 없는 노드라 GenAI 계층 밖이다 — 우리 확장 속성 `aiops.node` 로 구분한다. 실측 규모: 인시던트 1건(승인 없는 합성 발화)이 control-plane 34 · agent-service 54 · llm-gateway 80 스팬 (2026-09-08 — Security 관측 축소 전에는 control-plane 140). 승인 전후 두 trace 는 Tempo 에서 link 로 이동 가능하고, Loki 는 traceId 로 감사 로그(`audit.type=mcp_request`·`gateway_request`)를 대조한다.
 
@@ -115,7 +124,9 @@ http post /api/incidents/{incidentId}/approve      control-plane · SERVER (승�
 | `gateway.task_type`·`gateway.cache`·`gateway.guardrail`·`gateway.guardrail_stage`·`gateway.downgrade`·`gateway.fallback` | 게이트웨이 판정 (요청 헤더 `X-Task-Type`, 응답 헤더 `X-Gateway-*`) — 클라이언트 스팬(`chat default`)과 서버 스팬(`http post /v1/chat/completions`)에 **같은 키**. 헤더가 없으면 속성도 없다 | agent-service (httpx 응답 훅) · llm-gateway (감사 필터) |
 | `gateway.*` 메트릭 11종 · `mcp.tool.calls` | 기존 Micrometer 유지 (캐시·비용·예산·가드레일·마스킹 — 표준에 대응물 없음) | llm-gateway · control-plane |
 | `aiops.client_id`·`aiops.scope` | 감사 로그 MDC 필드(`client_id`·`scope`)를 HTTP 서버 스팬 속성으로도 부여 — Loki 축과 Tempo 축에서 같은 질의 (감사 필터 `GatewayAuditFilter`·`McpAuditFilter`) | llm-gateway · control-plane |
-| `aiops.node`·`aiops.resumed`·`aiops.link.reason`·`aiops.outcome` | 노드 이름 / 재개 실행 여부 / span link 사유(`resume-after-approval`) / MCP 도구 결과 3분류(success·degraded·failure) | agent-service · control-plane |
+| `aiops.node`·`aiops.resumed`·`aiops.link.reason`·`aiops.outcome` | 노드 이름 / 재개 실행 여부 / span link 사유(`resume-after-approval`·`evaluation-of`) / MCP 도구 결과 3분류(success·degraded·failure) | agent-service · control-plane · evaluation-service |
+| `aiops.prompt.version` | 노드가 쓴 시스템 프롬프트 버전 (`invoke_agent` 스팬) — 평가 메트릭에서는 평가 대상 분석 프롬프트 버전 | agent-service · evaluation-service |
+| `aiops.operation`·`aiops.evaluation.*` | 평가 스팬 연산(`evaluate`) / 샘플링 판정(`sampled`·`sampled_reason`·`sample_rate`·`sample_profile`·`evidence`) / 판정(`judge_model`·`judge_prompt_version`·`failure_mode`·`low_quality`·`normalized`) / 메트릭 축(`dimension`·`severity`) — 표준 `gen_ai.evaluation.*` 는 이벤트 속성에만 쓴다 (docs/quality-evaluation.md §6) | evaluation-service |
 
 Collector `transform` 규칙:
 
@@ -125,6 +136,7 @@ Collector `transform` 규칙:
 | `gen_ai.response.finish_reasons` 문자열 → 배열 (`ParseJSON`) | llm-gateway 스팬 (Spring AI 는 `'["tool_use"]'` 문자열로 발신) | Python 계측(배열)과 타입 정합 — 값 어휘는 정규화하지 않는다 (아래) |
 | `gen_ai.input.messages`·`gen_ai.output.messages`·`gen_ai.system_instructions` 삭제 | Tempo exporter 경로 | 콘텐츠는 Langfuse 경로만 (§6) |
 | `service.name == agent-service` 만 통과 + Kafka `ops.* process/send` 스팬 제외 (`filter`) | Langfuse exporter 경로 | 같은 LLM 호출이 agent-service(클라이언트)·llm-gateway(Spring AI) 두 스팬으로 나오므로 비용 이중 집계 방지. Kafka 스팬은 LLM 관점 밖이고 아래 루트 승격 뒤 고아가 된다 |
+| logs 파이프라인 `otlp → otlp_http/loki` (Loki 3.x OTLP 수신 `/otlp/v1/logs`) | 로그 시그널 전체 — 지금 발신은 evaluation-service 의 `gen_ai.evaluation.result` 이벤트뿐 (앱 로그는 Alloy 경로 그대로) | 규격의 평가 이벤트는 로그 레코드다 — Loki 에서 `{service_name="evaluation-service"}` 로 조회, trace id 로 Tempo 대조. 스팬 이벤트 사본은 Tempo trace 뷰용 (compose 만 — 차트는 evaluation-service 배포와 함께) |
 | `invoke_workflow incident-response` 의 `parent_span_id` 를 0 으로 (`transform/langfuse-root`) | Langfuse exporter 경로만 | Langfuse 는 trace 이름·세션(`gen_ai.conversation.id`)을 **루트 스팬**에서 읽는데, Kafka 전파 이후 워크플로 스팬의 부모가 control-plane(미수신)이라 세션이 비었다 (2026-09-08 실측 — E2E 세션 전부 누락). Langfuse 경로에서만 워크플로를 루트로 만든다. Tempo 경로는 원본 그대로라 한 traceId 가 유지된다 |
 
 **`finish_reasons` 값 어휘는 두 축이다** — agent-service(OpenAI 호환 응답) `tool_calls`/`stop`, llm-gateway(Anthropic 원어) `tool_use`/`end_turn`. 규격은 프로바이더 원어를 허용하므로 보정하지 않고, Tempo 질의는 계층별로 한다 (클라이언트 스팬 = `stop|tool_calls`, 게이트웨이 스팬 = `end_turn|tool_use`).
