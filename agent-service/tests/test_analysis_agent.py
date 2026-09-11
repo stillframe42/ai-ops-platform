@@ -137,7 +137,7 @@ def _patch_agent_factory(monkeypatch, load_behavior):
         calls["load"] += 1
         return load_behavior()
 
-    monkeypatch.setattr(analysis_agent, "_cached_agent", None)
+    monkeypatch.setattr(analysis_agent, "_cached_agents", {})
     monkeypatch.setattr(analysis_agent, "load_mcp_tools", fake_load)
     stub_settings = SimpleNamespace(mcp_server_url="http://stub:8081/mcp")
     monkeypatch.setattr(analysis_agent, "get_settings", lambda: stub_settings)
@@ -190,14 +190,14 @@ def test_analysis_task_wraps_monitor_summary_and_policy_in_prompts():
     from app.supervisor import router
 
     stub = _StubAgent()
-    analysis_agent._cached_agent = stub
+    analysis_agent._cached_agents["v1"] = stub
     try:
         asyncio.run(analysis_agent.analysis_node(_state()))
     finally:
-        analysis_agent._cached_agent = None
+        analysis_agent._cached_agents.clear()
 
     task = stub.captured_payload["messages"][0].content
     assert '<untrusted_content source="monitor-summary">' in task
-    assert UNTRUSTED_POLICY.strip() in analysis_agent.ANALYSIS_SYSTEM_PROMPT
-    assert UNTRUSTED_POLICY.strip() in action_agent.ACTION_SYSTEM_PROMPT
-    assert UNTRUSTED_POLICY.strip() in router._ROUTE_PROMPT
+    assert UNTRUSTED_POLICY.strip() in analysis_agent.analysis_system_prompt()
+    assert UNTRUSTED_POLICY.strip() in action_agent.action_system_prompt()
+    assert UNTRUSTED_POLICY.strip() in router.route_prompt()

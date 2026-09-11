@@ -112,6 +112,7 @@ class AIOpsState(TypedDict):
     incident: IncidentInfo
     monitoring: NotRequired[MonitoringResult | None]
     analysis: NotRequired[AnalysisResult | None]
+    analysis_prompt_version: NotRequired[str]  # 분석 노드가 쓴 프롬프트 버전 — 보고서 `analysis.prompt_version`
     action: NotRequired[ActionPlan | None]
     approval: NotRequired[ApprovalDecision | None]
     recovery: NotRequired[RecoveryResult | None]

@@ -11,43 +11,33 @@ from langchain.agents import create_agent
 from langchain_core.messages import AIMessage, HumanMessage
 
 from app.config import get_settings
+from app.config.agent_spans import record_prompt_version
 from app.config.llm import create_llm
+from app.prompts.registry import prompt_registry
 from app.security.untrusted import UNTRUSTED_POLICY, wrap_untrusted
 from app.supervisor.state import ActionPlan, AIOpsState
 
-# 조치 카탈로그는 scenarios.md "화이트리스트 + 승인 필수" 원칙 기준 (ActionType 과 1:1)
-ACTION_SYSTEM_PROMPT = """\
-너는 AIOps 플랫폼의 실행 에이전트다. 분석 에이전트의 원인 보고서를 입력받아
-조치 계획을 작성한다. 계획은 사람의 승인을 받기 전의 **제안**이다 — 여기서 실행되지 않는다.
+AGENT = "action"
 
-조치 카탈로그 (이 목록 밖의 조치는 제안 자체가 불가):
-- RESTART_APP: 대상 앱 컨테이너 재시작 (승인 필수 — 재시작 중 요청 유실 리스크)
-- SCALE_OUT: replica 증가 (승인 필수 — 자원 비용)
-- ROLLBACK: 직전 배포 버전으로 롤백 (승인 필수 — 배포가 원인일 때만 의미)
-- CIRCUIT_BREAK: 문제 엔드포인트 차단 (승인 필수 — 해당 기능 사용 불가)
-- NOTIFY_ONLY: 담당자 알림만 (승인 불필요 — 상태를 바꾸지 않음)
 
-작성 지침:
-- 근본 원인 가설과 severity 에 비례하는 최소 조치를 골라라 — 과잉 대응 금지.
-- 원인이 코드 결함(누수 등)이면 재시작·스케일아웃은 임시 완화일 뿐임을 rationale 에 명시하라.
-- expected_effect 에 조치 후 기대 상태를, risk 에 조치의 부작용을 구체적으로 적어라.
-- 확신이 없거나 상태 변경이 부적절하면 NOTIFY_ONLY 만 제안하라.
+def action_system_prompt(version: str | None = None) -> str:
+    """버전 파일(조치 카탈로그 — ActionType 과 1:1·작성 지침) + 비신뢰 정책 절."""
+    return prompt_registry().get(AGENT, version) + UNTRUSTED_POLICY
 
-환경 특성 — 조치 판단 기준 (중요): 이 플랫폼의 장애는 데모용 fault-injection 으로
-재현될 수 있다. 원인 보고서가 주입을 지목하더라도 그것은 실제 장애의 대역이다 —
-"인위적 주입이므로 NOTIFY_ONLY 만" 으로 결론짓지 말고, 같은 증상이 실제 운영에서
-발생했다면 취할 조치를 동일하게 제안하라 (승인 여부는 사람이 판단한다).
-""" + UNTRUSTED_POLICY
+
+
+def get_action_agent():
+    """실행 에이전트를 지연 생성한다 — import 시점에 LLM API 키를 요구하지 않기 위해. 캐시 키는 프롬프트 버전."""
+    return _build_action_agent(prompt_registry().version_of(AGENT))
 
 
 @lru_cache
-def get_action_agent():
-    """실행 에이전트를 지연 생성한다 — import 시점에 LLM API 키를 요구하지 않기 위해."""
+def _build_action_agent(prompt_version: str):
     settings = get_settings()
     return create_agent(
         model=create_llm(settings, task_type="action-planning"),
         tools=[],
-        system_prompt=ACTION_SYSTEM_PROMPT,
+        system_prompt=action_system_prompt(prompt_version),
         response_format=ActionPlan,
     )
 
@@ -67,6 +57,7 @@ async def action_node(state: AIOpsState) -> dict:
             "조치 계획을 작성하라."
         )
     )
+    record_prompt_version(prompt_registry().version_of(AGENT))
     result = await get_action_agent().ainvoke({"messages": [task]})
 
     plan: ActionPlan = result["structured_response"]

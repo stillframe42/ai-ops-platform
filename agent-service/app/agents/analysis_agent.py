@@ -14,8 +14,9 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from app.agents.tool_errors import ToolErrorFeedback
 from app.config import get_settings
-from app.config.agent_spans import instrumented_tool
+from app.config.agent_spans import instrumented_tool, record_prompt_version
 from app.config.llm import create_llm
+from app.prompts.registry import prompt_registry
 from app.security.untrusted import UNTRUSTED_POLICY, wrap_untrusted
 from app.supervisor.state import AIOpsState, AnalysisResult
 from app.tools.loki_tools import get_app_logs
@@ -27,55 +28,33 @@ logger = logging.getLogger(__name__)
 # ReAct 무한 루프 방지 — LLM+tool 왕복 1회당 스텝 2 이므로 도구 호출 약 7회 상한 (직전 프로젝트 검증 패턴)
 ANALYSIS_RECURSION_LIMIT = 16
 
-ANALYSIS_SYSTEM_PROMPT = """\
-너는 AIOps 플랫폼의 분석 에이전트다. 모니터링 에이전트의 상황 요약을 입력받아
-근본 원인 가설을 세우고, 도구로 검증한 뒤 원인 보고서를 작성한다.
+AGENT = "analysis"
 
-분석 절차:
-1. 상황 요약에서 장애 유형을 파악하고 근본 원인 가설을 세운다.
-2. 도구로 가설을 검증한다 — 가설과 배치되는 근거가 나오면 가설을 수정하라.
-   - get_app_logs: 에러의 실제 원인은 로그에 있다 (5xx 면 ERROR 로그부터 확인)
-   - compare_with_baseline: 현재 vs 1시간 전 비교 — 배경 부하(k6 상시 2 RPS)가 일정해
-     1시간 전이 평상시 기준선이다 (예: GC 빈도 증가는
-     compare_with_baseline('sum(rate(jvm_gc_pause_seconds_count[5m]))') 로 확인)
-   - 그 외 운영 도구는 관제 시스템(ops-control-plane)이 제공한다 — 각 도구의 설명을
-     참고해 활용하라. 특히 배포 이력으로 최근 배포와 장애 시점의 상관을 확인/배제하고,
-     유사 인시던트 검색으로 과거의 원인·조치를 참고하라.
-3. 검증에 사용한 근거를 evidence 에 수치·로그 내용과 함께 남긴다.
 
-severity 기준:
-- P1: 서비스 전면 장애 수준 (대부분의 요청 실패 또는 불능)
-- P2: 부분 영향 (일부 엔드포인트 저하, 트리거 스펙 임계 초과 지속)
-- P3: 사용자 영향 미미 (관찰만 필요, 조치 불요)
+def analysis_system_prompt(version: str | None = None) -> str:
+    """버전 파일(분석 절차·severity 기준·환경 특성) + 비신뢰 정책 절."""
+    return prompt_registry().get(AGENT, version) + UNTRUSTED_POLICY
 
-confidence 는 근거의 강도에 따라 0~1 로 정직하게 매겨라 — 근거가 정황뿐이면 낮게.
-suggested_actions 는 구체적 조치 후보를 짧게 나열한다 (실행 여부는 다음 단계 몫).
-
-환경 특성 — 조치 판단 기준 (중요): 이 플랫폼의 장애는 데모용 fault-injection 으로
-재현될 수 있다. 주입 흔적을 발견하면 원인 규명에는 그 사실을 기록하되, severity 와
-suggested_actions 는 "같은 증상이 실제 운영에서 발생했다면"을 기준으로 판단하라.
-"인위적 주입이므로 관찰만으로 충분"이라는 결론은 금지 — 주입은 실제 장애의 대역이며,
-증상을 해소할 조치 후보(재시작·스케일아웃·롤백 등)를 실제 장애와 동일하게 제안해야 한다.
-""" + UNTRUSTED_POLICY
 
 # 관측 스택 직접 조회 도구 — MCP 대상 아님 (ADR-0002 경계)
 LOCAL_ANALYSIS_TOOLS = [get_app_logs, compare_with_baseline]
 
-# lru_cache 대신 수동 캐시 — "성공 시에만 캐시"라는 조건부 정책이 필요해서
-_cached_agent = None
+# lru_cache 대신 수동 캐시(프롬프트 버전별) — "성공 시에만 캐시"라는 조건부 정책이 필요해서
+_cached_agents: dict[str, object] = {}
 
 
 async def get_analysis_agent():
     """분석 에이전트를 지연 생성한다 — import 시점에 LLM API 키를 요구하지 않기 위해.
-    MCP 도구 발견(tools/list 1왕복)을 포함하므로 async 다.
+    MCP 도구 발견(tools/list 1왕복)을 포함하므로 async 다. 캐시 키는 프롬프트 버전.
 
     캐시 정책: 발견 성공 시에만 캐시한다. 실패하면 로컬 도구만으로 강등해 이번 실행은
     부분 진행하고(DAY 13 관례 — 공백은 프롬프트가 아니라 도구 부재로 드러난다), 캐시하지
     않으므로 다음 실행에서 발견을 재시도한다 — MCP 서버 복구가 재기동 없이 반영된다.
     """
-    global _cached_agent
-    if _cached_agent is not None:
-        return _cached_agent
+    prompt_version = prompt_registry().version_of(AGENT)
+    cached = _cached_agents.get(prompt_version)
+    if cached is not None:
+        return cached
 
     settings = get_settings()
     try:
@@ -93,13 +72,13 @@ async def get_analysis_agent():
         model=create_llm(settings, task_type="root-cause-analysis"),
         # 로컬 도구는 여기서, MCP 도구는 발견 시점(load_mcp_tools)에 execute_tool 스팬으로 감싼다 (DAY 43)
         tools=[instrumented_tool(tool) for tool in LOCAL_ANALYSIS_TOOLS] + mcp_tools,
-        system_prompt=ANALYSIS_SYSTEM_PROMPT,
+        system_prompt=analysis_system_prompt(prompt_version),
         response_format=AnalysisResult,
         # 비일시적 도구 오류(화이트리스트 거부·4xx)는 모델 피드백으로 — 노드 실패 대신 재시도 기회 (DAY 46)
         middleware=[ToolErrorFeedback()],
     )
     if discovered:
-        _cached_agent = agent
+        _cached_agents[prompt_version] = agent
     return agent
 
 
@@ -121,6 +100,8 @@ async def analysis_node(state: AIOpsState) -> dict:
             "근본 원인 가설을 세우고 도구로 검증해 원인 보고서를 작성하라."
         )
     )
+    prompt_version = prompt_registry().version_of(AGENT)
+    record_prompt_version(prompt_version)
     agent = await get_analysis_agent()
     result = await agent.ainvoke(
         {"messages": [task]},
@@ -130,6 +111,8 @@ async def analysis_node(state: AIOpsState) -> dict:
     analysis: AnalysisResult = result["structured_response"]
     return {
         "analysis": analysis,
+        # 보고서 페이로드 `analysis.prompt_version` 의 원천 — 평가·실험이 이 값으로 프롬프트 버전을 가른다 (ADR-0019)
+        "analysis_prompt_version": prompt_version,
         "messages": [
             AIMessage(content=f"[analysis] ({analysis.severity}) {analysis.root_cause_hypothesis}")
         ],

@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     # LangGraph 체크포인트 저장소 (ADR-0009)
     checkpoint_db_url: str | None = None
 
+    # 시스템 프롬프트 버전 (app/prompts/{agent}/{version}.md) — 전역 기본 + 에이전트별 오버라이드
+    # (예: PROMPT_VERSION_OVERRIDES='{"analysis": "v2"}' — 분석 프롬프트 실험은 이 값만 바꾼다, ADR-0019)
+    prompt_version: str = "v1"
+    prompt_version_overrides: dict[str, str] = {}
+
     # OTLP 전송 — Collector 주소(스킴+호스트+포트, 경로 없음). 미설정이면 스팬·메트릭 생성만 하고 전송하지 않는다.
     # 백엔드(Tempo·Langfuse·Prometheus)는 Collector 설정 소관 (docs/otel-genai-mapping.md §2). Langfuse 도 이 경로로만
     # 받는다 — 앱은 Langfuse 키를 모른다

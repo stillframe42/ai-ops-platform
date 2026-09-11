@@ -12,8 +12,9 @@ from langchain_core.messages import AIMessage, AnyMessage, HumanMessage
 
 from app.agents.tool_errors import ToolErrorFeedback
 from app.config import get_settings
-from app.config.agent_spans import instrumented_tool
+from app.config.agent_spans import instrumented_tool, record_prompt_version
 from app.config.llm import create_llm
+from app.prompts.registry import prompt_registry
 from app.security.untrusted import UNTRUSTED_POLICY, wrap_untrusted
 from app.supervisor.state import AIOpsState, MonitoringResult
 from app.tools.prometheus_tools import (
@@ -22,44 +23,29 @@ from app.tools.prometheus_tools import (
     query_prometheus_range,
 )
 
-# 메트릭 이름은 /actuator/prometheus 실측 기준 (2026-07-17), 임계값은 docs/scenarios.md 스펙
-MONITOR_SYSTEM_PROMPT = """\
-너는 AIOps 플랫폼의 모니터링 에이전트다. 인시던트를 받으면 Prometheus 도구로 관련 메트릭을
-조회해 "상황 요약"을 만든다. 원인 분석은 다음 단계(분석 에이전트)의 몫이다 — 추정하지 말고
-관측된 사실만 수치와 함께 요약하라.
+AGENT = "monitor"
 
-target-app 주요 메트릭 (실제 노출 이름):
-- http_server_requests_seconds_bucket/count/sum (uri, status 라벨) — p95 는
-  histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le, uri))
-- 5xx 에러율: sum(rate(http_server_requests_seconds_count{status=~"5.."}[3m]))
-  / sum(rate(http_server_requests_seconds_count[3m]))
-- jvm_memory_used_bytes{area="heap"} / jvm_memory_max_bytes{area="heap"} — heap 사용률
-- jvm_memory_usage_after_gc — GC 직후 heap 사용률 (0~1, 누수 추세 판정 기준)
-- jvm_gc_pause_seconds_count — GC 빈도
 
-트리거 스펙 (docs/scenarios.md): latency p95 ≥ 3s 5분 지속 / 5xx ≥ 10% 3분 지속 / heap 85%.
+def monitor_system_prompt(version: str | None = None) -> str:
+    """버전 파일(메트릭 이름·트리거 스펙·조회 지침) + 비신뢰 정책 절."""
+    return prompt_registry().get(AGENT, version) + UNTRUSTED_POLICY
 
-조회 지침:
-- 먼저 get_active_alerts 로 발화 중인 Alert 를 확인하라.
-- 시나리오가 memory-pressure 면 query_prometheus_range 로 jvm_memory_usage_after_gc 의
-  30분 창(minutes=30)을 조회해 우상향 추세인지 판정하라 — 일시 스파이크와 구분할 것.
-- 그 외 시나리오는 query_prometheus 로 현재 수치(p95, 에러율 등)를 확인하라.
-
-응답 규칙: 마지막 메시지는 2~4문장의 상황 요약만 작성한다 — 관측 수치와 영향받는
-엔드포인트를 반드시 포함하라.
-""" + UNTRUSTED_POLICY
 
 MONITOR_TOOLS = [get_active_alerts, query_prometheus, query_prometheus_range]
 
 
-@lru_cache
 def get_monitor_agent():
-    """모니터링 에이전트를 지연 생성한다 — import 시점에 LLM API 키를 요구하지 않기 위해."""
+    """모니터링 에이전트를 지연 생성한다 — import 시점에 LLM API 키를 요구하지 않기 위해. 캐시 키는 프롬프트 버전."""
+    return _build_monitor_agent(prompt_registry().version_of(AGENT))
+
+
+@lru_cache
+def _build_monitor_agent(prompt_version: str):
     settings = get_settings()
     return create_agent(
         model=create_llm(settings, task_type="monitoring-summary"),
         tools=[instrumented_tool(tool) for tool in MONITOR_TOOLS],  # execute_tool 스팬 (DAY 43)
-        system_prompt=MONITOR_SYSTEM_PROMPT,
+        system_prompt=monitor_system_prompt(prompt_version),
         # 비일시적 도구 오류(화이트리스트 거부·4xx)는 모델 피드백으로 — 노드 실패 대신 재시도 기회 (DAY 46)
         middleware=[ToolErrorFeedback()],
     )
@@ -85,6 +71,7 @@ async def monitor_node(state: AIOpsState) -> dict:
             "관련 메트릭을 조회해 현재 상황을 요약하라."
         )
     )
+    record_prompt_version(prompt_registry().version_of(AGENT))
     result = await get_monitor_agent().ainvoke({"messages": [task]})
 
     # content 는 콘텐츠 블록 리스트일 수 있다 (thinking 블록 포함 시) — .text 로 텍스트만 추출

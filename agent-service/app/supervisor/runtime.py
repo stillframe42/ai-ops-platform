@@ -222,19 +222,26 @@ class GraphRuntime:
             return model.model_dump() if model is not None else None
 
         incident: IncidentInfo = values["incident"]
+        analysis = dump("analysis")
+        if analysis is not None:
+            # 평가·실험의 프롬프트 축 (ADR-0019) — AnalysisResult 스키마(구조화 출력)에는 두지 않고 발행 시 합친다
+            analysis["prompt_version"] = values.get("analysis_prompt_version")
+        run_trace_id, run_span_id = values.get("run_trace_id"), values.get("run_span_id")
         return {
             "incident_id": incident_id,
             "scenario": incident.scenario,
             "alert_name": incident.alert_name,
             "status": "completed" if done and not errors and not pending_errors else "partial",
             "monitoring": dump("monitoring"),
-            "analysis": dump("analysis"),
+            "analysis": analysis,
             "action": dump("action"),
             "approval": dump("approval"),  # 승인 감사 정보 — control-plane 보고서의 입력
             "recovery": dump("recovery"),  # 회복 판정 (DAY 24) — 종결 보고의 "회복 여부"
             "errors": errors,
             "pending_errors": pending_errors,
             "supervisor_visits": values.get("supervisor_visits", 0),
+            # 원 실행 워크플로 스팬 좌표 (hex) — 평가 스팬이 span link 로 가리킨다 (구버전 체크포인트는 null)
+            "trace_ref": {"trace_id": run_trace_id, "span_id": run_span_id} if run_trace_id and run_span_id else None,
             "completed_at": datetime.now(UTC).isoformat(),
         }
 

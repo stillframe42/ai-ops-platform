@@ -26,6 +26,7 @@ from app.config.otel_genai import GEN_AI_OPERATION_NAME, incident_attributes
 
 WORKFLOW_NAME = "incident-response"
 AIOPS_NODE = "aiops.node"  # 우리 확장 — LangGraph 노드 이름 (mapping §5)
+AIOPS_PROMPT_VERSION = "aiops.prompt.version"  # 우리 확장 — 노드가 쓴 시스템 프롬프트 버전 (실험 축, ADR-0019)
 MCP_METHOD_NAME = "mcp.method.name"
 TOOLS_CALL = "tools/call"
 
@@ -90,6 +91,11 @@ def workflow_span(
         links=_link_to(link_to),
     ) as span:
         yield span
+
+
+def record_prompt_version(version: str) -> None:
+    """현재 스팬(`invoke_agent {노드}`)에 프롬프트 버전을 남긴다 — 노드 본문이 호출한다 (래퍼는 버전을 모른다)."""
+    trace.get_current_span().set_attribute(AIOPS_PROMPT_VERSION, version)
 
 
 def span_ref(span: Span) -> RunSpanRef:

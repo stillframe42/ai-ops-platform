@@ -112,4 +112,4 @@ def test_monitor_task_wraps_alert_summary_as_untrusted(monkeypatch):
 
     task = captured["task"]
     assert '<untrusted_content source="alert-annotation">\np95 latency 3s 초과\n</untrusted_content>' in task
-    assert UNTRUSTED_POLICY.strip() in monitor_agent.MONITOR_SYSTEM_PROMPT
+    assert UNTRUSTED_POLICY.strip() in monitor_agent.monitor_system_prompt()

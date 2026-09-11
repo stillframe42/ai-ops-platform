@@ -59,6 +59,7 @@ Kafka 소비·발행은 `traceparent` 헤더로 control-plane 과 한 trace 다.
 
 - `OTEL_EXPORTER_OTLP_ENDPOINT` — Collector 주소 (compose 는 `http://otel-collector:4318`, 호스트 실행은 `http://localhost:4318`). **미설정 = 전파만 하고 전송 없음**, 메트릭도 함께 꺼진다
 - `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` — 프롬프트/응답 본문 캡처. 미설정 = `NO_CONTENT`(운영). compose 는 `SPAN_ONLY`(Langfuse 표시용) — 캡처 본문은 게이트웨이 마스킹 **전** 원문이라 Tempo 경로는 Collector 가 삭제한다
+- `PROMPT_VERSION`(기본 `v1`)·`PROMPT_VERSION_OVERRIDES`(JSON, 예 `{"analysis": "v2"}`) — 시스템 프롬프트 버전. 본문은 `app/prompts/{monitor,analysis,action,router}/<version>.md`, 버전은 `invoke_agent` 스팬 `aiops.prompt.version` 과 보고서 `analysis.prompt_version` 에 실린다 (ADR-0019 실험 축)
 - `/health` 의 `otlp_enabled` 로 전송 여부 확인. 속성 계약 테스트는 `tests/test_otel.py`
 
 ## MCP 도구 (DAY 16, ADR-0010)

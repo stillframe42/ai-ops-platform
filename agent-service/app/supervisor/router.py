@@ -10,24 +10,18 @@ from typing import Literal
 from pydantic import BaseModel
 
 from app.config import get_settings
+from app.config.agent_spans import record_prompt_version
 from app.config.llm import create_llm
+from app.prompts.registry import prompt_registry
 from app.security.untrusted import UNTRUSTED_POLICY, wrap_untrusted
 
-_ROUTE_PROMPT = """\
-너는 AIOps 플랫폼의 Supervisor 라우터다. 분석 에이전트가 낮은 확신의 보고서를 냈다.
-다음 중 하나를 결정하라:
-- analysis: 근거가 부족하거나 가설이 흔들린다 — 재분석으로 근거를 보강할 가치가 있다.
-- action: 확신은 낮아도 방향이 맞다 — 조치 계획 수립(실행 아님, 승인 전 제안)으로 진행한다.
+AGENT = "router"
 
-재분석은 LLM 비용이 들고 인시던트 대응을 지연시킨다 — 재분석이 새 근거를 얻을 가능성이
-낮으면 action 을 골라라. reason 에 판단 근거를 한두 문장으로 남겨라.
 
-분석 보고서:
-- 가설: {hypothesis}
-- 심각도: {severity} / 확신도: {confidence}
-- 근거:
-{evidence}
-""" + UNTRUSTED_POLICY
+def route_prompt(version: str | None = None) -> str:
+    """버전 파일(판단 기준 + {hypothesis}·{severity}·{confidence}·{evidence} 자리) + 비신뢰 정책 절."""
+    return prompt_registry().get(AGENT, version) + UNTRUSTED_POLICY
+
 
 
 class RouteDecision(BaseModel):
@@ -48,7 +42,8 @@ def get_route_llm():
 
 
 def decide_ambiguous_route(analysis) -> RouteDecision:
-    prompt = _ROUTE_PROMPT.format(
+    record_prompt_version(prompt_registry().version_of(AGENT))
+    prompt = route_prompt().format(
         hypothesis=analysis.root_cause_hypothesis,
         severity=analysis.severity,
         confidence=analysis.confidence,
