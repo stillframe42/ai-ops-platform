@@ -28,8 +28,9 @@ gateway:
     daily-limit-usd: 5.0
     service-daily-limit-usd:
       agent-service: 4.0
-      # Judge 호출 (ADR-0019) — 건당 약 0.011 USD (2026-09-09 실측), 샘플링이 상한이지만 폭주 대비 별도 한도
-      evaluation-service: 1.0
+      # Judge 호출 (ADR-0019) — 건당 약 0.012 USD (2026-09-11 실측 62건 0.74 USD). 골든셋 baseline 측정 1회(20건 × 3회)가 0.7 USD 라
+      # 1.0 이면 측정 1회로 소진 → 다운그레이드(haiku)가 측정을 조용히 오염한다. 측정 2회 + 온라인 평가 여유로 3.0
+      evaluation-service: 3.0
     downgrade:
       provider: anthropic
       model: claude-haiku-4-5

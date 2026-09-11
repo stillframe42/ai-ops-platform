@@ -1,4 +1,4 @@
-# OTel Collector (compose) — 앱 3종(agent-service·llm-gateway·control-plane)의 단일 수신처 (docs/otel-genai-mapping.md §2·§5).
+# OTel Collector (compose) — 앱 4종(agent-service·llm-gateway·control-plane·evaluation-service)의 단일 수신처 (docs/otel-genai-mapping.md §2·§5).
 # 백엔드 라우팅은 이 파일에서만 결정한다: 앱은 Collector 주소만 알고, 백엔드 교체·추가는 여기 exporter 변경으로 끝난다.
 # K8s 판은 charts/aiops/values.yaml 의 opentelemetry-collector.config — Langfuse exporter 유무만 다르다 (compose 전용 백엔드).
 
@@ -62,21 +62,25 @@ processors:
           - set(parent_span_id, SpanID(0x0000000000000000)) where name == "invoke_workflow incident-response"
 
 exporters:
-  otlp/tempo:
+  otlp_grpc/tempo:
     endpoint: tempo:4317
     tls:
       insecure: true
-  # otlphttp 는 endpoint 뒤에 /v1/traces 를 붙인다 → Langfuse 의 /api/public/otel/v1/traces (3.222.0 실측 2026-09-03)
-  otlphttp/langfuse:
+  # otlp_http 는 endpoint 뒤에 /v1/traces 를 붙인다 → Langfuse 의 /api/public/otel/v1/traces (3.222.0 실측 2026-09-03)
+  otlp_http/langfuse:
     endpoint: http://langfuse-server:3000/api/public/otel
     auth:
       authenticator: basicauth/langfuse
-  # gen_ai 메트릭(토큰·지연)을 Prometheus 가 스크레이프 — pull 모델 일관 (remote write 미사용, §2)
+  # gen_ai 메트릭(토큰·지연)·aiops.evaluation.score(평가 히스토그램)를 Prometheus 가 스크레이프 — pull 모델 일관 (remote write 미사용, §2)
   prometheus:
     endpoint: 0.0.0.0:8889
     # service.name 등 리소스 속성을 라벨로 — 대시보드의 서비스 축
     resource_to_telemetry_conversion:
       enabled: true
+  # 로그 시그널 → Loki OTLP 수신 (3.x 기본 활성, /otlp/v1/logs). 지금 유일한 발신은 evaluation-service 의
+  # gen_ai.evaluation.result 이벤트 (docs/quality-evaluation.md §6) — 앱 로그 자체는 Alloy 가 컨테이너 stdout 을 긁는 경로 그대로
+  otlp_http/loki:
+    endpoint: http://loki:3100/otlp
 
 service:
   extensions: [health_check, basicauth/langfuse]
@@ -93,12 +97,16 @@ service:
     traces/tempo:
       receivers: [otlp]
       processors: [memory_limiter, transform/normalize, transform/strip-content, batch]
-      exporters: [otlp/tempo]
+      exporters: [otlp_grpc/tempo]
     traces/langfuse:
       receivers: [otlp]
       processors: [memory_limiter, filter/agent-only, transform/langfuse-root, batch]
-      exporters: [otlphttp/langfuse]
+      exporters: [otlp_http/langfuse]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
       exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp_http/loki]
