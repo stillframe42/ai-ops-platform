@@ -1,6 +1,9 @@
 global:
   scrape_interval: 15s
   evaluation_interval: 15s
+  # 알림 출처 라벨 — compose 와 kind 가 같은 Slack 채널로 보내므로 품질 알림 메시지에 어느 환경인지 싣는다 (charts values externalLabels 와 짝)
+  external_labels:
+    cluster: compose
 
 alerting:
   alertmanagers:

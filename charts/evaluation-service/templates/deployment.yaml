@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evaluation-service
+  labels:
+    {{- include "evaluation-service.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: evaluation-service
+  template:
+    metadata:
+      labels:
+        # app 라벨 = Alloy 의 service 라벨 원천 (LogQL 진입점 계약)
+        app: evaluation-service
+    spec:
+      containers:
+        - name: evaluation-service
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            # Judge 호출은 llm-gateway 경유 (ADR-0015) — 모델은 게이트웨이 evaluation-judge 규칙이 고른다
+            - name: LLM_BASE_URL
+              value: {{ .Values.env.llmBaseUrl | quote }}
+            # 시간창 재조회 (docs/quality-evaluation.md §4) — 실패는 근거 없음으로 진행 (기동 의존 없음)
+            - name: PROMETHEUS_URL
+              value: {{ .Values.env.prometheusUrl | quote }}
+            - name: LOKI_URL
+              value: {{ .Values.env.lokiUrl | quote }}
+            - name: AUTH_TOKEN_URL
+              value: {{ .Values.env.authTokenUrl | quote }}
+            # 접속 실패는 컨슈머 백오프가 흡수 (compose 승계 — 기동 의존 없음)
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ .Values.env.kafkaBootstrapServers | quote }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.env.otelExporterOtlpEndpoint | quote }}
+            - name: EVAL_SAMPLE_PROFILE
+              value: {{ .Values.env.evalSampleProfile | quote }}
+            - name: EVAL_JUDGE_PROMPT_VERSION
+              value: {{ .Values.env.evalJudgePromptVersion | quote }}
+          envFrom:
+            # AUTH_CLIENT_SECRET — 미설정이면 기동 실패 (인증 항상 필수, ADR-0016)
+            - secretRef:
+                name: {{ .Values.existingSecret }}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}

@@ -1,0 +1,14 @@
+# 헬스 조회용 (port-forward 접근) — 데이터 경로의 유입은 Kafka 컨슈머라 Service 의존 없음
+apiVersion: v1
+kind: Service
+metadata:
+  name: evaluation-service
+  labels:
+    {{- include "evaluation-service.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: evaluation-service
+  ports:
+    - port: 8000
+      targetPort: http
+      name: http

@@ -4,6 +4,12 @@ route:
   group_wait: 10s
   group_interval: 1m
   repeat_interval: 30m
+  routes:
+    # 품질 SLO(kind=quality)는 추세 알림 — 30분마다 재통지하면 같은 메시지가 채널을 덮는다 (2026-09-14 실측). 발화·해소는 그대로, 재통지만 하루 1회
+    - receiver: control-plane-webhook
+      matchers:
+        - kind = "quality"
+      repeat_interval: 24h
 
 receivers:
   # Alert → control-plane webhook → 정규화·멱등 처리 → Kafka ops.incidents 발행 (DAY 17, ADR-0003 완결).

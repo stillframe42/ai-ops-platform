@@ -113,12 +113,13 @@ docker build -t aiops/control-plane:local control-plane/
 docker build -t aiops/agent-service:local agent-service/
 docker build -t aiops/llm-gateway:local llm-gateway/
 docker build -t aiops/auth-server:local auth-server/
-kind load docker-image --name aiops aiops/control-plane:local aiops/agent-service:local aiops/target-app:local aiops/llm-gateway:local aiops/auth-server:local
+docker build -t aiops/evaluation-service:local evaluation-service/
+kind load docker-image --name aiops aiops/control-plane:local aiops/agent-service:local aiops/target-app:local aiops/llm-gateway:local aiops/auth-server:local aiops/evaluation-service:local
 
 # 3. Secret 반입 (.env 2곳 → K8s Secret, 값 미출력 — 확정 방식: Secret 직접 생성 + values 미기록, ADR-0016)
 ./infra/k8s/create-secrets.sh
 
-# 4. 전체 설치 — umbrella 한 번으로 앱 6종(llm-gateway·auth-server 포함) + DB/Kafka/Redis + 모니터링·로그·추적(OTel Collector·Tempo)
+# 4. 전체 설치 — umbrella 한 번으로 앱 7종(llm-gateway·auth-server·evaluation-service 포함) + DB/Kafka/Redis + 모니터링·로그·추적(OTel Collector·Tempo)
 helm dependency build charts/aiops
 helm install aiops charts/aiops -n aiops --create-namespace -f charts/aiops/values-local.yaml
 ```

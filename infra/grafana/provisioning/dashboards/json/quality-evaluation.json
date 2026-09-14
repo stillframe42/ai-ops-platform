@@ -1,0 +1,593 @@
+{
+  "uid": "quality-evaluation",
+  "title": "보고서 품질 평가 (LLM-as-a-Judge)",
+  "tags": [
+    "ai-ops",
+    "evaluation",
+    "quality"
+  ],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "schemaVersion": 39,
+  "editable": true,
+  "graphTooltip": 1,
+  "description": "ADR-0019 3층 품질 평가의 온라인 층 — evaluation-service 가 내는 aiops.evaluation.* 메트릭(job=otel-collector), 게이트웨이 비용(job=llm-gateway), Tempo TraceQL(에이전트 성공률·스텝 수). 임계 0.7(저품질)·0.85(SLO)는 docs/quality-evaluation.md §2",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Faithfulness 1h 평균 (SLO ≥ 0.85)",
+      "description": "축 = evaluation-service OTel 메트릭(job=otel-collector) aiops_evaluation_score _sum/_count 의 1h 증가분 비율. Alert Rule AiopsFaithfulnessLow 와 같은 식 — 0.85 미만이 5분 지속이면 kind=quality 알림 → control-plane → Slack. 창 증가분 = 창 시작에 있던 시리즈는 increase() + 창 안에서 생긴 시리즈는 현재값 (increase 만 쓰면 첫 관측 유실)",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "평가 없음",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0.85
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum(increase(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) + sum(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h))) or sum(increase(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) or sum(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h))) / ((sum(increase(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) + sum(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h))) or sum(increase(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) or sum(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)))",
+          "legendFormat": "F 1h"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "저품질 비율 (어느 차원이든 < 0.7)",
+      "description": "축 = aiops_evaluation_verdicts_total{aiops_evaluation_low_quality=true} / 전체 판정 (대시보드 시간 범위). 저품질 = 리뷰 큐(pending_review) 적재 대상. 창 증가분 = 창 시작에 있던 시리즈는 increase() + 창 안에서 생긴 시리즈는 현재값 (increase 만 쓰면 첫 관측 유실)",
+      "gridPos": {
+        "h": 6,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "평가 없음",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.3
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum(increase(aiops_evaluation_verdicts_total{aiops_evaluation_low_quality=\"true\"}[$__range]) and (aiops_evaluation_verdicts_total{aiops_evaluation_low_quality=\"true\"} offset $__range)) + sum(aiops_evaluation_verdicts_total{aiops_evaluation_low_quality=\"true\"} unless (aiops_evaluation_verdicts_total{aiops_evaluation_low_quality=\"true\"} offset $__range))) or sum(increase(aiops_evaluation_verdicts_total{aiops_evaluation_low_quality=\"true\"}[$__range]) and (aiops_evaluation_verdicts_total{aiops_evaluation_low_quality=\"true\"} offset $__range)) or sum(aiops_evaluation_verdicts_total{aiops_evaluation_low_quality=\"true\"} unless (aiops_evaluation_verdicts_total{aiops_evaluation_low_quality=\"true\"} offset $__range))) / ((sum(increase(aiops_evaluation_verdicts_total[$__range]) and (aiops_evaluation_verdicts_total offset $__range)) + sum(aiops_evaluation_verdicts_total unless (aiops_evaluation_verdicts_total offset $__range))) or sum(increase(aiops_evaluation_verdicts_total[$__range]) and (aiops_evaluation_verdicts_total offset $__range)) or sum(aiops_evaluation_verdicts_total unless (aiops_evaluation_verdicts_total offset $__range)))",
+          "legendFormat": "저품질 비율"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "차원별 점수 추이 — 1h 이동 평균 (Faithfulness · Actionability · Severity)",
+      "description": "축 = aiops_evaluation_score _sum/_count 1h 증가분 비율, 차원 라벨 aiops_evaluation_dimension. 앵커 1.0/0.7/0.4/0.0 의 평균이라 0.7 아래는 표본 절반 이상이 저품질이라는 뜻. 점선 0.85 = Faithfulness SLO. 창 증가분 = 창 시작에 있던 시리즈는 increase() + 창 안에서 생긴 시리즈는 현재값 (increase 만 쓰면 첫 관측 유실)",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "decimals": 2,
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 0.85
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum by (aiops_evaluation_dimension)(increase(aiops_evaluation_score_sum[1h]) and (aiops_evaluation_score_sum offset 1h)) + sum by (aiops_evaluation_dimension)(aiops_evaluation_score_sum unless (aiops_evaluation_score_sum offset 1h))) or sum by (aiops_evaluation_dimension)(increase(aiops_evaluation_score_sum[1h]) and (aiops_evaluation_score_sum offset 1h)) or sum by (aiops_evaluation_dimension)(aiops_evaluation_score_sum unless (aiops_evaluation_score_sum offset 1h))) / ((sum by (aiops_evaluation_dimension)(increase(aiops_evaluation_score_count[1h]) and (aiops_evaluation_score_count offset 1h)) + sum by (aiops_evaluation_dimension)(aiops_evaluation_score_count unless (aiops_evaluation_score_count offset 1h))) or sum by (aiops_evaluation_dimension)(increase(aiops_evaluation_score_count[1h]) and (aiops_evaluation_score_count offset 1h)) or sum by (aiops_evaluation_dimension)(aiops_evaluation_score_count unless (aiops_evaluation_score_count offset 1h)))",
+          "legendFormat": "{{aiops_evaluation_dimension}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "분석 프롬프트 버전별 Faithfulness — 실험 축 (aiops_prompt_version)",
+      "description": "축 = aiops_evaluation_score{dimension=faithfulness} 1h 평균을 평가 대상 분석 프롬프트 버전(보고서 analysis.prompt_version)으로 나눔. v1 vs 훼손판·v2 비교가 여기서 보인다 — ADR-0019 실험 층의 결과 뷰. 창 증가분 = 창 시작에 있던 시리즈는 increase() + 창 안에서 생긴 시리즈는 현재값 (increase 만 쓰면 첫 관측 유실)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum by (aiops_prompt_version)(increase(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) + sum by (aiops_prompt_version)(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h))) or sum by (aiops_prompt_version)(increase(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) or sum by (aiops_prompt_version)(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h))) / ((sum by (aiops_prompt_version)(increase(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) + sum by (aiops_prompt_version)(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h))) or sum by (aiops_prompt_version)(increase(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) or sum by (aiops_prompt_version)(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)))",
+          "legendFormat": "analysis {{aiops_prompt_version}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "piechart",
+      "title": "실패 유형 분포 (A 근거 없음 · B 결론 불일치 · C 조치 비구체 · D 심각도 오판 · 없음)",
+      "description": "축 = aiops_evaluation_verdicts_total 의 aiops_evaluation_failure_mode 라벨 (대시보드 시간 범위 증가분). 리뷰 큐에서 사람이 확정한 유형은 DB(incident_evaluations.human_failure_mode) — 이 패널은 Judge 판정 기준. 창 증가분 = 창 시작에 있던 시리즈는 increase() + 창 안에서 생긴 시리즈는 현재값 (increase 만 쓰면 첫 관측 유실)",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 12,
+        "y": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "donut",
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum by (aiops_evaluation_failure_mode)(increase(aiops_evaluation_verdicts_total[$__range]) and (aiops_evaluation_verdicts_total offset $__range)) + sum by (aiops_evaluation_failure_mode)(aiops_evaluation_verdicts_total unless (aiops_evaluation_verdicts_total offset $__range))) or sum by (aiops_evaluation_failure_mode)(increase(aiops_evaluation_verdicts_total[$__range]) and (aiops_evaluation_verdicts_total offset $__range)) or sum by (aiops_evaluation_failure_mode)(aiops_evaluation_verdicts_total unless (aiops_evaluation_verdicts_total offset $__range)))",
+          "legendFormat": "{{aiops_evaluation_failure_mode}}",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "piechart",
+      "title": "샘플링 커버리지 — 판정 사유 분포 (sampled_reason)",
+      "description": "축 = aiops_evaluation_sampling_total 의 aiops_evaluation_sampled·sampled_reason 라벨. experiment 프로파일은 전수(sampled=true), production 은 층화 비율 — 제외(partial)·항상 채점(P1·critical·승인 요청)·비율 샘플의 비중. 창 증가분 = 창 시작에 있던 시리즈는 increase() + 창 안에서 생긴 시리즈는 현재값 (increase 만 쓰면 첫 관측 유실)",
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "pieType": "donut",
+        "legend": {
+          "displayMode": "list",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum by (aiops_evaluation_sampled, aiops_evaluation_sampled_reason)(increase(aiops_evaluation_sampling_total[$__range]) and (aiops_evaluation_sampling_total offset $__range)) + sum by (aiops_evaluation_sampled, aiops_evaluation_sampled_reason)(aiops_evaluation_sampling_total unless (aiops_evaluation_sampling_total offset $__range))) or sum by (aiops_evaluation_sampled, aiops_evaluation_sampled_reason)(increase(aiops_evaluation_sampling_total[$__range]) and (aiops_evaluation_sampling_total offset $__range)) or sum by (aiops_evaluation_sampled, aiops_evaluation_sampled_reason)(aiops_evaluation_sampling_total unless (aiops_evaluation_sampling_total offset $__range)))",
+          "legendFormat": "{{aiops_evaluation_sampled}} / {{aiops_evaluation_sampled_reason}}",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Judge 비용 — 게이트웨이 evaluation-service (USD/h)",
+      "description": "축 = llm-gateway Micrometer(job=llm-gateway) gateway_cost_usd_total{service=evaluation-service} 1h 증가분 — JWT client_id 기준. 실측 건당 ≈ 0.012 USD (gpt-5.6-terra), 일 한도 3.0 USD (gateway.yml)",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 14
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (model) (increase(gateway_cost_usd_total{service=\"evaluation-service\"}[1h])) or vector(0)",
+          "legendFormat": "{{model}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Judge 호출 결과 — ok vs error (error.type)",
+      "description": "축 = aiops_evaluation_judge_calls_total{aiops_evaluation_judge_outcome, error_type} 5m 증가분. error 20% 초과 10분 지속 = Alert Rule AiopsJudgeErrorRate. http.4xx 는 게이트웨이 가드레일·예산, timeout, VerdictError = 응답 파싱 실패. 창 증가분 = 창 시작에 있던 시리즈는 increase() + 창 안에서 생긴 시리즈는 현재값 (increase 만 쓰면 첫 관측 유실)",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 8,
+        "y": 14
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum by (aiops_evaluation_judge_outcome, error_type)(increase(aiops_evaluation_judge_calls_total[5m]) and (aiops_evaluation_judge_calls_total offset 5m)) + sum by (aiops_evaluation_judge_outcome, error_type)(aiops_evaluation_judge_calls_total unless (aiops_evaluation_judge_calls_total offset 5m))) or sum by (aiops_evaluation_judge_outcome, error_type)(increase(aiops_evaluation_judge_calls_total[5m]) and (aiops_evaluation_judge_calls_total offset 5m)) or sum by (aiops_evaluation_judge_outcome, error_type)(aiops_evaluation_judge_calls_total unless (aiops_evaluation_judge_calls_total offset 5m)))",
+          "legendFormat": "{{aiops_evaluation_judge_outcome}} {{error_type}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "비용 대비 품질 — 인시던트 분석 비용(USD/h) vs Faithfulness 1h 평균",
+      "description": "두 축: 왼쪽 = 게이트웨이 gateway_cost_usd_total{service=agent-service} 1h 증가분(분석 에이전트가 쓴 비용, job=llm-gateway), 오른쪽 = Faithfulness 1h 평균(job=otel-collector). 프롬프트 v2 가 비용을 올리면서 품질을 올리는지 한 화면에서 — 산점은 표본이 쌓인 뒤 Explore 로",
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 16,
+        "y": 14
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(gateway_cost_usd_total{service=\"agent-service\"}[1h])) or vector(0)",
+          "legendFormat": "분석 비용 USD/h"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum(increase(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) + sum(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h))) or sum(increase(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) or sum(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h))) / ((sum(increase(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) + sum(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h))) or sum(increase(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) or sum(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)))",
+          "legendFormat": "Faithfulness 1h"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "에이전트 성공률 — invoke_workflow 종료 상태 (초당, status)",
+      "description": "축 = Tempo TraceQL 메트릭(local-blocks). 워크플로 루트 스팬 gen_ai.operation.name=invoke_workflow 의 intrinsic status(ok/error) 별 rate — error 비중이 실패율. aiops.resumed=true 는 승인 뒤 재개 실행이라 인시던트 1건이 루트 스팬 2개",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{ span.gen_ai.operation.name = \"invoke_workflow\" } | rate() by (status, span.aiops.resumed)",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "type": "timeseries",
+      "title": "스텝 수 — 에이전트 노드 실행 (invoke_agent, 5분 합계)",
+      "description": "축 = Tempo TraceQL 메트릭. 노드 스팬 gen_ai.operation.name=invoke_agent 를 gen_ai.agent.name 별 count_over_time — 인시던트당 supervisor 4 + monitor/analysis/action 3 이 기준선(재개 시 +). 기준선 초과 = 재시도·루프",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 21
+      },
+      "datasource": {
+        "type": "tempo",
+        "uid": "tempo"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "tempo",
+            "uid": "tempo"
+          },
+          "queryType": "traceql",
+          "query": "{ span.gen_ai.operation.name = \"invoke_agent\" } | count_over_time() by (span.gen_ai.agent.name)",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "links": []
+}

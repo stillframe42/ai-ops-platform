@@ -1,0 +1,61 @@
+# 분석 보고서 품질 SLO Alert Rules (ADR-0019, docs/quality-evaluation.md §2 임계) — 데이터는 evaluation-service 가
+# OTel 로 내는 aiops_evaluation_* (Collector prometheus exporter, job=otel-collector).
+# kind=quality 라벨: control-plane 웹훅이 이 라벨을 보고 인시던트를 만들지 않고 Slack 만 보낸다 (대상이 target-app 장애가 아니라 분석 품질).
+# 수정 후 반영: curl -X POST http://localhost:9091/-/reload
+
+groups:
+  - name: aiops-quality
+    rules:
+      # SLI = Judge Faithfulness 평균 (_sum/_count), SLO = 1h 평균 ≥ 0.85 (골든셋 사람 라벨 평균과 같은 값 — 현 수준 유지).
+      # 데모 창 1h — 표본이 적어 흔들리지만 프롬프트 훼손 → 발화를 한 세션 안에서 볼 수 있다. 운영 판단은 7d 룰.
+      # 창 증가분 = "창 시작에 있던 시리즈는 increase()(리셋 처리) + 창 안에서 생긴 시리즈는 현재값(첫 관측 포함)".
+      # increase() 만 쓰면 창 안에서 처음 생긴 시리즈의 초기값을 세지 않아 평가가 드문 데모 창(1h)에서 분모가 0 이 되고,
+      # "현재 합 − 창 시작 합" 만 쓰면 재기동으로 인스턴스 라벨이 바뀐 옛 시리즈가 음수를 만든다 (2026-09-13 실측 둘 다)
+      - alert: AiopsFaithfulnessLow
+        expr: |
+          ((sum(increase(aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"}[1h]) and (aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"} offset 1h)) + sum(aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"} unless (aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"} offset 1h))) or sum(increase(aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"}[1h]) and (aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"} offset 1h)) or sum(aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"} unless (aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"} offset 1h)))
+          /
+          ((sum(increase(aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"}[1h]) and (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} offset 1h)) + sum(aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} offset 1h))) or sum(increase(aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"}[1h]) and (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} offset 1h)) or sum(aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} offset 1h)))
+          < 0.85
+        for: 5m
+        labels:
+          severity: warning
+          kind: quality
+        annotations:
+          summary: "분석 보고서 Faithfulness 1h 평균 SLO 미달 (< 0.85)"
+          description: "1h 평균 {{ $value | printf \"%.2f\" }} — 분석 프롬프트 버전(aiops_prompt_version)·모델 변경을 먼저 확인. 표본은 리뷰 큐 pending_review"
+
+      # 운영 창 7d — 오차 예산 판단용. 표본 10건 미만이면 판정하지 않는다 — 데모 평가 2~3건이 7일 내내 발화·30분마다 재통지된 실측(2026-09-14)
+      - alert: AiopsFaithfulnessLow7d
+        expr: |
+          ((sum(increase(aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"}[7d]) and (aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"} offset 7d)) + sum(aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"} unless (aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"} offset 7d))) or sum(increase(aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"}[7d]) and (aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"} offset 7d)) or sum(aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"} unless (aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness"} offset 7d)))
+          /
+          ((sum(increase(aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"}[7d]) and (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} offset 7d)) + sum(aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} offset 7d))) or sum(increase(aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"}[7d]) and (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} offset 7d)) or sum(aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} offset 7d)))
+          < 0.85
+          and
+          ((sum(increase(aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"}[7d]) and (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} offset 7d)) + sum(aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} offset 7d))) or sum(increase(aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"}[7d]) and (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} offset 7d)) or sum(aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness"} offset 7d))) >= 10
+        for: 1h
+        labels:
+          severity: warning
+          kind: quality
+        annotations:
+          summary: "분석 보고서 Faithfulness 7d 평균 SLO 미달 (< 0.85)"
+          description: "7d 평균 {{ $value | printf \"%.2f\" }} — 계통 변화. 실패 유형 분포(aiops_evaluation_verdicts_total)로 개선 후보를 고른다"
+
+      # 측정기 자체의 건강 — Judge 호출 실패(게이트웨이 거부·타임아웃·응답 파싱 실패)가 20% 를 넘으면 점수가 비는 것이라 SLO 판정이 무의미
+      - alert: AiopsJudgeErrorRate
+        expr: |
+          (
+            ((sum(increase(aiops_evaluation_judge_calls_total{aiops_evaluation_judge_outcome="error"}[1h]) and (aiops_evaluation_judge_calls_total{aiops_evaluation_judge_outcome="error"} offset 1h)) + sum(aiops_evaluation_judge_calls_total{aiops_evaluation_judge_outcome="error"} unless (aiops_evaluation_judge_calls_total{aiops_evaluation_judge_outcome="error"} offset 1h))) or sum(increase(aiops_evaluation_judge_calls_total{aiops_evaluation_judge_outcome="error"}[1h]) and (aiops_evaluation_judge_calls_total{aiops_evaluation_judge_outcome="error"} offset 1h)) or sum(aiops_evaluation_judge_calls_total{aiops_evaluation_judge_outcome="error"} unless (aiops_evaluation_judge_calls_total{aiops_evaluation_judge_outcome="error"} offset 1h)))
+            /
+            ((sum(increase(aiops_evaluation_judge_calls_total[1h]) and (aiops_evaluation_judge_calls_total offset 1h)) + sum(aiops_evaluation_judge_calls_total unless (aiops_evaluation_judge_calls_total offset 1h))) or sum(increase(aiops_evaluation_judge_calls_total[1h]) and (aiops_evaluation_judge_calls_total offset 1h)) or sum(aiops_evaluation_judge_calls_total unless (aiops_evaluation_judge_calls_total offset 1h)))
+          ) > 0.2
+          and
+          ((sum(increase(aiops_evaluation_judge_calls_total[1h]) and (aiops_evaluation_judge_calls_total offset 1h)) + sum(aiops_evaluation_judge_calls_total unless (aiops_evaluation_judge_calls_total offset 1h))) or sum(increase(aiops_evaluation_judge_calls_total[1h]) and (aiops_evaluation_judge_calls_total offset 1h)) or sum(aiops_evaluation_judge_calls_total unless (aiops_evaluation_judge_calls_total offset 1h))) >= 3
+        for: 10m
+        labels:
+          severity: warning
+          kind: quality
+        annotations:
+          summary: "Judge 호출 실패율 20% 초과"
+          description: "1h 실패율 {{ $value | humanizePercentage }} — error.type 라벨(http.4xx 는 게이트웨이 가드레일·예산, timeout, VerdictError) 확인"

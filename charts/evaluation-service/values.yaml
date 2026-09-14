@@ -1,0 +1,29 @@
+image:
+  repository: aiops/evaluation-service
+  tag: local
+
+# 응답 경로 밖의 컨슈머 1개 — 파티션 1(ops.analysis.results 는 3 이지만 평가 처리량은 인시던트 종결 빈도)라 replica 1 고정, KEDA 불필요
+replicas: 1
+
+# AUTH_CLIENT_SECRET (infra/k8s/create-secrets.sh) — 게이트웨이 호출용 OAuth 클라이언트, 프로바이더 키는 없다 (Judge 는 게이트웨이 경유)
+existingSecret: evaluation-service-secrets
+
+# K8s 서비스 주소 (compose environment 덮어쓰기의 대응물 — agent-service 차트와 같은 이름 체계)
+env:
+  llmBaseUrl: http://llm-gateway:8090/v1
+  prometheusUrl: http://monitoring-kube-prometheus-prometheus:9090
+  lokiUrl: http://loki:3100
+  authTokenUrl: http://auth-server:8091/oauth2/token
+  kafkaBootstrapServers: kafka:9092
+  # 트레이스·메트릭·로그(gen_ai.evaluation.result 이벤트) 전송 — Collector 주소만 안다. logs 파이프라인은 umbrella collector config
+  otelExporterOtlpEndpoint: http://otel-collector:4318
+  # 샘플링 프로파일 (docs/quality-evaluation.md §3) — 데모 클러스터는 전수 평가
+  evalSampleProfile: experiment
+  evalJudgePromptVersion: v2
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi

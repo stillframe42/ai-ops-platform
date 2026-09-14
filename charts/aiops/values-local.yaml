@@ -22,3 +22,9 @@ auth-server:
     repository: aiops/auth-server
     tag: local
   replicas: 1
+
+evaluation-service:
+  image:
+    repository: aiops/evaluation-service
+    tag: local
+  replicas: 1

@@ -26,6 +26,9 @@ dependencies:
 - name: auth-server
   repository: file://../auth-server
   version: 0.1.0
+- name: evaluation-service
+  repository: file://../evaluation-service
+  version: 0.1.0
 - name: kube-prometheus-stack
   repository: https://prometheus-community.github.io/helm-charts
   version: 88.2.0
@@ -41,5 +44,5 @@ dependencies:
 - name: tempo
   repository: https://grafana.github.io/helm-charts
   version: 1.24.4
-digest: sha256:66e64994c51c817ad392e75f24270154150a08d15c4eb8fc7a38991d91660372
-generated: "2026-09-03T15:32:56.750795+09:00"
+digest: sha256:2f637d838d07004a0e6c3553be2d5aa5e8d70901526051c14bad843974856495
+generated: "2026-09-13T20:01:28.510679+09:00"

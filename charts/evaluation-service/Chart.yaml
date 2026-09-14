@@ -1,0 +1,7 @@
+# evaluation-service 앱 차트 — 보고서 품질 평가 (샘플링 소비·시간창 재조회·LLM-as-a-Judge, ADR-0019)
+apiVersion: v2
+name: evaluation-service
+description: ops.analysis.results 샘플링 소비 → 시간창 재조회 → Judge(게이트웨이) → ops.evaluation.results
+type: application
+version: 0.1.0
+appVersion: "local"
