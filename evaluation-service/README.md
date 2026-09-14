@@ -45,7 +45,7 @@ uv run python scripts/judge_baseline.py --repeat 3 --out golden/judge-baseline.j
 | `evaluation/config/otel_evaluation.py` | 평가 텔레메트리 — `gen_ai.evaluation.result` 이벤트(로그 레코드 + 스팬 이벤트)·`aiops.evaluation.score` 히스토그램 |
 | `evaluation/config/` | 설정·로깅·OTel 3시그널(trace·metric·log — agent-service 이식, `service.name=evaluation-service`) |
 | `golden/` | 골든셋 — 라벨링 시트(`labeling/*.md`)·정답 정정(`ground-truth-overrides.json`)·`v1.jsonl`·Judge baseline 스냅샷(`judge-baseline.json`) (평가 자산, git 추적) |
-| `scripts/` | 시트 생성(`make_labeling_sheets.py`)·골든셋 조립(`build_golden.py`)·Judge 일관성 측정(`judge_baseline.py`) |
+| `scripts/` | 시트 생성(`make_labeling_sheets.py`)·골든셋 조립(`build_golden.py`)·Judge 일관성 측정(`judge_baseline.py`)·리뷰 승격(`promote_golden.py` — control-plane 리뷰 큐 `status=promoted` → 라벨링 시트 + 보고서·재조회 파일 생성, 이어서 `build_golden.py` 재생성). 원본은 시트 하나, `v1.jsonl` 은 매번 시트 전체에서 재생성 |
 | `tests/test_golden_regression.py` | `@pytest.mark.golden` — baseline 대비 회귀 (기본 제외) |
 
 ## 어휘

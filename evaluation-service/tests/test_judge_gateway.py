@@ -9,7 +9,15 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
-from evaluation.config.otel_evaluation import ATTR_DIMENSION, EVENT_NAME, METRIC_SCORE
+from evaluation.config.otel_evaluation import (
+    ATTR_DIMENSION,
+    ATTR_FAILURE_MODE,
+    ATTR_JUDGE_OUTCOME,
+    EVENT_NAME,
+    METRIC_JUDGE_CALLS,
+    METRIC_SCORE,
+    METRIC_VERDICTS,
+)
 from evaluation.config.settings import Settings
 from evaluation.judge_gateway import GatewayJudge
 from tests.conftest import LOG_EXPORTER, METRIC_READER
@@ -197,3 +205,32 @@ def test_evaluation_emits_log_events_and_score_histogram():
 def test_unknown_prompt_version_fails_fast():
     with pytest.raises(FileNotFoundError):
         GatewayJudge(_settings(), prompt_version="v9")
+
+
+def _count(name: str, **attrs) -> int:
+    """카운터 합 — 아직 기록이 없으면(리더가 None 반환) 0. 단독 실행(-k)과 전체 실행 모두에서 같은 기준."""
+    data = METRIC_READER.get_metrics_data()
+    if data is None:
+        return 0
+    found = [m for rm in data.resource_metrics for sm in rm.scope_metrics for m in sm.metrics if m.name == name]
+    if not found:
+        return 0
+    return sum(
+        int(p.value)
+        for p in found[-1].data.data_points
+        if all(p.attributes.get(k) == v for k, v in attrs.items())
+    )
+
+
+def test_counters_cover_verdict_failure_mode_and_judge_call_outcome():
+    """대시보드·SLO 룰의 축 — 판정 카운터는 failure_mode, 호출 카운터는 outcome(ok|error). 실패 호출은 판정 카운터를 올리지 않는다."""
+    ok_before = _count(METRIC_JUDGE_CALLS, **{ATTR_JUDGE_OUTCOME: "ok"})
+    err_before = _count(METRIC_JUDGE_CALLS, **{ATTR_JUDGE_OUTCOME: "error", "error.type": "VerdictError"})
+    verdicts_before = _count(METRIC_VERDICTS, **{ATTR_FAILURE_MODE: "D"})
+
+    assert _evaluate(Gateway(_verdict(f=1.0, a=1.0, s=0.4, mode="D"))) is not None
+    assert _evaluate(Gateway("판정 불가")) is None
+
+    assert _count(METRIC_JUDGE_CALLS, **{ATTR_JUDGE_OUTCOME: "ok"}) == ok_before + 1
+    assert _count(METRIC_JUDGE_CALLS, **{ATTR_JUDGE_OUTCOME: "error", "error.type": "VerdictError"}) == err_before + 1
+    assert _count(METRIC_VERDICTS, **{ATTR_FAILURE_MODE: "D"}) == verdicts_before + 1

@@ -32,6 +32,7 @@ from evaluation.config.otel_evaluation import (
     ATTR_OPERATION,
     LINK_REASON,
     record_evaluation,
+    record_judge_call,
 )
 from evaluation.config.otel_genai import GEN_AI_OPERATION_NAME, OPERATION_CHAT, incident_attributes
 from evaluation.config.settings import Settings
@@ -113,8 +114,10 @@ class GatewayJudge:
                 span.record_exception(exc)
                 span.set_status(Status(StatusCode.ERROR, _error_type(exc)))
                 span.set_attribute(ATTR_ERROR_TYPE, _error_type(exc))
+                record_judge_call(error_type=_error_type(exc))
                 logger.warning("Judge 판정 실패 — 건너뜀 (%s): %s", incident_id, exc)
                 return None
+            record_judge_call(error_type=None)
 
             evaluation = Evaluation(
                 incident_id=incident_id,

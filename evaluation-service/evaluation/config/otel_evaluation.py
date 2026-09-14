@@ -1,9 +1,11 @@
-"""평가 텔레메트리 — `gen_ai.evaluation.result` 이벤트 + `aiops.evaluation.score` 히스토그램 (docs/quality-evaluation.md §6).
+"""평가 텔레메트리 — `gen_ai.evaluation.result` 이벤트 + `aiops.evaluation.*` 메트릭 (docs/quality-evaluation.md §6).
 
 이벤트는 표준 어휘(semconv 0.65b0 `gen_ai.evaluation.*`)를 빌려 두 시그널로 낸다:
 - 로그 레코드(event_name) — 규격의 이벤트 정의 그대로. Collector logs 파이프라인 → Loki
 - 같은 속성의 스팬 이벤트 — Tempo trace 뷰에서 평가 스팬 안에 바로 보이게 (로그 시그널은 trace 화면 밖)
 메트릭은 표준에 평가 히스토그램이 없어 자체 네임스페이스 — 앵커 경계(0.0/0.4/0.7/1.0)를 버킷으로 고정한다.
+카운터 3종(판정·Judge 호출·샘플링)은 대시보드·SLO 룰이 Prometheus 만으로 실패 유형 분포·Judge 실패율·샘플링 커버리지를
+그리기 위한 것 — 같은 사실이 스팬 속성에도 있지만 Tempo 는 알림 룰의 데이터소스가 아니다.
 """
 
 from __future__ import annotations
@@ -24,6 +26,9 @@ ATTR_RESPONSE_ID = "gen_ai.response.id"
 LABEL_PASS, LABEL_FAIL = "pass", "fail"
 
 METRIC_SCORE = "aiops.evaluation.score"
+METRIC_VERDICTS = "aiops.evaluation.verdicts"  # 판정 1건 = 1 (failure_mode·severity·프롬프트 버전 축)
+METRIC_JUDGE_CALLS = "aiops.evaluation.judge.calls"  # Judge 호출 1회 = 1 (outcome ok|error, error.type)
+METRIC_SAMPLING = "aiops.evaluation.sampling"  # 소비 보고서 1건 = 1 (sampled·sampled_reason·profile)
 # 앵커 경계 = 버킷 경계 — `le="0.4"` 이하가 저품질(< 0.7 은 le="0.4" 버킷 누적), 대시보드·SLO 룰의 축
 SCORE_BUCKET_BOUNDARIES = (0.0, 0.4, 0.7, 1.0)
 
@@ -38,10 +43,17 @@ ATTR_FAILURE_MODE = "aiops.evaluation.failure_mode"
 ATTR_LOW_QUALITY = "aiops.evaluation.low_quality"
 ATTR_NORMALIZED = "aiops.evaluation.normalized"
 ATTR_LINK_REASON = "aiops.link.reason"
+ATTR_JUDGE_OUTCOME = "aiops.evaluation.judge_outcome"  # ok | error
+ATTR_ERROR_TYPE = "error.type"
+ATTR_SAMPLED = "aiops.evaluation.sampled"
+ATTR_SAMPLED_REASON = "aiops.evaluation.sampled_reason"
+ATTR_SAMPLE_PROFILE = "aiops.evaluation.sample_profile"
+OUTCOME_OK, OUTCOME_ERROR = "ok", "error"
 LINK_REASON = "evaluation-of"
 UNKNOWN_PROMPT_VERSION = "unknown"
 
 _histogram: metrics.Histogram | None = None
+_counters: dict[str, metrics.Counter] = {}
 
 
 def score_histogram() -> metrics.Histogram:
@@ -52,6 +64,27 @@ def score_histogram() -> metrics.Histogram:
             METRIC_SCORE, unit="", description="LLM-as-a-Judge 차원별 점수 (앵커 1.0/0.7/0.4/0.0)"
         )
     return _histogram
+
+
+def _counter(name: str, description: str) -> metrics.Counter:
+    if name not in _counters:
+        _counters[name] = metrics.get_meter("evaluation-service").create_counter(name, unit="", description=description)
+    return _counters[name]
+
+
+def record_judge_call(*, error_type: str | None) -> None:
+    """Judge 호출 1회 — 성공은 outcome=ok, 실패는 outcome=error + error.type (`AiopsJudgeErrorRate` 룰의 분자·분모)."""
+    attributes = {ATTR_JUDGE_OUTCOME: OUTCOME_ERROR if error_type else OUTCOME_OK}
+    if error_type:
+        attributes[ATTR_ERROR_TYPE] = error_type
+    _counter(METRIC_JUDGE_CALLS, "Judge 게이트웨이 호출 수 (outcome ok|error)").add(1, attributes)
+
+
+def record_sampling(*, sampled: bool, reason: str, profile: str) -> None:
+    """소비 보고서 1건의 샘플링 결정 — 커버리지(sampled 비율)·사유 분포 패널의 축."""
+    _counter(METRIC_SAMPLING, "소비 보고서 샘플링 결정 수").add(
+        1, {ATTR_SAMPLED: str(sampled).lower(), ATTR_SAMPLED_REASON: reason, ATTR_SAMPLE_PROFILE: profile}
+    )
 
 
 def score_label(score: float) -> str:
@@ -66,6 +99,9 @@ def record_evaluation(evaluation: Evaluation, *, severity: str | None, span: Spa
         ATTR_PROMPT_VERSION: evaluation.analysis_prompt_version or UNKNOWN_PROMPT_VERSION,
         ATTR_JUDGE_PROMPT_VERSION: evaluation.prompt_version,
     }
+    _counter(METRIC_VERDICTS, "Judge 판정 수 (failure_mode 축)").add(
+        1, {ATTR_FAILURE_MODE: evaluation.failure_mode, ATTR_LOW_QUALITY: str(evaluation.low_quality).lower(), **metric_attributes}
+    )
     for dimension, dimension_score in evaluation.scores.items():
         attributes = {
             ATTR_EVALUATION_NAME: dimension,

@@ -15,6 +15,7 @@ import logging
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 
+from evaluation.config.otel_evaluation import record_sampling
 from evaluation.config.otel_genai import incident_attributes
 from evaluation.config.settings import Settings
 from evaluation.events.consumer_loop import consume_batches, start_with_backoff
@@ -79,6 +80,7 @@ class EvaluationEventProcessor:
 
         decision = self.sampler.decide(report)
         self._record_decision(span, decision)
+        record_sampling(sampled=decision.sampled, reason=decision.reason, profile=decision.profile)
         logger.info(
             "샘플링 결정 — %s sampled=%s reason=%s rate=%.2f severity=%s profile=%s%s",
             incident_id,
