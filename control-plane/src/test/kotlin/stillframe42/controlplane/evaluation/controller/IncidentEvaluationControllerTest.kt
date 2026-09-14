@@ -1,6 +1,7 @@
 package stillframe42.controlplane.evaluation.controller
 
 import java.time.Instant
+import org.springframework.context.ApplicationEventPublisher
 import kotlin.test.Test
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath
@@ -9,7 +10,9 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import stillframe42.controlplane.evaluation.model.IncidentEvaluation
 import stillframe42.controlplane.evaluation.model.IncidentEvaluationDetail
 import stillframe42.controlplane.evaluation.model.IncidentEvaluationSummary
+import stillframe42.controlplane.evaluation.model.EvaluationReview
 import stillframe42.controlplane.evaluation.model.ReviewStatus
+import stillframe42.controlplane.evaluation.model.UpsertResult
 import stillframe42.controlplane.evaluation.repository.IncidentEvaluationRepository
 import stillframe42.controlplane.evaluation.service.IncidentEvaluationService
 
@@ -39,13 +42,16 @@ class IncidentEvaluationControllerTest {
     private val raw = """{"scores": {"faithfulness": {"score": 0.4, "reason": "이전 회차 OOM"}}, "failure_mode": "B"}"""
 
     private class FakeRepository(private val details: List<IncidentEvaluationDetail>) : IncidentEvaluationRepository {
-        override fun upsert(evaluation: IncidentEvaluation): Boolean = true
+        override fun upsert(evaluation: IncidentEvaluation): UpsertResult = UpsertResult(1, true)
         override fun findByIncidentId(incidentId: String): List<IncidentEvaluationDetail> =
             details.filter { it.summary.incidentId == incidentId }
+        override fun findById(id: Long): IncidentEvaluationDetail? = null
+        override fun findByReviewStatus(status: ReviewStatus, limit: Int): List<IncidentEvaluationDetail> = emptyList()
+        override fun applyReview(id: Long, review: EvaluationReview, reviewedAt: Instant): IncidentEvaluationDetail? = null
     }
 
     private fun mvc(repository: IncidentEvaluationRepository) =
-        MockMvcBuilders.standaloneSetup(IncidentEvaluationController(IncidentEvaluationService(repository))).build()
+        MockMvcBuilders.standaloneSetup(IncidentEvaluationController(IncidentEvaluationService(repository, ApplicationEventPublisher { }))).build()
 
     @Test
     fun `평가 목록은 snake_case 필드와 차원별 score·reason 객체를 반환한다`() {

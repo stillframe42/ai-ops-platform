@@ -10,7 +10,8 @@
   - `getAppConfig(app)` — 앱 런타임 설정 정보 (시드)
 - **OAuth2 리소스 서버** (2026-08-26, ADR-0016) — auth-server 발급 JWT 를 issuer JWKS 로 검증 (`aud` 에
   `control-plane` 필수), 스코프 인가: `/mcp` = `ops:read` / `GET /api/incidents/**` = `ops:read` /
-  `POST /api/incidents/{id}/approve|reject` = `ops:approve` / `POST /webhook/alertmanager` = 공유 시크릿 bearer
+  `POST /api/incidents/{id}/approve|reject` = `ops:approve` / `GET /api/evaluations/**` = `ops:read` /
+  `POST /api/evaluations/{id}/review` = `ops:approve` / `POST /webhook/alertmanager` = 공유 시크릿 bearer
   (`ALERTMANAGER_WEBHOOK_SECRET`, 필수) / actuator probe·스크레이프 permitAll. issuer 는 env `AUTH_ISSUER_URI`
   (기본 `http://localhost:8091`, docker 프로파일은 `http://auth-server:8091`). 무인증 상태는 없다 —
   MCP Inspector 등 수동 호출은 auth-server 에서 토큰을 발급받아 `--header "Authorization: Bearer <토큰>"`
@@ -39,6 +40,13 @@
 - **Slack 알림** (DAY 19) — 신규 보고서 저장 시 Incoming Webhook 발송 (P-등급·원인 가설·
   confidence·근거 3줄·제안 조치·상세 링크). env `SLACK_WEBHOOK_URL` 미설정이면 조용한 비활성
   (기동·발송 시점 로그로 진단 가능). 재수신(갱신)은 알림을 내지 않는다
+- **보고서 품질 평가 저장·리뷰 큐** (ADR-0019) — `ops.evaluation.results` 소비 → `incident_evaluations`
+  (Flyway V5·V6, 자연 키 `(incident_id, prompt_version, judge_model)` upsert) → 저품질(`< 0.7`)은
+  `review_status=pending_review` + Slack 검토 요청(AFTER_COMMIT·@Async). `GET /api/incidents/{id}/evaluations`,
+  `GET /api/evaluations/review-queue?status=&limit=`, `POST /api/evaluations/{id}/review`(`status`
+  reviewed|promoted|dismissed · `human_scores` · `failure_mode` · `note` · `reviewed_by` — 라벨 규약 위반 400,
+  promoted 는 종결이라 재검토 409). Alertmanager 알림 중 라벨 `kind=quality`(품질 SLO 룰)는 인시던트를
+  만들지 않고 Slack 만 보낸다 (발화·해소). Slack 발신 3종은 `slack.SlackWebhookClient` 하나를 공유한다
 - **조치 승인 도메인** (DAY 22, ADR-0005) — `ops.actions.pending` 소비 → `action_approvals`
   저장 (활성 pending 1건 멱등) → `POST /api/incidents/{id}/approve|reject` → 전이·감사 기록 +
   `ops.actions.decisions` 발행 (접수 실패 시 롤백 = 503). 404/409 규약은 `ApprovalController`
@@ -59,6 +67,21 @@
   트랜잭션 안 즉시 발행 (롤백 규약 유지). 미지원 조치(SCALE_OUT 등)는 명시적 실패로 기록
 - **종결 보고 확장** (DAY 24) — 보고서의 approval/recovery 를 파싱해 Slack 종결 알림에
   승인·조치 실행·회복 3줄 추가 (scenarios.md "수행 내용/수행 시각/회복 여부" 스펙)
+
+## 패키지 배치
+
+패키지는 **도메인** 단위다. 입구(`alert`)만 단계 이름이고, 도메인 사이는 애플리케이션 이벤트로만 잇는다 (직접 주입은 입구 → 도메인 한 방향).
+
+| 패키지 | 역할 |
+|---|---|
+| `alert` | Alertmanager 웹훅 입구 — 수신·파싱·분기만 (`AlertIngestService`: 인시던트 알림 → `incident`, `kind=quality` → `quality`) |
+| `incident` | 인시던트 생명주기 — id 발급·중복 병합(`IncidentRegistry`)·발행 이벤트 모양(`IncidentEvent`)·보고서 저장·조회 API·보고서 Slack |
+| `approval` | 조치 승인 (Slack 카드·API·타임아웃·실행) |
+| `evaluation` | 보고서 품질 평가 저장·리뷰 큐·검토 요청 Slack — 케이스(보고서 1건) 단위 |
+| `quality` | 품질 SLO 알림 Slack — 모집단(Prometheus 지표) 단위, `evaluation` 과 독립 |
+| `messaging` | Kafka 발행 기반 (`EventPublisher`·`KafkaEventPublisher`·`OpsTopics`) — 여러 도메인이 공유 |
+| `slack` | Slack Incoming Webhook 공통 클라이언트(`SlackWebhookClient` — URL·마스킹·감사·실패 정책) — `incident`·`evaluation`·`quality` 발신이 공유. 승인 카드의 Bot Token 경로(`approval/slack`)는 승인 전용이라 여기 두지 않는다 |
+| `gateway` · `ops` · `security` · `audit` · `config` · `common` | LLM 게이트웨이 클라이언트 · MCP 도구 · 인가·마스킹 · 감사 로그 · 프레임워크 배선 · JPA 공통 |
 
 ## 실행
 

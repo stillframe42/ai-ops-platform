@@ -26,6 +26,11 @@ import stillframe42.controlplane.alert.service.AlertIngestService
 import stillframe42.controlplane.approval.controller.ApprovalController
 import stillframe42.controlplane.approval.model.ApprovalDecisionOutcome
 import stillframe42.controlplane.approval.service.ActionApprovalService
+import stillframe42.controlplane.evaluation.controller.EvaluationReviewController
+import stillframe42.controlplane.evaluation.model.EvaluationReview
+import stillframe42.controlplane.evaluation.model.ReviewOutcome
+import stillframe42.controlplane.evaluation.model.ReviewStatus
+import stillframe42.controlplane.evaluation.service.IncidentEvaluationService
 import stillframe42.controlplane.incident.controller.IncidentQueryController
 import stillframe42.controlplane.incident.service.IncidentReportService
 
@@ -37,7 +42,12 @@ import stillframe42.controlplane.incident.service.IncidentReportService
  * 넣으므로 issuer 접근이 없다 — JwtDecoder 빈은 실 토큰 경로(무토큰·위조 토큰)에서만 호출되는 스텁.
  */
 @WebMvcTest(
-    controllers = [ApprovalController::class, IncidentQueryController::class, AlertmanagerWebhookController::class],
+    controllers = [
+        ApprovalController::class,
+        IncidentQueryController::class,
+        AlertmanagerWebhookController::class,
+        EvaluationReviewController::class,
+    ],
 )
 @Import(SecurityConfig::class, SecurityConfigTest.JwtStub::class)
 @TestPropertySource(properties = ["ops.webhook.shared-secret=test-webhook-secret"])
@@ -58,6 +68,9 @@ class SecurityConfigTest(@Autowired private val mvc: MockMvc) {
 
     @MockitoBean
     private lateinit var alertIngestService: AlertIngestService
+
+    @MockitoBean
+    private lateinit var incidentEvaluationService: IncidentEvaluationService
 
     private val incidentId = "inc-error-rate-surge-20260826031500-a1b2c3"
 
@@ -84,6 +97,32 @@ class SecurityConfigTest(@Autowired private val mvc: MockMvc) {
         // 404 = 인가를 지나 컨트롤러까지 도달했다는 증거 (서비스 스텁이 미존재로 응답)
         mvc.perform(post("/api/incidents/$incidentId/approve").with(adminToken()))
             .andExpect(status().isNotFound)
+    }
+
+    // --- 리뷰 API: 큐 조회는 ops:read, 검토 기록은 ops:approve ---
+
+    @Test
+    fun `리뷰 큐는 ops read 로 통과하고 검토 기록은 ops read 만으로는 403 이다`() {
+        // 큐 조회 스텁 불필요 — Mockito 기본 반환(빈 목록)으로 200
+
+        mvc.perform(get("/api/evaluations/review-queue").with(agentToken())).andExpect(status().isOk)
+        mvc.perform(
+            post("/api/evaluations/1/review").with(agentToken())
+                .contentType(MediaType.APPLICATION_JSON).content("""{"status": "dismissed"}"""),
+        ).andExpect(status().isForbidden)
+    }
+
+    @Test
+    fun `운영자 토큰(ops approve)으로 검토 기록은 인가를 통과한다`() {
+        // 매처 대신 실값 — Kotlin 비-null 파라미터에 any() 는 null 을 넘겨 호출 지점에서 깨진다
+        `when`(incidentEvaluationService.review(1L, EvaluationReview(ReviewStatus.DISMISSED, null, null, null, "api")))
+            .thenReturn(ReviewOutcome.NotFound)
+
+        // 404 = 인가를 지나 컨트롤러까지 도달했다는 증거 (승인 API 테스트와 같은 판정)
+        mvc.perform(
+            post("/api/evaluations/1/review").with(adminToken())
+                .contentType(MediaType.APPLICATION_JSON).content("""{"status": "dismissed"}"""),
+        ).andExpect(status().isNotFound)
     }
 
     // --- 조회 API·MCP: ops:read ---

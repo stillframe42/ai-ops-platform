@@ -1,0 +1,40 @@
+package stillframe42.controlplane.quality.notify
+
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Component
+import stillframe42.controlplane.slack.SlackWebhookClient
+
+
+import stillframe42.controlplane.quality.model.QualitySloAlert
+/**
+ * 품질 SLO 알림 → Slack. 발화·해소 모두 보낸다 — SLO 는 추세라 "언제 회복했나" 가 발화만큼 중요하다.
+ * 링크는 리뷰 큐 — 이 알림에 대응하는 사람의 첫 동작이 최근 저품질 케이스를 읽는 것이다.
+ */
+@Component
+class SlackQualitySloNotifier(
+    private val slackWebhookClient: SlackWebhookClient,
+    @param:Value("\${ops.report.base-url}") private val baseUrl: String,
+) : QualitySloNotifier {
+
+    override fun notify(alert: QualitySloAlert) {
+        slackWebhookClient.post(buildMessage(alert), alert.alertName, SOURCE, setOf(baseUrl))
+    }
+
+    fun buildMessage(alert: QualitySloAlert): String {
+        val firing = alert.status == "firing"
+        val lines = mutableListOf<String>()
+        lines += (if (firing) ":chart_with_downwards_trend: *[품질 SLO] " else ":white_check_mark: *[품질 SLO 해소] ") +
+            "${alert.alertName}*" + listOfNotNull(alert.severity, alert.cluster).takeIf { it.isNotEmpty() }?.joinToString(" · ", " (", ")").orEmpty()
+        alert.summary?.let { lines += "• $it" }
+        alert.description?.let { lines += "• $it" }
+        alert.startsAt?.let { lines += "• 시작: $it" }
+        if (firing) {
+            lines += "• 리뷰 큐: $baseUrl/api/evaluations/review-queue?status=pending_review"
+        }
+        return lines.joinToString("\n")
+    }
+
+    companion object {
+        private const val SOURCE = "slack-quality-alert"
+    }
+}

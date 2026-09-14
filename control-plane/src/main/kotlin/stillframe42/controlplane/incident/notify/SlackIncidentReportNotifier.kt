@@ -1,70 +1,25 @@
 package stillframe42.controlplane.incident.notify
 
-import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.http.MediaType
 import org.springframework.stereotype.Component
-import org.springframework.web.client.RestClient
-import stillframe42.controlplane.audit.AuditLog
 import stillframe42.controlplane.incident.model.IncidentReport
-import stillframe42.controlplane.security.SensitiveOutputMasker
-import tools.jackson.databind.json.JsonMapper
 
+
+import stillframe42.controlplane.slack.SlackWebhookClient
 /**
- * Slack Incoming Webhook 알림 (DAY 19) — URL 미설정이면 조용한 비활성 (Langfuse 키-게이트 관례).
+ * 보고서 종결 알림 (DAY 19) — 전송·마스킹·비활성 분기는 SlackWebhookClient, 여기는 메시지 포맷만.
  * 메시지 포맷: P-등급·원인 가설·confidence·근거 3줄·제안 조치·상세 링크 —
  * human-in-the-loop 승인 요청 포맷의 원형이기도 하다 (ADR-0006).
- * 타임아웃은 Boot 중앙 설정(spring.http.clients.*) — 주입 빌더가 반영한다.
  */
 @Component
 class SlackIncidentReportNotifier(
-    @Value("\${ops.slack.webhook-url}") private val webhookUrl: String,
-    @Value("\${ops.report.base-url}") private val baseUrl: String,
-    restClientBuilder: RestClient.Builder,
+    private val slackWebhookClient: SlackWebhookClient,
+    @param:Value("\${ops.report.base-url}") private val baseUrl: String,
 ) : IncidentReportNotifier {
 
-    private val logger = LoggerFactory.getLogger(javaClass)
-
-    private val restClient = restClientBuilder.build()
-
-    private val mapper = JsonMapper.builder().build()
-
-    init {
-        // 기동 시점 1회 진단 로그 — "왜 Slack 이 안 오지" 를 로그로 확인 가능하게 (URL 값은 미출력)
-        logger.info("Slack 알림 {}", if (webhookUrl.isBlank()) "비활성 — SLACK_WEBHOOK_URL 미설정" else "활성")
-    }
-
     override fun notify(report: IncidentReport) {
-        if (webhookUrl.isBlank()) {
-            logger.info("Slack 알림 비활성 — {} 발송 생략", report.incidentId)
-            return
-        }
-        // 발송 직전 마스킹 — 외부 채널이라 시크릿·내부 URL 을 싣지 않는다. 상세 링크(baseUrl)는 의도된 내부 링크라 예외
-        val message = SensitiveOutputMasker.mask(buildMessage(report), allowedUrlPrefixes = setOf(baseUrl))
-        if (message.hits.isNotEmpty()) {
-            AuditLog.record(
-                type = "output_masked",
-                fields = mapOf(
-                    "incident_id" to report.incidentId,
-                    "channel" to "slack-notify",
-                    "hits" to message.hits.joinToString(","),
-                ),
-                message = "Slack 발송 전 마스킹 — ${message.hits} (${report.incidentId})",
-            )
-        }
-        // 전송 실패는 로그만 — 알림 실패가 저장·오프셋 커밋을 되돌리면 안 된다 (IncidentReportNotifier 계약)
-        runCatching {
-            restClient.post()
-                .uri(webhookUrl)
-                .contentType(MediaType.APPLICATION_JSON)
-                .body(mapper.writeValueAsString(mapOf("text" to message.text)))
-                .retrieve()
-                .toBodilessEntity()
-        }.onFailure {
-            logger.warn("Slack 전송 실패 — {}: {}", report.incidentId, it.message)
-        }.onSuccess {
-            logger.info("Slack 알림 발송 — {}", report.incidentId)
-        }
+        // 상세 링크(baseUrl)는 의도된 내부 링크라 마스킹 예외
+        slackWebhookClient.post(buildMessage(report), report.incidentId, SOURCE, setOf(baseUrl))
     }
 
     /** mrkdwn 텍스트 조립 — 분석 실패(partial, analysis 없음)도 강등 문구로 발송한다 (침묵 금지). */
@@ -105,5 +60,6 @@ class SlackIncidentReportNotifier(
     companion object {
         /** 근거는 3줄까지 — 알림은 요약, 전체는 상세 링크가 담당 (weekly-plan 포맷 스펙). */
         private const val EVIDENCE_LINES = 3
+        private const val SOURCE = "slack-notify"
     }
 }

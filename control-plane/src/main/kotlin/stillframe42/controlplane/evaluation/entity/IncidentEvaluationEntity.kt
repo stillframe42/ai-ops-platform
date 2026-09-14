@@ -10,14 +10,17 @@ import java.time.Instant
 import org.hibernate.annotations.JdbcTypeCode
 import org.hibernate.type.SqlTypes
 import stillframe42.controlplane.common.jpa.AuditedEntity
+import stillframe42.controlplane.evaluation.model.EvaluationReview
 import stillframe42.controlplane.evaluation.model.IncidentEvaluation
 import stillframe42.controlplane.evaluation.model.IncidentEvaluationSummary
 import stillframe42.controlplane.evaluation.model.ReviewStatus
+import tools.jackson.core.type.TypeReference
+import tools.jackson.databind.json.JsonMapper
 
 /**
- * incident_evaluations 영속 모델 — 스키마 소유는 Flyway V5, 여기는 validate 만 (IncidentReportEntity 와 같은 관례).
+ * incident_evaluations 영속 모델 — 스키마 소유는 Flyway V5·V6, 여기는 validate 만 (IncidentReportEntity 와 같은 관례).
  * 자연 키 (incident_id, prompt_version, judge_model) 의 신규/갱신 판정은 저장소가 선조회로 한다.
- * 재수신 갱신은 점수·판정·원문만 — review_status 는 사람 검토 상태라 재전달이 덮어쓰지 않는다.
+ * 재수신 갱신은 점수·판정·원문만 — review_status 와 사람 검토 필드는 재전달이 덮어쓰지 않는다.
  */
 @Entity
 @Table(name = "incident_evaluations")
@@ -67,6 +70,23 @@ class IncidentEvaluationEntity(
 
     @Column(name = "evaluated_at", nullable = false)
     var evaluatedAt: Instant,
+
+    /** 사람 점수 3차원 — jsonb 문자열. 골든셋 human_scores 와 같은 형태라 승격 시 그대로 옮긴다 */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "human_scores")
+    var humanScores: String? = null,
+
+    @Column(name = "human_failure_mode")
+    var humanFailureMode: String? = null,
+
+    @Column(name = "review_note")
+    var reviewNote: String? = null,
+
+    @Column(name = "reviewed_by")
+    var reviewedBy: String? = null,
+
+    @Column(name = "reviewed_at")
+    var reviewedAt: Instant? = null,
 ) : AuditedEntity() {
 
     fun applyUpdate(evaluation: IncidentEvaluation) {
@@ -79,6 +99,15 @@ class IncidentEvaluationEntity(
         evidenceAvailable = evaluation.evidenceAvailable
         this.evaluation = evaluation.raw
         evaluatedAt = evaluation.evaluatedAt
+    }
+
+    fun applyReview(review: EvaluationReview, now: Instant) {
+        reviewStatus = review.status.wire
+        humanScores = review.humanScores?.let { mapper.writeValueAsString(it) }
+        humanFailureMode = review.failureMode
+        reviewNote = review.note
+        reviewedBy = review.reviewedBy
+        reviewedAt = now
     }
 
     fun toSummary() = IncidentEvaluationSummary(
@@ -98,9 +127,17 @@ class IncidentEvaluationEntity(
         evaluatedAt = evaluatedAt,
         createdAt = createdAt!!,
         updatedAt = updatedAt!!,
+        humanScores = humanScores?.let { mapper.readValue(it, SCORES_TYPE) },
+        humanFailureMode = humanFailureMode,
+        reviewNote = reviewNote,
+        reviewedBy = reviewedBy,
+        reviewedAt = reviewedAt,
     )
 
     companion object {
+        private val mapper = JsonMapper.builder().build()
+        private val SCORES_TYPE = object : TypeReference<Map<String, Double>>() {}
+
         fun from(evaluation: IncidentEvaluation) = IncidentEvaluationEntity(
             incidentId = evaluation.incidentId,
             promptVersion = evaluation.promptVersion,

@@ -9,6 +9,8 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import stillframe42.controlplane.messaging.EventPublisher
 import stillframe42.controlplane.messaging.OpsTopics
+import stillframe42.controlplane.quality.model.QualitySloAlert
+import stillframe42.controlplane.quality.notify.QualitySloNotifier
 import tools.jackson.databind.json.JsonMapper
 
 
@@ -37,8 +39,34 @@ class AlertIngestServiceTest {
     private val mapper = JsonMapper.builder().build()
     private val clock = Clock.fixed(Instant.parse("2026-07-25T09:30:00Z"), ZoneOffset.UTC)
 
-    private fun service(publisher: RecordingPublisher) =
-        AlertIngestService(IncidentRegistry(clock), publisher, clock)
+    private class RecordingQualityNotifier : QualitySloNotifier {
+        val notified = mutableListOf<QualitySloAlert>()
+        override fun notify(alert: QualitySloAlert) {
+            notified += alert
+        }
+    }
+
+    private fun service(publisher: RecordingPublisher, qualityNotifier: QualitySloNotifier = RecordingQualityNotifier()) =
+        AlertIngestService(IncidentRegistry(clock), publisher, qualityNotifier, clock)
+
+    private fun qualityPayload(status: String = "firing") = """
+        {
+          "version": "4",
+          "groupKey": "{}:{alertname=\"AiopsFaithfulnessLow\"}",
+          "status": "$status",
+          "receiver": "control-plane-webhook",
+          "alerts": [
+            {
+              "status": "$status",
+              "labels": {"alertname": "AiopsFaithfulnessLow", "severity": "warning", "kind": "quality", "cluster": "compose"},
+              "annotations": {"summary": "Faithfulness 1h 평균 0.62 < 0.85", "description": "분석 프롬프트 변경 확인"},
+              "startsAt": "2026-09-13T09:28:00Z",
+              "endsAt": "0001-01-01T00:00:00Z",
+              "fingerprint": "0af3e1c2d4b5a697"
+            }
+          ]
+        }
+    """.trimIndent()
 
     private fun firingPayload(
         alertname: String = "TargetAppHighErrorRate",
@@ -124,6 +152,23 @@ class AlertIngestServiceTest {
 
         assertEquals(1, publisher.onTopic(OpsTopics.ALERTS_RAW).size)
         assertEquals(0, publisher.onTopic(OpsTopics.INCIDENTS).size)
+    }
+
+    @Test
+    fun `kind=quality 알림은 인시던트화 없이 Slack 알림만 - 발화·해소 모두`() {
+        val publisher = RecordingPublisher()
+        val qualityNotifier = RecordingQualityNotifier()
+        val service = service(publisher, qualityNotifier)
+
+        service.ingest(qualityPayload())
+        service.ingest(qualityPayload(status = "resolved"))
+
+        assertEquals(2, publisher.onTopic(OpsTopics.ALERTS_RAW).size)
+        assertEquals(0, publisher.onTopic(OpsTopics.INCIDENTS).size)
+        assertEquals(listOf("firing", "resolved"), qualityNotifier.notified.map { it.status })
+        assertEquals("AiopsFaithfulnessLow", qualityNotifier.notified.first().alertName)
+        assertEquals("Faithfulness 1h 평균 0.62 < 0.85", qualityNotifier.notified.first().summary)
+        assertEquals("compose", qualityNotifier.notified.first().cluster)
     }
 
     @Test

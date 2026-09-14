@@ -9,6 +9,8 @@ import org.springframework.web.client.RestClient
 import stillframe42.controlplane.approval.model.ActionExecution
 import stillframe42.controlplane.incident.model.IncidentReport
 
+
+import stillframe42.controlplane.slack.SlackWebhookClient
 /**
  * 메시지 포맷 규약 검증 — HTTP 전송은 하지 않는다 (URL 미설정 경로 포함).
  * 포맷 스펙: P-등급·원인 가설·confidence·근거 3줄·제안 조치·상세 링크.
@@ -16,7 +18,7 @@ import stillframe42.controlplane.incident.model.IncidentReport
 class SlackIncidentReportNotifierTest {
 
     private fun notifier(webhookUrl: String = "") =
-        SlackIncidentReportNotifier(webhookUrl = webhookUrl, baseUrl = "http://localhost:8081", restClientBuilder = RestClient.builder())
+        SlackIncidentReportNotifier(SlackWebhookClient(webhookUrl, RestClient.builder()), baseUrl = "http://localhost:8081")
 
     private fun completedReport() = IncidentReport(
         incidentId = "inc-error-rate-surge-20260727031500-a1b2c3",

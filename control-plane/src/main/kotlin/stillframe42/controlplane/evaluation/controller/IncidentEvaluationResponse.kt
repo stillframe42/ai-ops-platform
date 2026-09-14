@@ -19,6 +19,11 @@ data class IncidentEvaluationResponse(
     @JsonProperty("evaluated_at") val evaluatedAt: String,
     @JsonProperty("created_at") val createdAt: String,
     @JsonProperty("updated_at") val updatedAt: String,
+    @JsonProperty("human_scores") val humanScores: Map<String, Double>?,
+    @JsonProperty("human_failure_mode") val humanFailureMode: String?,
+    @JsonProperty("review_note") val reviewNote: String?,
+    @JsonProperty("reviewed_by") val reviewedBy: String?,
+    @JsonProperty("reviewed_at") val reviewedAt: String?,
 ) {
     companion object {
         fun from(detail: IncidentEvaluationDetail, scores: JsonNode) = IncidentEvaluationResponse(
@@ -35,6 +40,11 @@ data class IncidentEvaluationResponse(
             evaluatedAt = detail.summary.evaluatedAt.toString(),
             createdAt = detail.summary.createdAt.toString(),
             updatedAt = detail.summary.updatedAt.toString(),
+            humanScores = detail.summary.humanScores,
+            humanFailureMode = detail.summary.humanFailureMode,
+            reviewNote = detail.summary.reviewNote,
+            reviewedBy = detail.summary.reviewedBy,
+            reviewedAt = detail.summary.reviewedAt?.toString(),
         )
     }
 }

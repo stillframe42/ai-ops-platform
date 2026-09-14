@@ -11,6 +11,7 @@ import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
 import stillframe42.controlplane.messaging.EventPublisher
 import stillframe42.controlplane.messaging.OpsTopics
+import stillframe42.controlplane.quality.notify.QualitySloNotifier
 import stillframe42.controlplane.alert.service.AlertIngestService
 import stillframe42.controlplane.incident.service.IncidentRegistry
 
@@ -35,7 +36,7 @@ class AlertmanagerWebhookControllerTest {
     fun `webhook 수신은 202 를 반환하고 본문을 수집 서비스로 넘긴다`() {
         val publisher = RecordingPublisher()
         val controller =
-            AlertmanagerWebhookController(AlertIngestService(IncidentRegistry(clock), publisher, clock))
+            AlertmanagerWebhookController(AlertIngestService(IncidentRegistry(clock), publisher, QualitySloNotifier { }, clock))
         val mvc = MockMvcBuilders.standaloneSetup(controller).build()
 
         mvc.perform(

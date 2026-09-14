@@ -8,6 +8,8 @@ import stillframe42.controlplane.messaging.EventPublisher
 import stillframe42.controlplane.incident.event.IncidentEvent
 import stillframe42.controlplane.incident.event.IncidentStatus
 import stillframe42.controlplane.messaging.OpsTopics
+import stillframe42.controlplane.quality.model.QualitySloAlert
+import stillframe42.controlplane.quality.notify.QualitySloNotifier
 import tools.jackson.databind.JsonNode
 import tools.jackson.databind.json.JsonMapper
 
@@ -21,11 +23,14 @@ import stillframe42.controlplane.incident.service.IncidentRegistry
  *   매핑 없는 alert 는 raw 보존만 하고 건너뛴다
  * - 반복 발화는 IncidentRegistry 병합 — ops.incidents 는 "새 인시던트" 스트림으로 유지
  * - resolved 는 활성 해제만 — 해소 이벤트 발행은 소비처가 생길 때 재검토
+ * - `kind=quality` 라벨(품질 SLO 룰)은 인시던트화하지 않고 Slack 만 — 대상이 target-app 이 아니라 분석 품질이라
+ *   에이전트를 돌릴 일이 없다. raw 보존은 다른 alert 와 같다
  */
 @Service
 class AlertIngestService(
     private val incidentRegistry: IncidentRegistry,
     private val eventPublisher: EventPublisher,
+    private val qualitySloNotifier: QualitySloNotifier,
     private val clock: Clock = Clock.systemUTC(),
 ) {
 
@@ -47,6 +52,12 @@ class AlertIngestService(
     }
 
     private fun handleAlert(alert: JsonNode) {
+        if (QualitySloAlert.isQuality(alert)) {
+            val qualitySloAlert = QualitySloAlert.from(alert) ?: return
+            logger.info("품질 알림 {} — {} (인시던트화 없음, Slack 만)", qualitySloAlert.status, qualitySloAlert.alertName)
+            qualitySloNotifier.notify(qualitySloAlert)
+            return
+        }
         val fingerprint = alert.path("fingerprint").stringOrNull() ?: run {
             logger.warn("fingerprint 없는 alert — 멱등 처리 불가로 건너뜀")
             return
