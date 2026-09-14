@@ -5,7 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import stillframe42.controlplane.incident.model.IncidentReport
 
-/** 이벤트 → Notifier 인계 규약만 검증 — AFTER_COMMIT 시점은 스프링 컨텍스트 몫 (E2E 확인). */
+/** 이벤트 → IncidentReportNotifier 인계 규약만 검증 — AFTER_COMMIT 시점은 스프링 컨텍스트 몫 (E2E 확인). */
 class IncidentReportStoredListenerTest {
 
     @Test

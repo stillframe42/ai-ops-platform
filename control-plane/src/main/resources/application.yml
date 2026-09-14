@@ -28,7 +28,7 @@ spring:
             # issuer-uri 대신 token-uri — issuer 로 두면 기동 시 메타데이터 조회로 auth-server 에 기동 순서가 결합된다
             token-uri: ${AUTH_TOKEN_URL:http://localhost:8091/oauth2/token}
 
-  # 주입 RestClient.Builder 공통 타임아웃 (8/19 — SlackNotifier·TargetAppActionExecutor 의
+  # 주입 RestClient.Builder 공통 타임아웃 (8/19 — SlackIncidentReportNotifier·TargetAppActionExecutor 의
   # 사용처별 requestFactory 조립 중복 제거. Boot 4 현행 키는 clients 복수형)
   http:
     clients:

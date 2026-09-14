@@ -1,4 +1,4 @@
-package stillframe42.controlplane.alert.event
+package stillframe42.controlplane.messaging
 
 import org.slf4j.LoggerFactory
 import org.springframework.kafka.core.KafkaTemplate

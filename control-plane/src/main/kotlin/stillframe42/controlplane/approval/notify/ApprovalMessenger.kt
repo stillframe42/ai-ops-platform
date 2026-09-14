@@ -6,7 +6,7 @@ import stillframe42.controlplane.approval.model.SlackMessageRef
 
 /**
  * 승인 카드 발송 경계 (DAY 23) — 구현(Slack App API)과 테스트 fake 의 주입 지점
- * (Notifier 와 같은 목적, 다만 발송 결과 좌표가 필요해 fun interface 가 아닌 3-메서드).
+ * (IncidentReportNotifier 와 같은 목적, 다만 발송 결과 좌표가 필요해 fun interface 가 아닌 3-메서드).
  * 계약: 어떤 메서드도 예외를 던지지 않는다 — 발송 실패가 저장·전이를 되돌리면 안 된다.
  */
 interface ApprovalMessenger {

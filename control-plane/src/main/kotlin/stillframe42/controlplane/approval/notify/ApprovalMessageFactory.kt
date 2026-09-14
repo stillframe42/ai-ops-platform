@@ -18,7 +18,7 @@ import stillframe42.controlplane.security.SensitiveOutputMasker
 
 /**
  * 승인 카드 메시지 조립 (DAY 23, ADR-0006 카드 내용 스펙) — 순수 함수만: HTTP 무의존이라
- * 블록 구조를 그대로 단위 테스트한다 (SlackNotifier.buildMessage 와 같은 경계 전략).
+ * 블록 구조를 그대로 단위 테스트한다 (SlackIncidentReportNotifier.buildMessage 와 같은 경계 전략).
  * 본문 요약은 DAY 19 알림 포맷의 확장 — 기존 알림 내용 + 조치안·사유 + [승인][거부] 버튼.
  */
 object ApprovalMessageFactory {
@@ -96,7 +96,7 @@ object ApprovalMessageFactory {
         lines += ":vertical_traffic_light: *[${request.riskLevel ?: "P?"}] " +
             "${request.scenario ?: "unknown"} 조치 승인 요청*"
         lines += "• 인시던트: `${request.incidentId}`" + (request.alertName?.let { " ($it)" } ?: "")
-        // LLM 생성 필드만 마스킹 — 외부(Slack) 발송 직전 조립 지점 (SlackNotifier 와 같은 출력 가드레일)
+        // LLM 생성 필드만 마스킹 — 외부(Slack) 발송 직전 조립 지점 (SlackIncidentReportNotifier 와 같은 출력 가드레일)
         lines += "• 원인 가설: ${request.rootCauseHypothesis?.maskedForSlack() ?: "-"}"
         lines += "• confidence: ${request.confidence?.let { "%.2f".format(it) } ?: "-"}"
         lines += "• 조치안: ${request.actions.ifEmpty { listOf(request.actionType) }.joinToString(", ") { it.maskedForSlack() }}"

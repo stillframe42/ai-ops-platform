@@ -7,10 +7,12 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
-import stillframe42.controlplane.alert.event.EventPublisher
-import stillframe42.controlplane.alert.event.OpsTopics
+import stillframe42.controlplane.messaging.EventPublisher
+import stillframe42.controlplane.messaging.OpsTopics
 import tools.jackson.databind.json.JsonMapper
 
+
+import stillframe42.controlplane.incident.service.IncidentRegistry
 /**
  * 단위 테스트 경계 — Kafka 무의존. 발행 기록용 fake 로 "무엇이 어느 토픽에 어떤 key 로
  * 실렸는가"(와이어 규약)만 검증한다. 실제 브로커 왕복은 E2E(확인 기준)에서.

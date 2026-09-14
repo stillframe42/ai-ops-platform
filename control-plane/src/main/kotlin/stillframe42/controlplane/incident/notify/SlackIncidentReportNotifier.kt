@@ -17,11 +17,11 @@ import tools.jackson.databind.json.JsonMapper
  * 타임아웃은 Boot 중앙 설정(spring.http.clients.*) — 주입 빌더가 반영한다.
  */
 @Component
-class SlackNotifier(
+class SlackIncidentReportNotifier(
     @Value("\${ops.slack.webhook-url}") private val webhookUrl: String,
     @Value("\${ops.report.base-url}") private val baseUrl: String,
     restClientBuilder: RestClient.Builder,
-) : Notifier {
+) : IncidentReportNotifier {
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
@@ -52,7 +52,7 @@ class SlackNotifier(
                 message = "Slack 발송 전 마스킹 — ${message.hits} (${report.incidentId})",
             )
         }
-        // 전송 실패는 로그만 — 알림 실패가 저장·오프셋 커밋을 되돌리면 안 된다 (Notifier 계약)
+        // 전송 실패는 로그만 — 알림 실패가 저장·오프셋 커밋을 되돌리면 안 된다 (IncidentReportNotifier 계약)
         runCatching {
             restClient.post()
                 .uri(webhookUrl)

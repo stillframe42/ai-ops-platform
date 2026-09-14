@@ -9,10 +9,10 @@ import org.springframework.http.MediaType
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers.status
 import org.springframework.test.web.servlet.setup.MockMvcBuilders
-import stillframe42.controlplane.alert.event.EventPublisher
-import stillframe42.controlplane.alert.event.OpsTopics
+import stillframe42.controlplane.messaging.EventPublisher
+import stillframe42.controlplane.messaging.OpsTopics
 import stillframe42.controlplane.alert.service.AlertIngestService
-import stillframe42.controlplane.alert.service.IncidentRegistry
+import stillframe42.controlplane.incident.service.IncidentRegistry
 
 /**
  * 단위 테스트 경계 — standalone MockMvc (서블릿 컨테이너·Kafka 무의존).

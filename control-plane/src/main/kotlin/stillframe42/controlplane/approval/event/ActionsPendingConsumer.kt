@@ -2,7 +2,7 @@ package stillframe42.controlplane.approval.event
 
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.stereotype.Component
-import stillframe42.controlplane.alert.event.OpsTopics
+import stillframe42.controlplane.messaging.OpsTopics
 import stillframe42.controlplane.approval.service.ActionApprovalService
 
 /**

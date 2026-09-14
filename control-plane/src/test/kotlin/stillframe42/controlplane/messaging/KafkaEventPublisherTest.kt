@@ -1,4 +1,4 @@
-package stillframe42.controlplane.alert.event
+package stillframe42.controlplane.messaging
 
 import java.util.concurrent.CompletableFuture
 import kotlin.test.assertFalse

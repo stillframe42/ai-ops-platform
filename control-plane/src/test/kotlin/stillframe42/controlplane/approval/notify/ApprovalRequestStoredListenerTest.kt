@@ -4,7 +4,7 @@ import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import org.springframework.context.ApplicationEventPublisher
-import stillframe42.controlplane.alert.event.EventPublisher
+import stillframe42.controlplane.messaging.EventPublisher
 import stillframe42.controlplane.approval.model.ActionApprovalRequest
 import stillframe42.controlplane.approval.model.ApprovalCard
 import stillframe42.controlplane.approval.model.PendingApproval

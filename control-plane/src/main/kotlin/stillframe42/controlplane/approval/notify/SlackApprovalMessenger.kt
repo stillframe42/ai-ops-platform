@@ -11,7 +11,7 @@ import stillframe42.controlplane.approval.model.SlackMessageRef
 
 /**
  * ApprovalMessenger 의 Slack App API 구현 (DAY 23, ADR-0006) — 기존 알림(Incoming Webhook,
- * SlackNotifier)과 발신 경로가 다르다: 버튼·chat.update·스레드는 Bot Token 의 Web API 만 가능.
+ * SlackIncidentReportNotifier)과 발신 경로가 다르다: 버튼·chat.update·스레드는 Bot Token 의 Web API 만 가능.
  * 토큰·채널 미설정이면 조용한 비활성 (Langfuse 키-게이트 관례), 전송 실패는 로그만 (계약).
  */
 @Component

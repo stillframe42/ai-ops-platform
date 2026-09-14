@@ -5,8 +5,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
-import stillframe42.controlplane.alert.event.EventPublisher
-import stillframe42.controlplane.alert.event.OpsTopics
+import stillframe42.controlplane.messaging.EventPublisher
+import stillframe42.controlplane.messaging.OpsTopics
 import stillframe42.controlplane.approval.model.ActionApprovalRequest
 import stillframe42.controlplane.approval.model.ActionExecution
 import stillframe42.controlplane.approval.model.ApprovalDecisionOutcome

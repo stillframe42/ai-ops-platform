@@ -1,4 +1,4 @@
-package stillframe42.controlplane.alert.event
+package stillframe42.controlplane.messaging
 
 /**
  * 이벤트 발행 경계 — 수집 로직이 KafkaTemplate 에 직접 결합하지 않게 분리한다.

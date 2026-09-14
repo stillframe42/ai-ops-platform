@@ -17,7 +17,7 @@ import stillframe42.controlplane.approval.model.ApprovalStatus
 
 /**
  * 승인 카드 조립 계약 — HTTP 무의존 순수 함수라 블록 구조를 그대로 검증한다
- * (SlackNotifier buildMessage 테스트와 같은 경계 전략). 버튼 value=incident_id 가
+ * (SlackIncidentReportNotifier buildMessage 테스트와 같은 경계 전략). 버튼 value=incident_id 가
  * Socket Mode 왕복의 키라는 규약이 핵심.
  */
 class ApprovalMessageFactoryTest {

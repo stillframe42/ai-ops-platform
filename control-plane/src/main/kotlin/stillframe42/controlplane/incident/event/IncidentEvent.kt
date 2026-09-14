@@ -1,4 +1,4 @@
-package stillframe42.controlplane.alert.event
+package stillframe42.controlplane.incident.event
 
 import java.time.Instant
 

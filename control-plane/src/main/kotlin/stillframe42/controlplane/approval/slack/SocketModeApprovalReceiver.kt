@@ -46,7 +46,7 @@ class SocketModeApprovalReceiver(
                 .also { it.startAsync() }
             logger.info("Socket Mode 연결 시작 — 승인 버튼 수신 대기")
         }.onFailure {
-            // 수신 불가여도 앱은 살아야 한다 — 승인 API 경로가 항상 남아 있다 (Notifier 계약과 같은 태도)
+            // 수신 불가여도 앱은 살아야 한다 — 승인 API 경로가 항상 남아 있다 (IncidentReportNotifier 계약과 같은 태도)
             logger.warn("Socket Mode 시작 실패 — 승인은 API 경로만 가능: {}", it.message)
         }
     }

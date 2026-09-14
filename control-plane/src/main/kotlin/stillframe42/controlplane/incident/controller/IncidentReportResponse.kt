@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonUnwrapped
 import stillframe42.controlplane.incident.model.IncidentReportSummary
 import tools.jackson.databind.JsonNode
 
+
+import stillframe42.controlplane.incident.event.IncidentEvent
 /**
  * 조회 API 응답 모델 (DAY 19) — 와이어(snake_case)를 타입으로 고정한다.
  * 필드 추가·오타·누락이 컴파일 단계에서 걸린다 (IncidentEvent data class 와 같은 취지).

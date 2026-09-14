@@ -13,10 +13,10 @@ import stillframe42.controlplane.incident.model.IncidentReport
  * 메시지 포맷 규약 검증 — HTTP 전송은 하지 않는다 (URL 미설정 경로 포함).
  * 포맷 스펙: P-등급·원인 가설·confidence·근거 3줄·제안 조치·상세 링크.
  */
-class SlackNotifierTest {
+class SlackIncidentReportNotifierTest {
 
     private fun notifier(webhookUrl: String = "") =
-        SlackNotifier(webhookUrl = webhookUrl, baseUrl = "http://localhost:8081", restClientBuilder = RestClient.builder())
+        SlackIncidentReportNotifier(webhookUrl = webhookUrl, baseUrl = "http://localhost:8081", restClientBuilder = RestClient.builder())
 
     private fun completedReport() = IncidentReport(
         incidentId = "inc-error-rate-surge-20260727031500-a1b2c3",

@@ -4,6 +4,9 @@ import stillframe42.controlplane.incident.model.IncidentReport
 import stillframe42.controlplane.incident.model.IncidentReportDetail
 import stillframe42.controlplane.incident.model.IncidentReportSummary
 
+
+import stillframe42.controlplane.messaging.EventPublisher
+import stillframe42.controlplane.messaging.KafkaEventPublisher
 /**
  * 인시던트 보고서 저장소 경계 — 서비스·컨트롤러는 이 인터페이스만 본다
  * (EventPublisher/KafkaEventPublisher 와 같은 fake 주입 관례).

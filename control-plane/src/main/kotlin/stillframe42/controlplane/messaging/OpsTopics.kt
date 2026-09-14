@@ -1,4 +1,4 @@
-package stillframe42.controlplane.alert.event
+package stillframe42.controlplane.messaging
 
 /**
  * Kafka 토픽 명세의 코드 측 상수 (DAY 17) — 파티션·보존 설정은 infra 의 kafka-init 가 소유한다.
