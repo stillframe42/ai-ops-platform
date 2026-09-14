@@ -80,7 +80,7 @@ flowchart LR
 | 행동 | 실물 | 위험 |
 |------|------|------|
 | 조치 실행 | control-plane ActionExecutor (HITL 승인 후) | 대상 시스템 상태 변경 |
-| 외부 발송 | Slack 보고서·승인 요청 메시지 | 민감 정보 유출 (LLM02)·시스템 프롬프트 유출 (LLM07) — **출력 마스킹 (2026-09-01)**: `SensitiveOutputMasker` 가 발송 직전 시크릿·내부 URL·프롬프트 유출 표지 마스킹 (`SlackNotifier`·승인 카드) |
+| 외부 발송 | Slack 보고서·승인 요청 메시지 | 민감 정보 유출 (LLM02)·시스템 프롬프트 유출 (LLM07) — **출력 마스킹 (2026-09-01)**: `SensitiveOutputMasker` 가 발송 직전 시크릿·내부 URL·프롬프트 유출 표지 마스킹 (`SlackIncidentReportNotifier`·승인 카드) |
 | 보고서 저장 | 인시던트 보고서 → 저장 → RAG 재주입 | **지속성 획득** — 이후 모든 분석의 근거 오염. **저장 시점 스캔 (2026-09-01)**: `StoredReportSanitizer` |
 | 도구 호출 | MCP 3종·로컬 도구 5종 (전부 읽기 전용) | 권한 밖 호출·인자 조작 (PromQL/LogQL 자유 문자열) — **도구 인자 검증 (2026-09-01)**: `tool_gating` 화이트리스트 (메트릭·함수·로그 레벨·범위), 인가 실패는 `authz_denied` 감사 경보 |
 

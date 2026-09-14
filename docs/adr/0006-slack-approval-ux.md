@@ -7,7 +7,7 @@
 
 초기 Slack 연동은 Incoming Webhook 발신 전용(분석 보고 알림)이었다. human-in-the-loop 는 사람의 승인 입력을 받아야 하는데, Incoming Webhook 으로는 버튼 클릭을 수신할 수 없다 (scenarios.md ADR-0006 예약). 표준 Interactivity 는 Slack 이 호출할 공개 Request URL 을 요구하지만, 로컬 compose 스택에는 공개 URL 이 없다.
 
-DAY 19 의 알림 포맷(`SlackNotifier.buildMessage`)이 승인 요청 포맷의 초안이다 (코드 주석으로 예약됨).
+DAY 19 의 알림 포맷(`SlackIncidentReportNotifier.buildMessage`)이 승인 요청 포맷의 초안이다 (코드 주석으로 예약됨).
 
 ## 결정
 
