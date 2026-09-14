@@ -71,3 +71,13 @@ def test_agent_factories_cache_per_prompt_version(monkeypatch):
     with pytest.raises(FileNotFoundError):
         monitor_agent._build_monitor_agent("v9")
     monitor_agent._build_monitor_agent.cache_clear()
+
+
+def test_broken_analysis_prompt_exists_for_low_quality_induction():
+    """저품질 유발용 분석 프롬프트 — 근거 인용·도구 검증 지시가 없어야 Judge Faithfulness 하락을 재현한다 (ADR-0019 확인 기준)."""
+    registry = PromptRegistry("v1", overrides={"analysis": "v0-broken"})
+    broken = registry.get("analysis")
+    assert registry.version_of("analysis") == "v0-broken"
+    assert "compare_with_baseline" not in broken and "get_app_logs" not in broken
+    assert "근거" in registry.get("analysis", "v1")
+
