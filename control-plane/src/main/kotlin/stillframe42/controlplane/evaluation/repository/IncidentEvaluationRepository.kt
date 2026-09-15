@@ -21,6 +21,9 @@ interface IncidentEvaluationRepository {
     /** 리뷰 큐 — 상태별 최신 평가 순 (V5 idx_incident_evaluations_review) */
     fun findByReviewStatus(status: ReviewStatus, limit: Int): List<IncidentEvaluationDetail>
 
+    /** 실험 1건의 평가 전부 — variant 구분 없이 최신 평가 순 (V7 idx_incident_evaluations_experiment), 집계는 서비스 몫 */
+    fun findByExperimentName(experimentName: String): List<IncidentEvaluationDetail>
+
     /** 사람 검토 반영. @return 갱신된 행, 없는 id 는 null. 전이 가능 여부 판정은 서비스 몫 */
     fun applyReview(id: Long, review: EvaluationReview, reviewedAt: Instant): IncidentEvaluationDetail?
 }

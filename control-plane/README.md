@@ -11,7 +11,8 @@
 - **OAuth2 리소스 서버** (2026-08-26, ADR-0016) — auth-server 발급 JWT 를 issuer JWKS 로 검증 (`aud` 에
   `control-plane` 필수), 스코프 인가: `/mcp` = `ops:read` / `GET /api/incidents/**` = `ops:read` /
   `POST /api/incidents/{id}/approve|reject` = `ops:approve` / `GET /api/evaluations/**` = `ops:read` /
-  `POST /api/evaluations/{id}/review` = `ops:approve` / `POST /webhook/alertmanager` = 공유 시크릿 bearer
+  `POST /api/evaluations/{id}/review` = `ops:approve` / `GET /api/experiments/**` = `ops:read` /
+  `POST /webhook/alertmanager` = 공유 시크릿 bearer
   (`ALERTMANAGER_WEBHOOK_SECRET`, 필수) / actuator probe·스크레이프 permitAll. issuer 는 env `AUTH_ISSUER_URI`
   (기본 `http://localhost:8091`, docker 프로파일은 `http://auth-server:8091`). 무인증 상태는 없다 —
   MCP Inspector 등 수동 호출은 auth-server 에서 토큰을 발급받아 `--header "Authorization: Bearer <토큰>"`
@@ -41,12 +42,17 @@
   confidence·근거 3줄·제안 조치·상세 링크). env `SLACK_WEBHOOK_URL` 미설정이면 조용한 비활성
   (기동·발송 시점 로그로 진단 가능). 재수신(갱신)은 알림을 내지 않는다
 - **보고서 품질 평가 저장·리뷰 큐** (ADR-0019) — `ops.evaluation.results` 소비 → `incident_evaluations`
-  (Flyway V5·V6, 자연 키 `(incident_id, prompt_version, judge_model)` upsert) → 저품질(`< 0.7`)은
+  (Flyway V5·V6·V7, 자연 키 `(incident_id, prompt_version, judge_model)` upsert; 페이로드의 선택 필드
+  `experiment_name`·`experiment_variant` 는 같은 이름의 컬럼에 저장 — 실험 밖 평가는 null) → 저품질(`< 0.7`)은
   `review_status=pending_review` + Slack 검토 요청(AFTER_COMMIT·@Async). `GET /api/incidents/{id}/evaluations`,
   `GET /api/evaluations/review-queue?status=&limit=`, `POST /api/evaluations/{id}/review`(`status`
   reviewed|promoted|dismissed · `human_scores` · `failure_mode` · `note` · `reviewed_by` — 라벨 규약 위반 400,
   promoted 는 종결이라 재검토 409). Alertmanager 알림 중 라벨 `kind=quality`(품질 SLO 룰)는 인시던트를
   만들지 않고 Slack 만 보낸다 (발화·해소). Slack 발신 3종은 `slack.SlackWebhookClient` 하나를 공유한다
+- **A/B 실험 요약 API** (ADR-0019 결정 ③) — `GET /api/experiments/{name}/summary` — 실험 이름으로
+  `incident_evaluations` 전건을 읽어 variant 별 `n`·차원 평균(`faithfulness_avg`·`actionability_avg`·
+  `severity_accuracy_avg`)·`low_quality_rate` 를 이름순으로 집계 (Kotlin 집계 — 실험 1건은 수십 행).
+  `experiment_variant` 가 null 인 행은 제외, 평가가 없는 실험은 빈 `variants` 로 200
 - **조치 승인 도메인** (DAY 22, ADR-0005) — `ops.actions.pending` 소비 → `action_approvals`
   저장 (활성 pending 1건 멱등) → `POST /api/incidents/{id}/approve|reject` → 전이·감사 기록 +
   `ops.actions.decisions` 발행 (접수 실패 시 롤백 = 503). 404/409 규약은 `ApprovalController`

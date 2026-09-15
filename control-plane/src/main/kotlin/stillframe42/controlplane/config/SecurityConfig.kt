@@ -26,6 +26,7 @@ import stillframe42.controlplane.security.AuditingAccessDeniedHandler
  * | `POST /api/incidents/{id}/approve·reject` | `ops:approve` — agent-service 토큰에는 구조적으로 없다 (LLM06) |
  * | `GET /api/evaluations/review-queue` | `ops:read` |
  * | `POST /api/evaluations/{id}/review` | `ops:approve` — 사람의 라벨 결정이라 승인과 같은 등급 |
+ * | `GET /api/experiments/{name}/summary` | `ops:read` |
  * | `POST /webhook/alertmanager` | 공유 시크릿 (별도 체인) |
  * | actuator probe·스크레이프 | permitAll |
  *
@@ -63,6 +64,7 @@ class SecurityConfig {
                     .requestMatchers(HttpMethod.GET, "/api/incidents/**").hasAuthority(SCOPE_OPS_READ)
                     .requestMatchers(HttpMethod.POST, "/api/evaluations/*/review").hasAuthority(SCOPE_OPS_APPROVE)
                     .requestMatchers(HttpMethod.GET, "/api/evaluations/**").hasAuthority(SCOPE_OPS_READ)
+                    .requestMatchers(HttpMethod.GET, "/api/experiments/**").hasAuthority(SCOPE_OPS_READ)
                     .anyRequest().authenticated()
             }
             // Boot 자동구성의 JwtDecoder(issuer-uri·audiences) 사용 — scope 클레임은 기본 변환대로 SCOPE_ 접두 권한이 된다

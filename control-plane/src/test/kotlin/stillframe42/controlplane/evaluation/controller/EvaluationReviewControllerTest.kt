@@ -28,6 +28,7 @@ class EvaluationReviewControllerTest {
         override fun findById(id: Long): IncidentEvaluationDetail? = rows[id]
         override fun findByReviewStatus(status: ReviewStatus, limit: Int): List<IncidentEvaluationDetail> =
             rows.values.filter { it.summary.reviewStatus == status }.take(limit)
+        override fun findByExperimentName(experimentName: String): List<IncidentEvaluationDetail> = emptyList()
         override fun applyReview(id: Long, review: EvaluationReview, reviewedAt: Instant): IncidentEvaluationDetail? {
             val current = rows[id] ?: return null
             val updated = IncidentEvaluationDetail(
@@ -52,6 +53,8 @@ class EvaluationReviewControllerTest {
         promptVersion = "v2",
         judgeModel = "gpt-5.6-terra",
         analysisPromptVersion = "v1",
+        experimentName = null,
+        experimentVariant = null,
         faithfulness = 0.7,
         actionability = 0.4,
         severityAccuracy = 1.0,

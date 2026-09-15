@@ -27,6 +27,8 @@ class IncidentEvaluationControllerTest {
         promptVersion = "v1",
         judgeModel = "gpt-5.6-terra",
         analysisPromptVersion = "v1",
+        experimentName = null,
+        experimentVariant = null,
         faithfulness = 0.4,
         actionability = 0.7,
         severityAccuracy = 1.0,
@@ -47,6 +49,7 @@ class IncidentEvaluationControllerTest {
             details.filter { it.summary.incidentId == incidentId }
         override fun findById(id: Long): IncidentEvaluationDetail? = null
         override fun findByReviewStatus(status: ReviewStatus, limit: Int): List<IncidentEvaluationDetail> = emptyList()
+        override fun findByExperimentName(experimentName: String): List<IncidentEvaluationDetail> = emptyList()
         override fun applyReview(id: Long, review: EvaluationReview, reviewedAt: Instant): IncidentEvaluationDetail? = null
     }
 

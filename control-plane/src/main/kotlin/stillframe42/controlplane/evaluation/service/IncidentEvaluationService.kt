@@ -6,8 +6,11 @@ import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import stillframe42.controlplane.evaluation.model.EvaluationReview
+import stillframe42.controlplane.evaluation.model.ExperimentSummary
+import stillframe42.controlplane.evaluation.model.ExperimentVariantSummary
 import stillframe42.controlplane.evaluation.model.IncidentEvaluation
 import stillframe42.controlplane.evaluation.model.IncidentEvaluationDetail
+import stillframe42.controlplane.evaluation.model.IncidentEvaluationSummary
 import stillframe42.controlplane.evaluation.model.ReviewOutcome
 import stillframe42.controlplane.evaluation.model.ReviewStatus
 import stillframe42.controlplane.evaluation.repository.IncidentEvaluationRepository
@@ -18,6 +21,8 @@ import stillframe42.controlplane.evaluation.repository.IncidentEvaluationReposit
  * 저장 예외는 그대로 전파 — 리스너 컨테이너의 재시도 경로 (AnalysisResultConsumer 주석).
  *
  * 리뷰: promoted 는 종결(골든셋 파일과 어긋나지 않게) — 그 외 상태에서는 검토를 다시 기록할 수 있다.
+ * 실험 요약: 실험 1건은 수십 행이라 SQL GROUP BY 대신 전건을 읽어 Kotlin 에서 집계한다 — 저장소 경계를 요약 전용 쿼리로
+ * 넓히지 않고, 저품질률·평균 규칙이 한 곳(여기)에 있다.
  */
 @Service
 class IncidentEvaluationService(
@@ -61,6 +66,25 @@ class IncidentEvaluationService(
 
     fun findByReviewStatus(status: ReviewStatus, limit: Int): List<IncidentEvaluationDetail> =
         incidentEvaluationRepository.findByReviewStatus(status, limit)
+
+    fun summarizeExperiment(name: String): ExperimentSummary {
+        val variants = incidentEvaluationRepository.findByExperimentName(name)
+            .map { it.summary }
+            .filter { it.experimentVariant != null }
+            .groupBy { it.experimentVariant!! }
+            .map { (variant, rows) -> rows.summarizeVariant(variant) }
+            .sortedBy { it.variant }
+        return ExperimentSummary(experiment = name, variants = variants)
+    }
+
+    private fun List<IncidentEvaluationSummary>.summarizeVariant(variant: String) = ExperimentVariantSummary(
+        variant = variant,
+        n = size,
+        faithfulnessAvg = map { it.faithfulness }.average(),
+        actionabilityAvg = map { it.actionability }.average(),
+        severityAccuracyAvg = map { it.severityAccuracy }.average(),
+        lowQualityRate = count { it.lowQuality }.toDouble() / size,
+    )
 
     @Transactional
     fun review(id: Long, review: EvaluationReview): ReviewOutcome {

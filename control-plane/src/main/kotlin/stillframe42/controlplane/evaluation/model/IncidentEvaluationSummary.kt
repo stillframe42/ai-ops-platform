@@ -9,6 +9,8 @@ data class IncidentEvaluationSummary(
     val promptVersion: String,
     val judgeModel: String,
     val analysisPromptVersion: String?,
+    val experimentName: String?,
+    val experimentVariant: String?,
     val faithfulness: Double,
     val actionability: Double,
     val severityAccuracy: Double,

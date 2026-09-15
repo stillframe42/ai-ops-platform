@@ -13,7 +13,8 @@ class IncidentEvaluationTest {
                     "actionability": {"score": 0.7, "reason": "RESTART 타당"},
                     "severity_accuracy": {"score": 1.0, "reason": "P2 타당"}},
          "failure_mode": "B", "low_quality": true, "judge_model": "gpt-5.6-terra", "prompt_version": "v1",
-         "analysis_prompt_version": "v1", "evidence_available": true, "evaluated_at": "2026-09-11T02:00:00.123456+00:00"}
+         "analysis_prompt_version": "v1", "experiment_name": "analysis-prompt-v2", "experiment_variant": "B",
+         "evidence_available": true, "evaluated_at": "2026-09-11T02:00:00.123456+00:00"}
     """.trimIndent()
 
     @Test
@@ -27,6 +28,8 @@ class IncidentEvaluationTest {
         assertEquals("B", evaluation.failureMode)
         assertEquals(true, evaluation.lowQuality)
         assertEquals("v1", evaluation.analysisPromptVersion)
+        assertEquals("analysis-prompt-v2", evaluation.experimentName)
+        assertEquals("B", evaluation.experimentVariant)
         assertEquals(Instant.parse("2026-09-11T02:00:00.123456Z"), evaluation.evaluatedAt)
         assertEquals(ReviewStatus.PENDING_REVIEW, evaluation.initialReviewStatus())
         assertEquals(payload, evaluation.raw)
@@ -36,6 +39,17 @@ class IncidentEvaluationTest {
     fun `저품질이 아니면 검토 불요 상태로 시작한다`() {
         val fine = payload.replace("\"low_quality\": true", "\"low_quality\": false")
         assertEquals(ReviewStatus.NOT_REQUIRED, IncidentEvaluation.parse(fine)!!.initialReviewStatus())
+    }
+
+    @Test
+    fun `실험 필드는 없거나 null 이면 null - 실험 밖 평가도 그대로 저장한다`() {
+        val absent = payload.replace("\"experiment_name\": \"analysis-prompt-v2\", \"experiment_variant\": \"B\",", "")
+        assertNull(IncidentEvaluation.parse(absent)!!.experimentName)
+        assertNull(IncidentEvaluation.parse(absent)!!.experimentVariant)
+
+        val explicitNull = payload.replace("\"experiment_variant\": \"B\"", "\"experiment_variant\": null")
+        assertEquals("analysis-prompt-v2", IncidentEvaluation.parse(explicitNull)!!.experimentName)
+        assertNull(IncidentEvaluation.parse(explicitNull)!!.experimentVariant)
     }
 
     @Test

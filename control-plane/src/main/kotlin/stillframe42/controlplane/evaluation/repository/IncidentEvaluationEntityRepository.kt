@@ -14,4 +14,6 @@ interface IncidentEvaluationEntityRepository : JpaRepository<IncidentEvaluationE
     fun findAllByIncidentIdOrderByEvaluatedAtDesc(incidentId: String): List<IncidentEvaluationEntity>
 
     fun findAllByReviewStatusOrderByEvaluatedAtDesc(reviewStatus: String, pageable: Pageable): List<IncidentEvaluationEntity>
+
+    fun findAllByExperimentNameOrderByEvaluatedAtDesc(experimentName: String): List<IncidentEvaluationEntity>
 }

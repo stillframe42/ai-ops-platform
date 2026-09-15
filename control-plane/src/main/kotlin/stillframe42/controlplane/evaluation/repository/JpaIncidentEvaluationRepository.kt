@@ -44,6 +44,9 @@ class JpaIncidentEvaluationRepository(
         incidentEvaluationEntityRepository.findAllByReviewStatusOrderByEvaluatedAtDesc(status.wire, PageRequest.of(0, limit))
             .map { it.toDetail() }
 
+    override fun findByExperimentName(experimentName: String): List<IncidentEvaluationDetail> =
+        incidentEvaluationEntityRepository.findAllByExperimentNameOrderByEvaluatedAtDesc(experimentName).map { it.toDetail() }
+
     override fun applyReview(id: Long, review: EvaluationReview, reviewedAt: Instant): IncidentEvaluationDetail? {
         val entity = incidentEvaluationEntityRepository.findById(id).orElse(null) ?: return null
         entity.applyReview(review, reviewedAt)

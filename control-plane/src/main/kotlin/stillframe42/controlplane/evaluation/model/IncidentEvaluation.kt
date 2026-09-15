@@ -14,6 +14,9 @@ data class IncidentEvaluation(
     val promptVersion: String,
     val judgeModel: String,
     val analysisPromptVersion: String?,
+    /** A/B 실험 축 (ADR-0019 결정 ③) — 실험 밖 평가는 둘 다 null. variant 만 null 이면 실험 요약에서 제외된다 */
+    val experimentName: String?,
+    val experimentVariant: String?,
     val faithfulness: Double,
     val actionability: Double,
     val severityAccuracy: Double,
@@ -47,6 +50,8 @@ data class IncidentEvaluation(
                 promptVersion = promptVersion,
                 judgeModel = judgeModel,
                 analysisPromptVersion = root.path("analysis_prompt_version").stringOrNull(),
+                experimentName = root.path("experiment_name").stringOrNull(),
+                experimentVariant = root.path("experiment_variant").stringOrNull(),
                 faithfulness = values[0],
                 actionability = values[1],
                 severityAccuracy = values[2],

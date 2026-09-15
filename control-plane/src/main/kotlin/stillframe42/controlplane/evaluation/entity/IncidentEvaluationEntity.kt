@@ -18,7 +18,7 @@ import tools.jackson.core.type.TypeReference
 import tools.jackson.databind.json.JsonMapper
 
 /**
- * incident_evaluations 영속 모델 — 스키마 소유는 Flyway V5·V6, 여기는 validate 만 (IncidentReportEntity 와 같은 관례).
+ * incident_evaluations 영속 모델 — 스키마 소유는 Flyway V5·V6·V7, 여기는 validate 만 (IncidentReportEntity 와 같은 관례).
  * 자연 키 (incident_id, prompt_version, judge_model) 의 신규/갱신 판정은 저장소가 선조회로 한다.
  * 재수신 갱신은 점수·판정·원문만 — review_status 와 사람 검토 필드는 재전달이 덮어쓰지 않는다.
  */
@@ -41,6 +41,12 @@ class IncidentEvaluationEntity(
 
     @Column(name = "analysis_prompt_version")
     var analysisPromptVersion: String?,
+
+    @Column(name = "experiment_name")
+    var experimentName: String?,
+
+    @Column(name = "experiment_variant")
+    var experimentVariant: String?,
 
     @Column(nullable = false)
     var faithfulness: Double,
@@ -91,6 +97,8 @@ class IncidentEvaluationEntity(
 
     fun applyUpdate(evaluation: IncidentEvaluation) {
         analysisPromptVersion = evaluation.analysisPromptVersion
+        experimentName = evaluation.experimentName
+        experimentVariant = evaluation.experimentVariant
         faithfulness = evaluation.faithfulness
         actionability = evaluation.actionability
         severityAccuracy = evaluation.severityAccuracy
@@ -117,6 +125,8 @@ class IncidentEvaluationEntity(
         promptVersion = promptVersion,
         judgeModel = judgeModel,
         analysisPromptVersion = analysisPromptVersion,
+        experimentName = experimentName,
+        experimentVariant = experimentVariant,
         faithfulness = faithfulness,
         actionability = actionability,
         severityAccuracy = severityAccuracy,
@@ -143,6 +153,8 @@ class IncidentEvaluationEntity(
             promptVersion = evaluation.promptVersion,
             judgeModel = evaluation.judgeModel,
             analysisPromptVersion = evaluation.analysisPromptVersion,
+            experimentName = evaluation.experimentName,
+            experimentVariant = evaluation.experimentVariant,
             faithfulness = evaluation.faithfulness,
             actionability = evaluation.actionability,
             severityAccuracy = evaluation.severityAccuracy,

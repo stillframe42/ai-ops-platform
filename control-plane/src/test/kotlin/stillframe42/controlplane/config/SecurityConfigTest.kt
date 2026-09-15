@@ -27,7 +27,9 @@ import stillframe42.controlplane.approval.controller.ApprovalController
 import stillframe42.controlplane.approval.model.ApprovalDecisionOutcome
 import stillframe42.controlplane.approval.service.ActionApprovalService
 import stillframe42.controlplane.evaluation.controller.EvaluationReviewController
+import stillframe42.controlplane.evaluation.controller.ExperimentSummaryController
 import stillframe42.controlplane.evaluation.model.EvaluationReview
+import stillframe42.controlplane.evaluation.model.ExperimentSummary
 import stillframe42.controlplane.evaluation.model.ReviewOutcome
 import stillframe42.controlplane.evaluation.model.ReviewStatus
 import stillframe42.controlplane.evaluation.service.IncidentEvaluationService
@@ -47,6 +49,7 @@ import stillframe42.controlplane.incident.service.IncidentReportService
         IncidentQueryController::class,
         AlertmanagerWebhookController::class,
         EvaluationReviewController::class,
+        ExperimentSummaryController::class,
     ],
 )
 @Import(SecurityConfig::class, SecurityConfigTest.JwtStub::class)
@@ -123,6 +126,16 @@ class SecurityConfigTest(@Autowired private val mvc: MockMvc) {
             post("/api/evaluations/1/review").with(adminToken())
                 .contentType(MediaType.APPLICATION_JSON).content("""{"status": "dismissed"}"""),
         ).andExpect(status().isNotFound)
+    }
+
+    @Test
+    fun `실험 요약은 ops read 로 통과하고 ops read 가 없는 토큰은 403, 무토큰은 401 이다`() {
+        `when`(incidentEvaluationService.summarizeExperiment(anyString())).thenReturn(ExperimentSummary("exp", emptyList()))
+        val approveOnly = jwt().authorities(SimpleGrantedAuthority(SecurityConfig.SCOPE_OPS_APPROVE))
+
+        mvc.perform(get("/api/experiments/exp/summary").with(agentToken())).andExpect(status().isOk)
+        mvc.perform(get("/api/experiments/exp/summary").with(approveOnly)).andExpect(status().isForbidden)
+        mvc.perform(get("/api/experiments/exp/summary")).andExpect(status().isUnauthorized)
     }
 
     // --- 조회 API·MCP: ops:read ---
