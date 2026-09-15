@@ -25,13 +25,14 @@ MCP_SESSION_ID = "mcp.session.id"
 MCP_PROTOCOL_VERSION = "mcp.protocol.version"
 GATEWAY_TASK_TYPE_HEADER = "x-task-type"
 GATEWAY_TASK_TYPE = "gateway.task_type"
-# 게이트웨이 판정 응답 헤더 → 클라이언트 스팬 속성. 헤더명은 llm-gateway 가 쓰는 5종과 일치해야 한다
+# 게이트웨이 판정 응답 헤더 → 클라이언트 스팬 속성. 헤더명은 llm-gateway 가 쓰는 6종과 일치해야 한다
 GATEWAY_RESPONSE_HEADERS = {
     "x-gateway-cache": "gateway.cache",
     "x-gateway-guardrail": "gateway.guardrail",
     "x-gateway-guardrail-stage": "gateway.guardrail_stage",
     "x-gateway-downgrade": "gateway.downgrade",
     "x-gateway-fallback": "gateway.fallback",
+    "x-gateway-variant": "gateway.variant",  # 실험 모델 variant 적용 echo (ADR-0019)
 }
 
 

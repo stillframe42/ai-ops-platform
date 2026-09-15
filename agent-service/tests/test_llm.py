@@ -38,3 +38,12 @@ def test_llm_http_clients_carry_client_credentials_auth():
     assert isinstance(llm.http_async_client, httpx.AsyncClient)
     assert isinstance(llm.http_client.auth, ClientCredentialsAuth)
     assert llm.http_async_client.auth is llm.http_client.auth
+
+
+def test_llm_sends_experiment_variant_header_only_when_given():
+    """실험 모델 variant 는 요청 헤더 X-Experiment-Variant 로 — 게이트웨이가 정의된 variant 만 모델을 바꾼다 (ADR-0019)."""
+    plain = create_llm(_settings(), task_type="root-cause-analysis")
+    assert "X-Experiment-Variant" not in plain.default_headers
+    tagged = create_llm(_settings(), task_type="root-cause-analysis", extra_headers={"X-Experiment-Variant": "analysis-model-haiku:B"})
+    assert tagged.default_headers["X-Experiment-Variant"] == "analysis-model-haiku:B"
+    assert tagged.default_headers["X-Task-Type"] == "root-cause-analysis"

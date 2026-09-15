@@ -21,7 +21,7 @@ from app.supervisor.state import ActionPlan, AnalysisResult
 def _as_async_factory(agent):
     """get_analysis_agent 는 async (MCP 도구 발견 포함, DAY 16) — 스텁을 코루틴으로 감싼다."""
 
-    async def _get():
+    async def _get(*args, **kwargs):
         return agent
 
     return _get

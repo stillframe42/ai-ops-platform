@@ -232,6 +232,7 @@ def test_openai_chat_span_carries_genai_and_gateway_attributes():
             self.send_header("X-Gateway-Guardrail", "flagged")
             self.send_header("X-Gateway-Guardrail-Stage", "pattern")
             self.send_header("X-Gateway-Downgrade", "haiku")
+            self.send_header("X-Gateway-Variant", "analysis-model-haiku:B")
             self.end_headers()
             self.wfile.write(body)
 
@@ -270,6 +271,7 @@ def test_openai_chat_span_carries_genai_and_gateway_attributes():
     assert attrs["gateway.guardrail"] == "flagged"
     assert attrs["gateway.guardrail_stage"] == "pattern"
     assert attrs["gateway.downgrade"] == "haiku"
+    assert attrs["gateway.variant"] == "analysis-model-haiku:B"  # 실험 variant 적용 echo (ADR-0019)
     assert "gateway.fallback" not in attrs  # 헤더가 없는 판정은 속성도 없다
 
 
@@ -450,3 +452,65 @@ def test_resource_identifies_service_instance():
     assert attrs["service.name"] == "agent-service"
     assert attrs["service.instance.id"]  # 비어 있지 않은 문자열 (HOSTNAME 또는 호스트명)
     assert build_resource().attributes["service.instance.id"] == attrs["service.instance.id"]
+
+
+def test_workflow_span_carries_experiment_assignment(monkeypatch):
+    """배정된 실험은 루트 스팬 속성 aiops.experiment.name/variant 로 — Tempo 에서 variant 별 trace 를 가른다 (ADR-0019)."""
+    from app.experiments.assigner import ExperimentAssigner
+    from app.experiments.definition import ExperimentDefinition, VariantSpec
+    from app.supervisor import runtime as runtime_module
+
+    definition = ExperimentDefinition(
+        name="analysis-prompt-v2", target="analysis", variants={"A": VariantSpec(prompt="v1"), "B": VariantSpec(prompt="v2")}
+    )
+    monkeypatch.setattr(runtime_module, "experiment_assigner", lambda: ExperimentAssigner([definition]))
+    exporter = _exporter()
+    graph = _SpanCapturingGraph()
+
+    asyncio.run(GraphRuntime(graph).start(build_incident("latency-surge", "inc-otel-exp")))
+
+    span = next(s for s in exporter.get_finished_spans() if s.attributes.get("incident.id") == "inc-otel-exp")
+    assert span.attributes["aiops.experiment.name"] == "analysis-prompt-v2"
+    assert span.attributes["aiops.experiment.variant"] == graph.inputs[0]["experiment"].variant
+
+
+def test_record_experiment_tags_current_span():
+    from app.config.agent_spans import record_experiment
+    from app.supervisor.state import ExperimentAssignment
+
+    exporter = _exporter()
+    tracer = trace.get_tracer("test")
+    with tracer.start_as_current_span("invoke_agent analysis"):
+        record_experiment(ExperimentAssignment(name="analysis-model-haiku", variant="B", model_override=True))
+        record_experiment(None)  # 배정 없음은 무기록 — 속성 부재가 "실험 밖" 의 표현
+
+    span = next(s for s in exporter.get_finished_spans() if s.name == "invoke_agent analysis")
+    assert span.attributes["aiops.experiment.name"] == "analysis-model-haiku"
+    assert span.attributes["aiops.experiment.variant"] == "B"
+
+
+def test_resume_span_carries_experiment_from_checkpoint(monkeypatch):
+    """재개 trace 도 같은 실험 좌표 — 승인 뒤 이어지는 실행이 Tempo 에서 variant 로 검색되게 (체크포인트의 배정을 읽는다)."""
+    from app.experiments.assigner import ExperimentAssigner
+    from app.experiments.definition import ExperimentDefinition, VariantSpec
+    from app.supervisor import runtime as runtime_module
+
+    definition = ExperimentDefinition(
+        name="analysis-prompt-v2", target="analysis", variants={"A": VariantSpec(prompt="v1"), "B": VariantSpec(prompt="v2")}
+    )
+    monkeypatch.setattr(runtime_module, "experiment_assigner", lambda: ExperimentAssigner([definition]))
+    exporter = _exporter()
+    graph = _SpanCapturingGraph()
+    runtime = GraphRuntime(graph)
+
+    async def run() -> None:
+        await runtime.start(build_incident("latency-surge", "inc-otel-exp-resume"))
+        graph._state = dict(graph.inputs[0])  # 체크포인트 = 시작 입력 (스텁은 상태를 저장하지 않는다)
+        await runtime.resume("inc-otel-exp-resume")
+
+    asyncio.run(run())
+
+    spans = [s for s in exporter.get_finished_spans() if s.attributes.get("incident.id") == "inc-otel-exp-resume"]
+    resumed = next(s for s in spans if s.attributes["aiops.resumed"] is True)
+    assert resumed.attributes["aiops.experiment.name"] == "analysis-prompt-v2"
+    assert resumed.attributes["aiops.experiment.variant"] == graph.inputs[0]["experiment"].variant

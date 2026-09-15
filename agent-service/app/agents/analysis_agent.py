@@ -14,11 +14,11 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from app.agents.tool_errors import ToolErrorFeedback
 from app.config import get_settings
-from app.config.agent_spans import instrumented_tool, record_prompt_version
+from app.config.agent_spans import instrumented_tool, record_experiment, record_prompt_version
 from app.config.llm import create_llm
 from app.prompts.registry import prompt_registry
 from app.security.untrusted import UNTRUSTED_POLICY, wrap_untrusted
-from app.supervisor.state import AIOpsState, AnalysisResult
+from app.supervisor.state import AIOpsState, AnalysisResult, ExperimentAssignment
 from app.tools.loki_tools import get_app_logs
 from app.tools.mcp_tools import load_mcp_tools
 from app.tools.prometheus_tools import compare_with_baseline
@@ -39,20 +39,22 @@ def analysis_system_prompt(version: str | None = None) -> str:
 # 관측 스택 직접 조회 도구 — MCP 대상 아님 (ADR-0002 경계)
 LOCAL_ANALYSIS_TOOLS = [get_app_logs, compare_with_baseline]
 
-# lru_cache 대신 수동 캐시(프롬프트 버전별) — "성공 시에만 캐시"라는 조건부 정책이 필요해서
-_cached_agents: dict[str, object] = {}
+# lru_cache 대신 수동 캐시(프롬프트 버전·실험 variant 별) — "성공 시에만 캐시"라는 조건부 정책이 필요해서
+_cached_agents: dict[tuple[str, str | None], object] = {}
 
 
-async def get_analysis_agent():
+async def get_analysis_agent(prompt_version: str | None = None, gateway_variant: str | None = None):
     """분석 에이전트를 지연 생성한다 — import 시점에 LLM API 키를 요구하지 않기 위해.
-    MCP 도구 발견(tools/list 1왕복)을 포함하므로 async 다. 캐시 키는 프롬프트 버전.
+    MCP 도구 발견(tools/list 1왕복)을 포함하므로 async 다. 캐시 키는 (프롬프트 버전, 게이트웨이 variant) —
+    variant 는 LLM 클라이언트의 기본 헤더에 실리므로 variant 마다 별도 에이전트가 필요하다 (ADR-0019).
 
     캐시 정책: 발견 성공 시에만 캐시한다. 실패하면 로컬 도구만으로 강등해 이번 실행은
     부분 진행하고(DAY 13 관례 — 공백은 프롬프트가 아니라 도구 부재로 드러난다), 캐시하지
     않으므로 다음 실행에서 발견을 재시도한다 — MCP 서버 복구가 재기동 없이 반영된다.
     """
-    prompt_version = prompt_registry().version_of(AGENT)
-    cached = _cached_agents.get(prompt_version)
+    prompt_version = prompt_version or prompt_registry().version_of(AGENT)
+    key = (prompt_version, gateway_variant)
+    cached = _cached_agents.get(key)
     if cached is not None:
         return cached
 
@@ -69,7 +71,11 @@ async def get_analysis_agent():
         mcp_tools, discovered = [], False
 
     agent = create_agent(
-        model=create_llm(settings, task_type="root-cause-analysis"),
+        model=create_llm(
+            settings,
+            task_type="root-cause-analysis",
+            extra_headers={"X-Experiment-Variant": gateway_variant} if gateway_variant else None,
+        ),
         # 로컬 도구는 여기서, MCP 도구는 발견 시점(load_mcp_tools)에 execute_tool 스팬으로 감싼다 (DAY 43)
         tools=[instrumented_tool(tool) for tool in LOCAL_ANALYSIS_TOOLS] + mcp_tools,
         system_prompt=analysis_system_prompt(prompt_version),
@@ -78,8 +84,16 @@ async def get_analysis_agent():
         middleware=[ToolErrorFeedback()],
     )
     if discovered:
-        _cached_agents[prompt_version] = agent
+        _cached_agents[key] = agent
     return agent
+
+
+def _resolve_experiment(experiment: ExperimentAssignment | None) -> tuple[str, str | None]:
+    """배정 → (프롬프트 버전, 게이트웨이 variant). 프롬프트 variant 가 없으면 설정 기본 — 모델 실험은 프롬프트를 고정한다."""
+    default_version = prompt_registry().version_of(AGENT)
+    if experiment is None:
+        return default_version, None
+    return experiment.prompt_version or default_version, experiment.gateway_variant
 
 
 async def analysis_node(state: AIOpsState) -> dict:
@@ -100,9 +114,11 @@ async def analysis_node(state: AIOpsState) -> dict:
             "근본 원인 가설을 세우고 도구로 검증해 원인 보고서를 작성하라."
         )
     )
-    prompt_version = prompt_registry().version_of(AGENT)
+    experiment = state.get("experiment")
+    prompt_version, gateway_variant = _resolve_experiment(experiment)
     record_prompt_version(prompt_version)
-    agent = await get_analysis_agent()
+    record_experiment(experiment)
+    agent = await get_analysis_agent(prompt_version, gateway_variant)
     result = await agent.ainvoke(
         {"messages": [task]},
         config={"recursion_limit": ANALYSIS_RECURSION_LIMIT},

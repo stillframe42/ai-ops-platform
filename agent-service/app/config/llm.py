@@ -9,7 +9,7 @@ from app.tools.oauth_client import shared_auth
 GATEWAY_TIMEOUT = httpx.Timeout(600.0, connect=5.0)
 
 
-def create_llm(settings: Settings, task_type: str | None = None) -> BaseChatModel:
+def create_llm(settings: Settings, task_type: str | None = None, extra_headers: dict[str, str] | None = None) -> BaseChatModel:
     """모든 LLM 호출은 llm-gateway 경유 (ADR-0015) — 프로바이더 실키는 게이트웨이만 보유한다.
 
     task_type 은 게이트웨이 라우팅 정책 키 (X-Task-Type 헤더) — 모델 선택은 게이트웨이 소관이라
@@ -18,8 +18,11 @@ def create_llm(settings: Settings, task_type: str | None = None) -> BaseChatMode
     인증 (ADR-0016): SDK 의 api_key 는 정적이라 OAuth 토큰을 실을 수 없다 — httpx 클라이언트에 ClientCredentialsAuth
     를 달아 주입하면 SDK 가 넣은 `Bearer <api_key>` 를 요청마다 유효 토큰으로 덮어쓴다. 서비스 식별(비용·한도)은
     검증된 토큰의 client_id 가 대신하므로 X-Client-Service 자기 신고 헤더는 보내지 않는다.
+
+    extra_headers 는 실험 모델 variant(X-Experiment-Variant, ADR-0019) 용 — 게이트웨이는 gateway.yml 에 정의된 variant 만
+    모델을 바꾸므로 헤더가 임의 모델 지정 경로가 되지는 않는다.
     """
-    headers = {}
+    headers = dict(extra_headers or {})
     if task_type:
         headers["X-Task-Type"] = task_type
     auth = shared_auth(settings)

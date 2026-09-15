@@ -20,7 +20,7 @@ from app.supervisor.state import ActionPlan, AnalysisResult
 def _as_async_factory(agent):
     """get_analysis_agent 는 async (MCP 도구 발견 포함, DAY 16) — 스텁을 코루틴으로 감싼다."""
 
-    async def _get():
+    async def _get(*args, **kwargs):
         return agent
 
     return _get
@@ -219,6 +219,7 @@ def test_checkpoint_serializer_roundtrips_registered_state_models() -> None:
         ActionPlan,
         AnalysisResult,
         ApprovalDecision,
+        ExperimentAssignment,
         MonitoringResult,
         NodeFailure,
     )
@@ -231,6 +232,7 @@ def test_checkpoint_serializer_roundtrips_registered_state_models() -> None:
         ActionPlan(actions=["NOTIFY_ONLY"], rationale="[스텁] 계획"),
         NodeFailure(node="monitor", error_type="E", message="m", occurred_at="t"),
         ApprovalDecision(status="approved", decided_by="U0123ABC", note="[스텁] 승인"),
+        ExperimentAssignment(name="analysis-prompt-v2", variant="B", prompt_version="v2"),
     ]
     for sample in samples:
         assert serde.loads_typed(serde.dumps_typed(sample)) == sample
@@ -299,3 +301,48 @@ def test_get_result_marks_partial_when_errors_recorded(stubs: SimpleNamespace) -
 
 def test_get_result_returns_none_for_unknown_incident() -> None:
     assert asyncio.run(_runtime().get_result("inc-unknown")) is None
+
+
+# --- 실험 배정 (ADR-0019) ---
+
+
+def _fixed_assigner(monkeypatch, definitions):
+    from app.experiments.assigner import ExperimentAssigner
+    from app.supervisor import runtime as runtime_module
+
+    monkeypatch.setattr(runtime_module, "experiment_assigner", lambda: ExperimentAssigner(definitions))
+
+
+def _prompt_experiment():
+    from app.experiments.definition import ExperimentDefinition, VariantSpec
+
+    return ExperimentDefinition(
+        name="analysis-prompt-v2", target="analysis", variants={"A": VariantSpec(prompt="v1"), "B": VariantSpec(prompt="v2")}
+    )
+
+
+def test_start_assigns_experiment_and_result_carries_it(monkeypatch) -> None:
+    _fixed_assigner(monkeypatch, [_prompt_experiment()])
+    runtime = _runtime()
+
+    async def run() -> tuple[dict, dict]:
+        await runtime.start(build_incident("error-rate-surge", incident_id="inc-exp-001"))
+        snapshot = await runtime.graph.aget_state(runtime._config("inc-exp-001"))
+        return snapshot.values, await runtime.get_result("inc-exp-001")
+
+    values, result = asyncio.run(run())
+    assignment = values["experiment"]
+    assert assignment.name == "analysis-prompt-v2" and assignment.variant in {"A", "B"}
+    # 페이로드 experiment = 배정 (name·variant) — evaluation-service·control-plane 의 variant 축
+    assert result["experiment"] == {"name": "analysis-prompt-v2", "variant": assignment.variant}
+
+
+def test_result_experiment_is_null_without_active_experiment(monkeypatch) -> None:
+    _fixed_assigner(monkeypatch, [])
+    runtime = _runtime()
+
+    async def run() -> dict:
+        await runtime.start(build_incident("error-rate-surge", incident_id="inc-exp-002"))
+        return await runtime.get_result("inc-exp-002")
+
+    assert asyncio.run(run())["experiment"] is None

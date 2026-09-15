@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.agents import analysis_agent
-from app.supervisor.state import AnalysisResult, IncidentInfo, MonitoringResult
+from app.supervisor.state import AnalysisResult, ExperimentAssignment, IncidentInfo, MonitoringResult
 
 
 class _StubAgent:
@@ -65,7 +65,7 @@ def _state() -> dict:
 def _patch_agent(monkeypatch, stub):
     """get_analysis_agent 는 async (MCP 도구 발견 포함) — 스텁을 코루틴으로 감싼다."""
 
-    async def _get():
+    async def _get(*args, **kwargs):
         return stub
 
     monkeypatch.setattr(analysis_agent, "get_analysis_agent", _get)
@@ -141,7 +141,7 @@ def _patch_agent_factory(monkeypatch, load_behavior):
     monkeypatch.setattr(analysis_agent, "load_mcp_tools", fake_load)
     stub_settings = SimpleNamespace(mcp_server_url="http://stub:8081/mcp")
     monkeypatch.setattr(analysis_agent, "get_settings", lambda: stub_settings)
-    monkeypatch.setattr(analysis_agent, "create_llm", lambda settings, task_type=None: "stub-llm")
+    monkeypatch.setattr(analysis_agent, "create_llm", lambda settings, task_type=None, extra_headers=None: "stub-llm")
 
     def fake_create_agent(**kwargs):
         calls["tools"].append(kwargs["tools"])
@@ -190,7 +190,7 @@ def test_analysis_task_wraps_monitor_summary_and_policy_in_prompts():
     from app.supervisor import router
 
     stub = _StubAgent()
-    analysis_agent._cached_agents["v1"] = stub
+    analysis_agent._cached_agents[("v1", None)] = stub
     try:
         asyncio.run(analysis_agent.analysis_node(_state()))
     finally:
@@ -201,3 +201,69 @@ def test_analysis_task_wraps_monitor_summary_and_policy_in_prompts():
     assert UNTRUSTED_POLICY.strip() in analysis_agent.analysis_system_prompt()
     assert UNTRUSTED_POLICY.strip() in action_agent.action_system_prompt()
     assert UNTRUSTED_POLICY.strip() in router.route_prompt()
+
+
+# --- 실험 배정 해석 (ADR-0019) ---
+
+
+def _patch_agent_capturing(monkeypatch, stub):
+    captured: list[tuple] = []
+
+    async def _get(prompt_version, gateway_variant):
+        captured.append((prompt_version, gateway_variant))
+        return stub
+
+    monkeypatch.setattr(analysis_agent, "get_analysis_agent", _get)
+    return captured
+
+
+def test_analysis_node_without_experiment_uses_registry_version(monkeypatch):
+    captured = _patch_agent_capturing(monkeypatch, _StubAgent())
+
+    update = asyncio.run(analysis_agent.analysis_node(_state()))
+
+    assert captured == [("v1", None)]
+    assert update["analysis_prompt_version"] == "v1"
+
+
+def test_analysis_node_applies_prompt_variant(monkeypatch):
+    captured = _patch_agent_capturing(monkeypatch, _StubAgent())
+    state = _state()
+    state["experiment"] = ExperimentAssignment(name="analysis-prompt-v2", variant="B", prompt_version="v2")
+
+    update = asyncio.run(analysis_agent.analysis_node(state))
+
+    assert captured == [("v2", None)]
+    assert update["analysis_prompt_version"] == "v2"
+
+
+def test_analysis_node_requests_model_override_via_gateway_variant(monkeypatch):
+    captured = _patch_agent_capturing(monkeypatch, _StubAgent())
+    state = _state()
+    state["experiment"] = ExperimentAssignment(name="analysis-model-haiku", variant="B", model_override=True)
+
+    update = asyncio.run(analysis_agent.analysis_node(state))
+
+    # 프롬프트는 설정 기본 그대로, 모델만 게이트웨이가 (name, variant) 정의로 바꾼다
+    assert captured == [("v1", "analysis-model-haiku:B")]
+    assert update["analysis_prompt_version"] == "v1"
+
+
+def test_agent_cache_key_includes_gateway_variant(monkeypatch):
+    calls = _patch_agent_factory(monkeypatch, lambda: ["mcp-tool"])
+    headers: list = []
+
+    def fake_create_llm(settings, task_type=None, extra_headers=None):
+        headers.append(extra_headers)
+        return "stub-llm"
+
+    monkeypatch.setattr(analysis_agent, "create_llm", fake_create_llm)
+
+    control = asyncio.run(analysis_agent.get_analysis_agent("v1", None))
+    treatment = asyncio.run(analysis_agent.get_analysis_agent("v1", "analysis-model-haiku:B"))
+    treatment_again = asyncio.run(analysis_agent.get_analysis_agent("v1", "analysis-model-haiku:B"))
+
+    # variant 별로 다른 에이전트(헤더가 다르다), 같은 variant 는 캐시
+    assert control is not treatment and treatment is treatment_again
+    assert headers == [None, {"X-Experiment-Variant": "analysis-model-haiku:B"}]
+    assert calls["load"] == 2

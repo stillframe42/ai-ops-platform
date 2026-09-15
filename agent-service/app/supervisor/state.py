@@ -96,6 +96,24 @@ class RecoveryResult(BaseModel):
     attempts: int = 0
 
 
+class ExperimentAssignment(BaseModel):
+    """실험 배정 결과 (ADR-0019) — 워크플로 시작 시 한 번 정해져 상태에 남는다.
+
+    prompt_version 은 variant 가 지정한 프롬프트 버전(없으면 설정 기본), model_override 는 게이트웨이 모델 오버라이드
+    요청 여부 — 둘 다 분석 노드가 해석한다. 페이로드·스팬 태그의 원천.
+    """
+
+    name: str
+    variant: str
+    prompt_version: str | None = None
+    model_override: bool = False
+
+    @property
+    def gateway_variant(self) -> str | None:
+        """LLM 요청 헤더 X-Experiment-Variant 값 — 게이트웨이 gateway.yml experiments 의 (name, variant) 키"""
+        return f"{self.name}:{self.variant}" if self.model_override else None
+
+
 class NodeFailure(BaseModel):
     """노드 실패 기록 — 실패가 전체 실행을 중단시키지 않고 상태에 남는다 (DAY 13 복원력).
 
@@ -113,6 +131,7 @@ class AIOpsState(TypedDict):
     monitoring: NotRequired[MonitoringResult | None]
     analysis: NotRequired[AnalysisResult | None]
     analysis_prompt_version: NotRequired[str]  # 분석 노드가 쓴 프롬프트 버전 — 보고서 `analysis.prompt_version`
+    experiment: NotRequired[ExperimentAssignment | None]  # 실험 배정 (ADR-0019) — 시작 시 확정, 보고서 `experiment`
     action: NotRequired[ActionPlan | None]
     approval: NotRequired[ApprovalDecision | None]
     recovery: NotRequired[RecoveryResult | None]

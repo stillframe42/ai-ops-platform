@@ -35,6 +35,7 @@ app/
 ├── supervisor/        # 공유 상태 스키마 + Supervisor StateGraph
 ├── agents/            # 모니터링/분석/실행 에이전트 노드
 ├── events/            # Kafka 인시던트 컨슈머 (DAY 18, ADR-0011)
+├── experiments/       # A/B 실험 정의(experiments.yml)·배정기 (ADR-0019 실험 층)
 └── tools/             # Prometheus(DAY 9)·Loki(DAY 10)·MCP 클라이언트(DAY 16)·조치 실행(DAY 21~) 도구
 ```
 
@@ -59,7 +60,8 @@ Kafka 소비·발행은 `traceparent` 헤더로 control-plane 과 한 trace 다.
 
 - `OTEL_EXPORTER_OTLP_ENDPOINT` — Collector 주소 (compose 는 `http://otel-collector:4318`, 호스트 실행은 `http://localhost:4318`). **미설정 = 전파만 하고 전송 없음**, 메트릭도 함께 꺼진다
 - `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` — 프롬프트/응답 본문 캡처. 미설정 = `NO_CONTENT`(운영). compose 는 `SPAN_ONLY`(Langfuse 표시용) — 캡처 본문은 게이트웨이 마스킹 **전** 원문이라 Tempo 경로는 Collector 가 삭제한다
-- `PROMPT_VERSION`(기본 `v1`)·`PROMPT_VERSION_OVERRIDES`(JSON, 예 `{"analysis": "v2"}`) — 시스템 프롬프트 버전. 본문은 `app/prompts/{monitor,analysis,action,router}/<version>.md`, 버전은 `invoke_agent` 스팬 `aiops.prompt.version` 과 보고서 `analysis.prompt_version` 에 실린다 (ADR-0019 실험 축). `analysis/v0-broken.md` 는 저품질 유발용(도구 검증·근거 인용 지시 삭제) — 평가 파이프라인의 알림·리뷰 큐를 실증할 때만 `PROMPT_VERSION_OVERRIDES={"analysis": "v0-broken"}` 으로 켠다
+- `EXPERIMENTS_FILE`(기본 `app/experiments/experiments.yml`) — A/B 실험 정의 (ADR-0019). 워크플로 시작 시 `ExperimentAssigner` 가 `sha256(name:incident_id)` 로 variant 를 정한다(status active 인 첫 실험, `sample` 비율만 편입, 첫 variant = control). 배정은 상태 `experiment` → 스팬 `aiops.experiment.name`·`aiops.experiment.variant`(`invoke_workflow`·`invoke_agent analysis`) → 보고서 최상위 `experiment{name, variant}` 로 흐른다. variant 의 `prompt` 는 분석 프롬프트 버전, `model_override: true` 는 LLM 요청 헤더 `X-Experiment-Variant: <name>:<variant>` — 모델은 게이트웨이 `gateway.yml` `experiments` 에 정의된 것만 바뀐다. 종료는 `status: concluded`
+- `PROMPT_VERSION`(기본 `v1`)·`PROMPT_VERSION_OVERRIDES`(JSON, 예 `{"analysis": "v2"}`) — 시스템 프롬프트 버전. 본문은 `app/prompts/{monitor,analysis,action,router}/<version>.md`, 버전은 `invoke_agent` 스팬 `aiops.prompt.version` 과 보고서 `analysis.prompt_version` 에 실린다 (ADR-0019 실험 축). `analysis/v2.md` 는 실험 1 처리군(추론 구조만 "근거 인용 → 가설 → 반증 → 결론" 으로, severity 기준·환경 특성은 v1 과 동일 — 단일 변인). `analysis/v0-broken.md` 는 저품질 유발용(도구 검증·근거 인용 지시 삭제) — 평가 파이프라인의 알림·리뷰 큐를 실증할 때만 `PROMPT_VERSION_OVERRIDES={"analysis": "v0-broken"}` 으로 켠다
 - `/health` 의 `otlp_enabled` 로 전송 여부 확인. 속성 계약 테스트는 `tests/test_otel.py`
 
 ## MCP 도구 (DAY 16, ADR-0010)

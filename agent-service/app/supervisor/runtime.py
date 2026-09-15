@@ -16,14 +16,16 @@ from psycopg.rows import dict_row
 from opentelemetry.context import Context
 from psycopg_pool import AsyncConnectionPool
 
-from app.config.agent_spans import RunSpanRef, span_ref, workflow_span
+from app.config.agent_spans import RunSpanRef, record_experiment, span_ref, workflow_span
 from app.config.settings import Settings
+from app.experiments.assigner import experiment_assigner
 from app.supervisor.graph import DONE, GRAPH_RECURSION_LIMIT, build_graph
 from app.supervisor.state import (
     ActionExecution,
     ActionPlan,
     AnalysisResult,
     ApprovalDecision,
+    ExperimentAssignment,
     IncidentInfo,
     MonitoringResult,
     NodeFailure,
@@ -59,6 +61,7 @@ def build_checkpoint_serializer() -> JsonPlusSerializer:
             ActionExecution,
             RecoveryResult,
             NodeFailure,
+            ExperimentAssignment,
         ]
     )
 
@@ -104,10 +107,19 @@ class GraphRuntime:
         # gen_ai.conversation.id(=incident id)는 하위 스팬 전부에 상속된다 (인시던트 1건 = Langfuse 세션 하나).
         # parent_context 는 Kafka 헤더의 상류(control-plane 웹훅) 컨텍스트 — 있으면 그 trace 에 잇는다.
         # 루트 좌표를 상태에 넣어 두는 이유: 승인 대기로 끊긴 뒤의 재개 trace 가 이 실행을 link 로 가리키기 위해
+        # 실험 배정은 시작 시 한 번 — 체크포인트에 남아 재개·재생에서도 같은 variant (ADR-0019, 해시 결정론)
+        experiment = experiment_assigner().assign(incident.id)
         with workflow_span(incident.id, parent_context=parent_context) as span:
             trace_id, span_id = span_ref(span)
+            record_experiment(experiment)
             await self.graph.ainvoke(
-                {"incident": incident, "messages": [], "run_trace_id": trace_id, "run_span_id": span_id},
+                {
+                    "incident": incident,
+                    "messages": [],
+                    "run_trace_id": trace_id,
+                    "run_span_id": span_id,
+                    "experiment": experiment,
+                },
                 config=self._config(incident.id),
             )
 
@@ -117,8 +129,9 @@ class GraphRuntime:
         승인 대기(interrupt) 상태에서 호출되면 approval 노드가 재실행되며 다시 interrupt
         로 멈춘다 — 결정 없는 재개는 대기를 갱신할 뿐이다 (반복 알림 재전달 경로).
         """
-        link = await self._run_ref(incident_id)
+        link, experiment = await self._checkpoint_context(incident_id)
         with workflow_span(incident_id, parent_context=parent_context, link_to=link, resumed=True):
+            record_experiment(experiment)
             await self.graph.ainvoke(None, config=self._config(incident_id))
 
     async def resume_with_decision(
@@ -130,16 +143,21 @@ class GraphRuntime:
         approval 노드가 다시 정규화한다 (알 수 없는 값은 안전 측 거부).
         재개는 새 trace(승인 결정 이벤트의 상류가 부모) — 원 실행은 link 로 가리킨다.
         """
-        link = await self._run_ref(incident_id)
+        link, experiment = await self._checkpoint_context(incident_id)
         with workflow_span(incident_id, parent_context=parent_context, link_to=link, resumed=True):
+            record_experiment(experiment)
             await self.graph.ainvoke(Command(resume=decision), config=self._config(incident_id))
 
-    async def _run_ref(self, incident_id: str) -> RunSpanRef | None:
-        """체크포인트에 보관된 원 실행(run) 워크플로 스팬 좌표 — 없으면(구버전 체크포인트) link 없음."""
+    async def _checkpoint_context(self, incident_id: str) -> tuple[RunSpanRef | None, ExperimentAssignment | None]:
+        """체크포인트에 보관된 원 실행(run) 스팬 좌표와 실험 배정 — 재개 trace 가 link 와 같은 실험 태그를 갖게.
+
+        구버전 체크포인트(좌표·배정 없음)는 (None, None).
+        """
         snapshot = await self.graph.aget_state(self._config(incident_id))
         values = snapshot.values or {}
         trace_id, span_id = values.get("run_trace_id"), values.get("run_span_id")
-        return (trace_id, span_id) if trace_id and span_id else None
+        link = (trace_id, span_id) if trace_id and span_id else None
+        return link, values.get("experiment")
 
     def start_background(self, incident: IncidentInfo) -> None:
         self._spawn(incident.id, self.start(incident))
@@ -227,6 +245,7 @@ class GraphRuntime:
             # 평가·실험의 프롬프트 축 (ADR-0019) — AnalysisResult 스키마(구조화 출력)에는 두지 않고 발행 시 합친다
             analysis["prompt_version"] = values.get("analysis_prompt_version")
         run_trace_id, run_span_id = values.get("run_trace_id"), values.get("run_span_id")
+        experiment: ExperimentAssignment | None = values.get("experiment")
         return {
             "incident_id": incident_id,
             "scenario": incident.scenario,
@@ -242,6 +261,8 @@ class GraphRuntime:
             "supervisor_visits": values.get("supervisor_visits", 0),
             # 원 실행 워크플로 스팬 좌표 (hex) — 평가 스팬이 span link 로 가리킨다 (구버전 체크포인트는 null)
             "trace_ref": {"trace_id": run_trace_id, "span_id": run_span_id} if run_trace_id and run_span_id else None,
+            # 실험 배정 (name·variant) — evaluation-service 가 평가에 옮겨 싣고 control-plane 이 variant 별로 집계한다
+            "experiment": {"name": experiment.name, "variant": experiment.variant} if experiment else None,
             "completed_at": datetime.now(UTC).isoformat(),
         }
 

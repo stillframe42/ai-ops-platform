@@ -81,3 +81,17 @@ def test_broken_analysis_prompt_exists_for_low_quality_induction():
     assert "compare_with_baseline" not in broken and "get_app_logs" not in broken
     assert "근거" in registry.get("analysis", "v1")
 
+
+
+def test_analysis_v2_changes_only_reasoning_structure():
+    """실험 1 처리군 v2 — 단일 변인: 추론 구조(근거 인용 → 가설 → 반증 → 결론)만 바꾸고 severity 기준·환경 특성은 v1 과 동일."""
+    registry = PromptRegistry("v1")
+    v1, v2 = registry.get("analysis", "v1"), registry.get("analysis", "v2")
+
+    def section(text: str, start: str, end: str | None) -> str:
+        body = text.split(start, 1)[1]
+        return body.split(end, 1)[0] if end else body
+
+    assert section(v1, "severity 기준:", "confidence 는") == section(v2, "severity 기준:", "confidence 는")
+    assert section(v1, "환경 특성 — 조치 판단 기준", None) == section(v2, "환경 특성 — 조치 판단 기준", None)
+    assert "반증" in v2 and "반증" not in v1

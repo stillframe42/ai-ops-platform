@@ -2,6 +2,8 @@ from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.experiments.definition import EXPERIMENTS_FILE
+
 
 class Settings(BaseSettings):
     """기본값은 호스트 실행 기준 — compose/K8s 는 env 로 컨테이너 주소를 덮어쓴다."""
@@ -37,6 +39,9 @@ class Settings(BaseSettings):
     # (예: PROMPT_VERSION_OVERRIDES='{"analysis": "v2"}' — 분석 프롬프트 실험은 이 값만 바꾼다, ADR-0019)
     prompt_version: str = "v1"
     prompt_version_overrides: dict[str, str] = {}
+
+    # A/B 실험 정의 파일 (ADR-0019) — 기본은 패키지 동봉본. 환경별로 다른 실험을 돌리려면 경로를 덮어쓴다
+    experiments_file: str = str(EXPERIMENTS_FILE)
 
     # OTLP 전송 — Collector 주소(스킴+호스트+포트, 경로 없음). 미설정이면 스팬·메트릭 생성만 하고 전송하지 않는다.
     # 백엔드(Tempo·Langfuse·Prometheus)는 Collector 설정 소관 (docs/otel-genai-mapping.md §2). Langfuse 도 이 경로로만
