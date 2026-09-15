@@ -2,6 +2,14 @@ spring:
   application:
     name: llm-gateway
 
+  # 비용 원장 스키마 버전 관리 (db/migration) — DataSource 는 gateway.postgres.url 로 만든 gatewayDataSource 하나라 Boot 자동 구성이
+  # 그 DB 에 적용한다 (미구성이면 Flyway 도 비활성). llmgateway DB 는 pgvector vector_store 가 먼저 생겨 비어 있지 않으므로
+  # baseline 이 필요하고, 기본 baseline 1 은 V1 을 건너뛰어 원장이 안 만들어진다 → 0 (control-plane 2026-07-27 실측과 같은 함정).
+  # 이미 원장이 있던 환경은 V1·V2 가 IF NOT EXISTS 라 같은 경로로 통과한다
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 0
+
   security:
     oauth2:
       resourceserver:

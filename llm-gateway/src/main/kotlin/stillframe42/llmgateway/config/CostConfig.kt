@@ -23,33 +23,11 @@ class CostConfig {
     @ConditionalOnProperty("gateway.postgres.url")
     class LedgerConfig {
 
-        // 스키마 준비는 배선 소관 — 저장소 클래스는 append 만 (8/19 검토: 생성자 I/O·책임 분리).
-        // 멱등 DDL 을 기동 시 실행하는 수명주기는 pgvector initializeSchema 와 대칭,
-        // 버전 관리(Flyway)는 첫 스키마 변경 시점에 도입 (그때 pgvector 테이블까지 함께 인수)
+        // 스키마는 Flyway(`db/migration`) 소유 — Boot 자동 구성이 gatewayDataSource 에 마이그레이션을 적용하고
+        // JdbcOperations 빈을 그 뒤로 미룬다. 저장소 클래스는 append 만 (8/19 검토: 생성자 I/O·책임 분리).
+        // vector_store 는 Spring AI pgvector 소유(initialize-schema) — control-plane 과 같은 경계
         @Bean
         fun jdbcCostLedger(gatewayJdbcTemplate: JdbcTemplate): CostLedger {
-            gatewayJdbcTemplate.execute(
-                """
-                CREATE TABLE IF NOT EXISTS llm_cost_ledger (
-                    id BIGSERIAL PRIMARY KEY,
-                    occurred_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-                    day DATE NOT NULL DEFAULT (now() AT TIME ZONE 'UTC')::date,
-                    service TEXT NOT NULL,
-                    task TEXT,
-                    provider TEXT NOT NULL,
-                    model TEXT NOT NULL,
-                    cache_status TEXT NOT NULL,
-                    prompt_tokens INT NOT NULL,
-                    completion_tokens INT NOT NULL,
-                    cost_usd NUMERIC(12, 6) NOT NULL,
-                    saved_usd NUMERIC(12, 6) NOT NULL
-                )
-                """.trimIndent(),
-            )
-            // 집계 차원 질의(서비스별/일별)용 — 태스크·모델은 스캔 규모상 인덱스 불요 (데모 규모)
-            gatewayJdbcTemplate.execute(
-                "CREATE INDEX IF NOT EXISTS idx_llm_cost_ledger_day_service ON llm_cost_ledger (day, service)",
-            )
             return JdbcCostLedger(gatewayJdbcTemplate)
         }
     }

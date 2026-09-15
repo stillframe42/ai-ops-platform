@@ -33,6 +33,7 @@ dependencies {
 	implementation("io.github.resilience4j:resilience4j-circuitbreaker:2.3.0")
 	implementation("io.github.resilience4j:resilience4j-micrometer:2.3.0")
 	implementation("org.springframework.ai:spring-ai-pgvector-store")
+	implementation("org.springframework.boot:spring-boot-starter-flyway")
 	implementation("com.zaxxer:HikariCP")
 	runtimeOnly("org.postgresql:postgresql")
 	implementation("tools.jackson.module:jackson-module-kotlin")
@@ -40,6 +41,7 @@ dependencies {
 	implementation("io.micrometer:micrometer-tracing-bridge-otel")
 	implementation("io.opentelemetry:opentelemetry-exporter-otlp")
 	runtimeOnly("io.micrometer:micrometer-registry-prometheus")
+	runtimeOnly("org.flywaydb:flyway-database-postgresql")
 	testImplementation("io.micrometer:micrometer-registry-prometheus")
 	testImplementation("org.springframework.boot:spring-boot-starter-actuator-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
@@ -47,6 +49,8 @@ dependencies {
 	testImplementation("io.opentelemetry:opentelemetry-sdk-testing")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+	// 마이그레이션 SQL 적용 검증용 인메모리 DB (PostgreSQL 호환 모드) — 실 pgvector 는 compose·kind 기동 로그로 확인
+	testRuntimeOnly("com.h2database:h2")
 }
 
 dependencyManagement {
