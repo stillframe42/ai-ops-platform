@@ -581,6 +581,50 @@
           "tableType": "traces"
         }
       ]
+    },
+    {
+      "id": 12,
+      "type": "timeseries",
+      "title": "실험 variant 별 Faithfulness — 1h 평균 (aiops_experiment_name · aiops_experiment_variant)",
+      "description": "ADR-0019 실험 층의 결과 뷰. 배정된 variant(agent-service 해시 배정 → 보고서 experiment → 평가 메트릭 라벨)별 Faithfulness 1h 평균. variant none = 실험 밖 인시던트. 판정은 experiment_report.py 의 부트스트랩 CI 로 — 이 패널은 추세 확인용. 창 증가분 계산은 패널 4 와 같은 방식",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "((sum by (aiops_experiment_name, aiops_experiment_variant)(increase(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) + sum by (aiops_experiment_name, aiops_experiment_variant)(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h))) or sum by (aiops_experiment_name, aiops_experiment_variant)(increase(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) or sum by (aiops_experiment_name, aiops_experiment_variant)(aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_sum{aiops_evaluation_dimension=\"faithfulness\"} offset 1h))) / ((sum by (aiops_experiment_name, aiops_experiment_variant)(increase(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) + sum by (aiops_experiment_name, aiops_experiment_variant)(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h))) or sum by (aiops_experiment_name, aiops_experiment_variant)(increase(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"}[1h]) and (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)) or sum by (aiops_experiment_name, aiops_experiment_variant)(aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension=\"faithfulness\"} offset 1h)))",
+          "legendFormat": "{{aiops_experiment_name}} · {{aiops_experiment_variant}}"
+        }
+      ]
     }
   ],
   "templating": {
@@ -589,5 +633,6 @@
   "annotations": {
     "list": []
   },
-  "links": []
+  "links": [],
+  "version": 2
 }

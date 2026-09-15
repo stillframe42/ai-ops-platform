@@ -14,6 +14,7 @@ SETTLE_SECONDS=${SETTLE_SECONDS:-360}   # 최장 rate 창 5m + 여유 — reset 
 FIRE_TIMEOUT=${FIRE_TIMEOUT:-900}
 PIPELINE_TIMEOUT=${PIPELINE_TIMEOUT:-240}
 RESULTS_FILE=${RESULTS_FILE:-./e2e-runs.jsonl}
+CP_TOKEN=${CP_TOKEN:-}   # control-plane API 는 ops:read 필수 — 비어 있으면 인시던트 조회가 401 로 빈 목록이 되어 회차가 시간 초과된다
 COMPOSE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 log() { echo "[$(date -u +%H:%M:%S)] $*" >&2; }
@@ -86,7 +87,7 @@ wait_incident() {
   local scenario_label=$1 baseline=$2 deadline=$(( $(date +%s) + PIPELINE_TIMEOUT ))
   while [ "$(date +%s)" -lt "$deadline" ]; do
     local id
-    id=$(curl -s "$CP/api/incidents?limit=5" \
+    id=$(curl -s -H "Authorization: Bearer $CP_TOKEN" "$CP/api/incidents?limit=5" \
       | jq -r ".[] | select(.scenario==\"$scenario_label\") | .incident_id" \
       | grep -vxF -f "$baseline" | head -1 || true)
     if [ -n "$id" ]; then echo "$id"; return 0; fi
@@ -117,7 +118,7 @@ run_cycle() {
 
   local baseline
   baseline=$(mktemp)
-  curl -s "$CP/api/incidents?limit=20" | jq -r '.[].incident_id' > "$baseline"
+  curl -s -H "Authorization: Bearer $CP_TOKEN" "$CP/api/incidents?limit=20" | jq -r '.[].incident_id' > "$baseline"
 
   local t_inject t_fire incident_id t_slack="" outcome=ok
   t_inject=$(now_iso)
@@ -144,7 +145,7 @@ run_cycle() {
 
   # 회차 기록 — 구간 시간 계산 + API 요약 필드 결합
   local summary=null
-  [ -n "${incident_id:-}" ] && summary=$(curl -s "$CP/api/incidents?limit=5" \
+  [ -n "${incident_id:-}" ] && summary=$(curl -s -H "Authorization: Bearer $CP_TOKEN" "$CP/api/incidents?limit=5" \
     | jq -c ".[] | select(.incident_id==\"$incident_id\") | {status, severity, confidence}")
   python3 - "$scenario" "$outcome" "$t_inject" "${t_fire:-}" "${t_slack:-}" "${incident_id:-}" "$summary" >> "$RESULTS_FILE" <<'PY'
 import json, sys
