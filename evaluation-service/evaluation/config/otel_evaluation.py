@@ -37,6 +37,8 @@ ATTR_OPERATION = "aiops.operation"  # evaluate — gen_ai.operation.name 의 표
 ATTR_DIMENSION = "aiops.evaluation.dimension"
 ATTR_SEVERITY = "aiops.evaluation.severity"  # 평가 대상 보고서의 P 등급 (에이전트 판정)
 ATTR_PROMPT_VERSION = "aiops.prompt.version"  # 평가 대상 분석 프롬프트 버전 — 실험 축
+ATTR_EXPERIMENT_NAME = "aiops.experiment.name"  # A/B 실험 좌표 (보고서 `experiment`, ADR-0019 결정 ③)
+ATTR_EXPERIMENT_VARIANT = "aiops.experiment.variant"
 ATTR_JUDGE_PROMPT_VERSION = "aiops.evaluation.judge_prompt_version"
 ATTR_JUDGE_MODEL = "aiops.evaluation.judge_model"
 ATTR_FAILURE_MODE = "aiops.evaluation.failure_mode"
@@ -51,6 +53,7 @@ ATTR_SAMPLE_PROFILE = "aiops.evaluation.sample_profile"
 OUTCOME_OK, OUTCOME_ERROR = "ok", "error"
 LINK_REASON = "evaluation-of"
 UNKNOWN_PROMPT_VERSION = "unknown"
+NO_EXPERIMENT = "none"
 
 _histogram: metrics.Histogram | None = None
 _counters: dict[str, metrics.Counter] = {}
@@ -98,6 +101,9 @@ def record_evaluation(evaluation: Evaluation, *, severity: str | None, span: Spa
         ATTR_SEVERITY: severity or "unknown",
         ATTR_PROMPT_VERSION: evaluation.analysis_prompt_version or UNKNOWN_PROMPT_VERSION,
         ATTR_JUDGE_PROMPT_VERSION: evaluation.prompt_version,
+        # 실험 밖 보고서도 "none" 으로 라벨을 채운다 — Prometheus 에서 시리즈 형태를 고정하기 위해 (라벨 유무가 갈리면 sum by 가 두 갈래로 나뉜다)
+        ATTR_EXPERIMENT_NAME: evaluation.experiment_name or NO_EXPERIMENT,
+        ATTR_EXPERIMENT_VARIANT: evaluation.experiment_variant or NO_EXPERIMENT,
     }
     _counter(METRIC_VERDICTS, "Judge 판정 수 (failure_mode 축)").add(
         1, {ATTR_FAILURE_MODE: evaluation.failure_mode, ATTR_LOW_QUALITY: str(evaluation.low_quality).lower(), **metric_attributes}

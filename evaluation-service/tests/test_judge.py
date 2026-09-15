@@ -47,3 +47,15 @@ def test_payload_contract_carries_analysis_prompt_version():
     payload = evaluation.to_payload()
     assert payload["analysis_prompt_version"] == "v2" and payload["low_quality"] is True
     assert "judge_response_id" not in payload
+
+
+def test_payload_contract_carries_experiment_axis_null_by_default():
+    base = dict(
+        incident_id="inc-x", scores={"faithfulness": DimensionScore(1.0, "r")}, failure_mode="없음",
+        judge_model="gpt-5.6-terra", prompt_version="v1", evidence_available=False,
+    )
+    payload = Evaluation(**base).to_payload()
+    assert payload["experiment_name"] is None and payload["experiment_variant"] is None
+
+    payload = Evaluation(**base, experiment_name="analysis-prompt-v2", experiment_variant="B").to_payload()
+    assert payload["experiment_name"] == "analysis-prompt-v2" and payload["experiment_variant"] == "B"

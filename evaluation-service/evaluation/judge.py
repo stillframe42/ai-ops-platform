@@ -38,6 +38,9 @@ class Evaluation:
     evidence_available: bool
     # 평가 대상 분석 프롬프트 버전 (보고서 `analysis.prompt_version`) — 실험 축. 구버전 보고서는 None
     analysis_prompt_version: str | None = None
+    # A/B 실험 좌표 (보고서 `experiment.{name,variant}`, ADR-0019 결정 ③) — 실험 밖 보고서·구버전 보고서는 None
+    experiment_name: str | None = None
+    experiment_variant: str | None = None
     # Judge 응답 id (`gen_ai.response.id`) — 평가 이벤트와 Judge 호출 스팬의 상관 키, 페이로드에는 싣지 않는다
     judge_response_id: str | None = None
     evaluated_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
@@ -55,6 +58,8 @@ class Evaluation:
             "judge_model": self.judge_model,
             "prompt_version": self.prompt_version,
             "analysis_prompt_version": self.analysis_prompt_version,
+            "experiment_name": self.experiment_name,
+            "experiment_variant": self.experiment_variant,
             "evidence_available": self.evidence_available,
             "evaluated_at": self.evaluated_at,
         }

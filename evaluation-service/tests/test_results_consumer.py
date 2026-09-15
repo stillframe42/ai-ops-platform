@@ -72,6 +72,8 @@ class FakeJudge:
             judge_model="stub",
             prompt_version="test",
             evidence_available=evidence is not None,
+            experiment_name=(report.get("experiment") or {}).get("name"),
+            experiment_variant=(report.get("experiment") or {}).get("variant"),
         )
 
 
@@ -179,3 +181,16 @@ def test_consumer_span_carries_sampling_decision_and_incident_axis():
     assert span.attributes[ATTR_SAMPLED_REASON] == "critical"  # TargetAppHighErrorRate = critical 규칙
     assert span.attributes[ATTR_EVIDENCE] == "disabled"
     assert span.attributes["messaging.destination.name"] == "ops.analysis.results"
+
+
+def test_published_payload_carries_experiment_axis_from_report():
+    judge, publisher = FakeJudge(), RecordingPublisher()
+    processor = EvaluationEventProcessor(Sampler("experiment"), judge, publisher)
+
+    asyncio.run(processor.process(_report(experiment={"name": "analysis-prompt-v2", "variant": "B"})))
+    asyncio.run(processor.process(_report(experiment=None)))
+
+    _, with_experiment = publisher.published[0]
+    assert with_experiment["experiment_name"] == "analysis-prompt-v2" and with_experiment["experiment_variant"] == "B"
+    _, without_experiment = publisher.published[1]
+    assert without_experiment["experiment_name"] is None and without_experiment["experiment_variant"] is None

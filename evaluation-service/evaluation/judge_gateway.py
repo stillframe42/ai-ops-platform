@@ -23,6 +23,8 @@ from opentelemetry import trace
 from opentelemetry.trace import Link, SpanContext, SpanKind, Status, StatusCode, TraceFlags
 
 from evaluation.config.otel_evaluation import (
+    ATTR_EXPERIMENT_NAME,
+    ATTR_EXPERIMENT_VARIANT,
     ATTR_FAILURE_MODE,
     ATTR_JUDGE_MODEL,
     ATTR_JUDGE_PROMPT_VERSION,
@@ -99,11 +101,16 @@ class GatewayJudge:
         """ground_truth 는 골든셋 측정 전용 — 온라인 경로(컨슈머)는 주지 않는다 (배포 형상 그대로 측정하려면 여기서도 생략)."""
         incident_id = report["incident_id"]
         analysis = report.get("analysis") or {}
+        experiment = report.get("experiment") or {}
         attributes = {
             ATTR_OPERATION: "evaluate",
             ATTR_JUDGE_PROMPT_VERSION: self._prompt_version,
             **incident_attributes(incident_id),
         }
+        # 스팬은 메트릭과 달리 시리즈 형태 제약이 없다 — 실험 밖 보고서에는 속성 자체를 두지 않는다
+        for attribute, key in ((ATTR_EXPERIMENT_NAME, "name"), (ATTR_EXPERIMENT_VARIANT, "variant")):
+            if experiment.get(key):
+                attributes[attribute] = str(experiment[key])
         with _tracer.start_as_current_span(
             "evaluate incident-report", kind=SpanKind.INTERNAL, attributes=attributes, links=_link_to(report.get("trace_ref"))
         ) as span:
@@ -127,6 +134,8 @@ class GatewayJudge:
                 prompt_version=self._prompt_version,
                 evidence_available=evidence is not None,
                 analysis_prompt_version=analysis.get("prompt_version"),
+                experiment_name=experiment.get("name"),
+                experiment_variant=experiment.get("variant"),
                 judge_response_id=response_id,
             )
             span.set_attributes(

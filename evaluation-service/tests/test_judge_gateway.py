@@ -11,12 +11,15 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 from evaluation.config.otel_evaluation import (
     ATTR_DIMENSION,
+    ATTR_EXPERIMENT_NAME,
+    ATTR_EXPERIMENT_VARIANT,
     ATTR_FAILURE_MODE,
     ATTR_JUDGE_OUTCOME,
     EVENT_NAME,
     METRIC_JUDGE_CALLS,
     METRIC_SCORE,
     METRIC_VERDICTS,
+    NO_EXPERIMENT,
 )
 from evaluation.config.settings import Settings
 from evaluation.judge_gateway import GatewayJudge
@@ -234,3 +237,45 @@ def test_counters_cover_verdict_failure_mode_and_judge_call_outcome():
     assert _count(METRIC_JUDGE_CALLS, **{ATTR_JUDGE_OUTCOME: "ok"}) == ok_before + 1
     assert _count(METRIC_JUDGE_CALLS, **{ATTR_JUDGE_OUTCOME: "error", "error.type": "VerdictError"}) == err_before + 1
     assert _count(METRIC_VERDICTS, **{ATTR_FAILURE_MODE: "D"}) == verdicts_before + 1
+
+
+def _score_points(**attrs):
+    data = METRIC_READER.get_metrics_data()
+    found = [m for rm in data.resource_metrics for sm in rm.scope_metrics for m in sm.metrics if m.name == METRIC_SCORE]
+    return [p for p in found[-1].data.data_points if all(p.attributes.get(k) == v for k, v in attrs.items())]
+
+
+def test_experiment_axis_from_report_reaches_payload_span_and_metrics():
+    """A/B 실험 축(ADR-0019 결정 ③) — 보고서 `experiment` → 평가 필드·평가 스팬 속성·히스토그램/판정 카운터 속성."""
+    exporter = _exporter()
+    report = {**_report(), "experiment": {"name": "analysis-prompt-v2", "variant": "B"}}
+    verdicts_before = _count(METRIC_VERDICTS, **{ATTR_EXPERIMENT_VARIANT: "B"})
+
+    evaluation = _evaluate(Gateway(_verdict()), report)
+
+    assert evaluation.experiment_name == "analysis-prompt-v2" and evaluation.experiment_variant == "B"
+    payload = evaluation.to_payload()
+    assert payload["experiment_name"] == "analysis-prompt-v2" and payload["experiment_variant"] == "B"
+
+    span = next(s for s in reversed(exporter.get_finished_spans()) if s.name == "evaluate incident-report")
+    assert span.attributes[ATTR_EXPERIMENT_NAME] == "analysis-prompt-v2"
+    assert span.attributes[ATTR_EXPERIMENT_VARIANT] == "B"
+
+    points = _score_points(**{ATTR_EXPERIMENT_VARIANT: "B"})
+    assert {p.attributes[ATTR_EXPERIMENT_NAME] for p in points} == {"analysis-prompt-v2"}
+    assert {p.attributes[ATTR_DIMENSION] for p in points} == {"faithfulness", "actionability", "severity_accuracy"}
+    assert _count(METRIC_VERDICTS, **{ATTR_EXPERIMENT_VARIANT: "B"}) == verdicts_before + 1
+
+
+@pytest.mark.parametrize("report", [_report(), {**_report(), "experiment": None}])
+def test_report_without_experiment_keeps_series_shape_with_none_label(report):
+    exporter = _exporter()
+
+    evaluation = _evaluate(Gateway(_verdict()), report)
+
+    assert evaluation.experiment_name is None and evaluation.experiment_variant is None
+    span = next(s for s in reversed(exporter.get_finished_spans()) if s.name == "evaluate incident-report")
+    assert ATTR_EXPERIMENT_NAME not in span.attributes and ATTR_EXPERIMENT_VARIANT not in span.attributes
+    # 라벨 유무가 갈리면 Prometheus 시리즈가 두 갈래 — 없을 때도 "none" 으로 고정
+    points = _score_points(**{ATTR_EXPERIMENT_VARIANT: NO_EXPERIMENT, ATTR_EXPERIMENT_NAME: NO_EXPERIMENT})
+    assert {p.attributes[ATTR_DIMENSION] for p in points} == {"faithfulness", "actionability", "severity_accuracy"}
