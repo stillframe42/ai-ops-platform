@@ -52,4 +52,13 @@ class LlmGatewayApplicationTests {
 		assertTrue(routingProperties.rules.any { it.task == "guardrail-classify" && it.maxTokens == 5 })
 		assertEquals(GuardrailProperties.Mode.FLAG, guardrailProperties.mode)
 	}
+
+	// Map 키(variant 이름 "B")는 대문자 그대로 바인딩돼야 헤더 값 `<name>:B` 와 대조된다 — 완화 바인딩이 소문자로 바꾸면 실험이 조용히 무효
+	@Test
+	fun `실험 variant 가 gateway yml 에서 variant 키 원문 그대로 바인딩된다`() {
+		val experiment = routingProperties.experiments.single { it.name == "analysis-model-haiku" }
+		assertEquals("root-cause-analysis", experiment.task)
+		assertEquals("claude-haiku-4-5", experiment.variants["B"]?.model)
+		assertEquals("anthropic", experiment.variants["B"]?.provider)
+	}
 }

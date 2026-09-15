@@ -6,4 +6,6 @@ data class Route(
     val provider: Provider,
     val model: String,
     val maxTokens: Int?,
+    /** 실험 variant 오버라이드가 적용됐을 때만 `<name>:<variant>` — 캐시 키·비용 라벨의 실험 축 (미적용 = null) */
+    val variant: String? = null,
 )

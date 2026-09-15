@@ -141,6 +141,40 @@ class GatewayControllerTest {
     }
 
     @Test
+    fun `적용된 실험 variant 는 X-Gateway-Variant 헤더로 드러난다`() {
+        val request = ChatCompletionRequest(messages = listOf(ChatMessage(role = "user", content = "ping")))
+        given(cachingChat.complete(request, "root-cause-analysis", null, "agent-service", "analysis-model-haiku:B"))
+            .willReturn(CachedChatResult(response(), CacheStatus.MISS, variant = "analysis-model-haiku:B"))
+
+        mockMvc.perform(
+            post("/v1/chat/completions")
+                .contentType(MediaType.APPLICATION_JSON).with(agentToken())
+                .header("X-Task-Type", "root-cause-analysis")
+                .header("X-Experiment-Variant", "analysis-model-haiku:B")
+                .content("""{"messages":[{"role":"user","content":"ping"}]}"""),
+        )
+            .andExpect(status().isOk)
+            .andExpect(header().string("X-Gateway-Variant", "analysis-model-haiku:B"))
+    }
+
+    @Test
+    fun `variant 가 적용되지 않으면 헤더를 보냈어도 X-Gateway-Variant 는 없다`() {
+        val request = ChatCompletionRequest(messages = listOf(ChatMessage(role = "user", content = "ping")))
+        given(cachingChat.complete(request, "root-cause-analysis", null, "agent-service", "analysis-model-haiku:Z"))
+            .willReturn(CachedChatResult(response(), CacheStatus.MISS))
+
+        mockMvc.perform(
+            post("/v1/chat/completions")
+                .contentType(MediaType.APPLICATION_JSON).with(agentToken())
+                .header("X-Task-Type", "root-cause-analysis")
+                .header("X-Experiment-Variant", "analysis-model-haiku:Z")
+                .content("""{"messages":[{"role":"user","content":"ping"}]}"""),
+        )
+            .andExpect(status().isOk)
+            .andExpect(header().doesNotExist("X-Gateway-Variant"))
+    }
+
+    @Test
     fun `stream=true 요청은 400 - OpenAI 오류 계약`() {
         mockMvc.perform(
             post("/v1/chat/completions")

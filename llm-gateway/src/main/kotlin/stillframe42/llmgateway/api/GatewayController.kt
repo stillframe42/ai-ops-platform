@@ -27,6 +27,7 @@ class GatewayController(
         @RequestBody request: ChatCompletionRequest,
         @RequestHeader(GatewayHeaders.TASK_TYPE, required = false) taskType: String?,
         @RequestHeader(GatewayHeaders.CACHE_CONTROL, required = false) cacheControl: String?,
+        @RequestHeader(GatewayHeaders.EXPERIMENT_VARIANT, required = false) experimentVariant: String?,
     ): ResponseEntity<ChatCompletionResponse> {
         if (request.stream == true) {
             // 스트리밍 미지원 (현행 클라이언트 사용 0건 실측 — 배제 아닌 유예)
@@ -45,7 +46,7 @@ class GatewayController(
         val effectiveCacheControl = if (guardrail.isClean) cacheControl else "no-cache"
 
         // 서비스 차원은 검증된 토큰의 client_id — 헤더 자기 신고(X-Client-Service)는 위조 가능해 제거 (ADR-0016)
-        val result = cachingChatService.complete(maskedRequest, taskType, effectiveCacheControl, ClientIdentity.current())
+        val result = cachingChatService.complete(maskedRequest, taskType, effectiveCacheControl, ClientIdentity.current(), experimentVariant)
 
         val builder = ResponseEntity.ok()
             // 캐시 판정 노출 — 확인 기준 실측·클라이언트 디버깅용 (OpenAI 계약 밖 부가 헤더라 무해)
@@ -62,6 +63,10 @@ class GatewayController(
         result.fallbackTarget?.let {
             // 주 프로바이더 장애로 폴백 발생 — 값은 교차 프로바이더명 또는 local
             builder.header(GatewayHeaders.FALLBACK, it)
+        }
+        result.variant?.let {
+            // 요청 헤더의 variant 가 실제 적용됐을 때만 — 미정의 variant 를 보낸 호출자는 이 헤더 부재로 무시를 안다
+            builder.header(GatewayHeaders.VARIANT, it)
         }
         return builder.body(result.response)
     }

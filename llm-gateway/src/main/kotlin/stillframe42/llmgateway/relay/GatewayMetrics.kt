@@ -17,12 +17,14 @@ class GatewayMetrics(
     private val meterRegistry: MeterRegistry,
 ) {
 
-    fun record(taskType: String?, provider: Provider, model: String) {
+    /** variant 라벨은 실험 오버라이드(`<name>:<variant>`)가 적용된 요청만 값이 있다 — 대조군은 "none" (ADR-0019) */
+    fun record(taskType: String?, provider: Provider, model: String, variant: String?) {
         meterRegistry.counter(
             "gateway.requests",
             "task", taskType ?: "none",
             "provider", provider.name.lowercase(),
             "model", model,
+            "variant", variant ?: "none",
         ).increment()
     }
 
@@ -57,22 +59,24 @@ class GatewayMetrics(
     }
 
     /** 실지출 USD — 단가는 gateway.cost 외부화 테이블 단일 원천 */
-    fun costUsd(service: String, task: String?, model: String, amount: Double) {
+    fun costUsd(service: String, task: String?, model: String, variant: String?, amount: Double) {
         meterRegistry.counter(
             "gateway.cost.usd",
             "service", service,
             "task", task ?: "none",
             "model", model,
+            "variant", variant ?: "none",
         ).increment(amount)
     }
 
     /** 캐시 히트로 아낀 USD — 대시보드 절감 비용 패널의 표준가 상수를 대체 */
-    fun costSavedUsd(service: String, task: String?, model: String, amount: Double) {
+    fun costSavedUsd(service: String, task: String?, model: String, variant: String?, amount: Double) {
         meterRegistry.counter(
             "gateway.cost.saved.usd",
             "service", service,
             "task", task ?: "none",
             "model", model,
+            "variant", variant ?: "none",
         ).increment(amount)
     }
 

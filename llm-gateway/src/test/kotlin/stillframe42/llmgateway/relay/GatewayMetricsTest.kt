@@ -1,10 +1,13 @@
 package stillframe42.llmgateway.relay
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import io.micrometer.prometheusmetrics.PrometheusConfig
 import io.micrometer.prometheusmetrics.PrometheusMeterRegistry
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import stillframe42.llmgateway.cache.CacheStatus
+import stillframe42.llmgateway.routing.Provider
 
 class GatewayMetricsTest {
 
@@ -20,5 +23,17 @@ class GatewayMetricsTest {
         val scraped = registry.scrape()
         assertTrue(scraped.contains("gateway_latency_seconds_bucket"), "버킷 미발행 — 분위수 패널이 공백이 된다:\n$scraped")
         assertTrue(scraped.contains("result=\"miss\""))
+    }
+
+    @Test
+    fun `요청 카운터는 실험 variant 라벨을 나른다 - 미적용은 none`() {
+        val registry = SimpleMeterRegistry()
+        val gatewayMetrics = GatewayMetrics(registry)
+
+        gatewayMetrics.record("root-cause-analysis", Provider.ANTHROPIC, "claude-sonnet-5", variant = null)
+        gatewayMetrics.record("root-cause-analysis", Provider.ANTHROPIC, "claude-haiku-4-5", variant = "analysis-model-haiku:B")
+
+        assertEquals(1.0, registry.get("gateway.requests").tags("variant", "none").counter().count(), 1e-9)
+        assertEquals(1.0, registry.get("gateway.requests").tags("variant", "analysis-model-haiku:B").counter().count(), 1e-9)
     }
 }

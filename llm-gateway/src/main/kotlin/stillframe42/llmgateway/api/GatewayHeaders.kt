@@ -13,6 +13,9 @@ object GatewayHeaders {
     /** 요청 — `no-cache` 면 캐싱 제외 */
     const val CACHE_CONTROL = "X-Cache-Control"
 
+    /** 요청 — 실험 variant `<experiment-name>:<variant>` (예: analysis-model-haiku:B). gateway.routing.experiments 에 정의된 것만 적용, 나머지는 무시 (ADR-0019) */
+    const val EXPERIMENT_VARIANT = "X-Experiment-Variant"
+
     /** 응답 — 캐시 판정 (exact_hit / semantic_hit / miss / bypass) */
     const val CACHE = "X-Gateway-Cache"
 
@@ -27,4 +30,7 @@ object GatewayHeaders {
 
     /** 응답 — 주 프로바이더 장애로 폴백 발생 (교차 프로바이더명 또는 local) */
     const val FALLBACK = "X-Gateway-Fallback"
+
+    /** 응답 — 실제 적용된 실험 variant (요청 값 그대로), 적용됐을 때만 존재 */
+    const val VARIANT = "X-Gateway-Variant"
 }

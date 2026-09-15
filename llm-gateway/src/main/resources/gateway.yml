@@ -95,3 +95,13 @@ gateway:
       task: default
       provider: anthropic
       model: claude-sonnet-5
+    # A/B 실험 (ADR-0019 결정 ③) — 배정은 agent-service(incident_id 해시), 게이트웨이는 X-Experiment-Variant `<name>:<variant>` 로
+    # 지목된 variant 의 모델 오버라이드만 맡는다. 실험 variant 는 여기 정의된 것만 허용 — 헤더로 임의 모델 지정 금지
+    # (예산·라우팅 정책 우회). 미정의 variant·태스크 불일치는 무시(규칙대로 해석 + WARN), 적용 시 응답 X-Gateway-Variant 로 확인
+    experiments:
+      - name: analysis-model-haiku
+        task: root-cause-analysis
+        variants:
+          B:
+            provider: anthropic
+            model: claude-haiku-4-5

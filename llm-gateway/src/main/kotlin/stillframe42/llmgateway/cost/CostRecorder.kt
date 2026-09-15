@@ -22,8 +22,8 @@ class CostRecorder(
         val cost = if (hit) 0.0 else amount
         val saved = if (hit) amount else 0.0
 
-        if (cost > 0.0) gatewayMetrics.costUsd(service, route.taskType, response.model, cost)
-        if (saved > 0.0) gatewayMetrics.costSavedUsd(service, route.taskType, response.model, saved)
+        if (cost > 0.0) gatewayMetrics.costUsd(service, route.taskType, response.model, route.variant, cost)
+        if (saved > 0.0) gatewayMetrics.costSavedUsd(service, route.taskType, response.model, route.variant, saved)
         costLedger?.append(
             CostEntry(
                 service = service,
@@ -35,6 +35,7 @@ class CostRecorder(
                 completionTokens = response.usage.completionTokens,
                 costUsd = cost,
                 savedUsd = saved,
+                variant = route.variant,
             ),
         )
         return cost

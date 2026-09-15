@@ -13,4 +13,6 @@ data class CostEntry(
     val completionTokens: Int,
     val costUsd: Double,
     val savedUsd: Double,
+    /** 실험 variant 오버라이드 적용 시 `<name>:<variant>` — 실험군 비용 집계 축 (미적용 = null) */
+    val variant: String? = null,
 )

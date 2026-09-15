@@ -19,8 +19,8 @@ class JdbcCostLedger(
             jdbcTemplate.update(
                 """
                 INSERT INTO llm_cost_ledger
-                    (service, task, provider, model, cache_status, prompt_tokens, completion_tokens, cost_usd, saved_usd)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (service, task, provider, model, cache_status, prompt_tokens, completion_tokens, cost_usd, saved_usd, variant)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent(),
                 entry.service,
                 entry.task,
@@ -31,6 +31,7 @@ class JdbcCostLedger(
                 entry.completionTokens,
                 entry.costUsd,
                 entry.savedUsd,
+                entry.variant,
             )
         }.onFailure {
             logger.warn("비용 원장 기록 실패 — 메트릭은 유지: {}", it.message)

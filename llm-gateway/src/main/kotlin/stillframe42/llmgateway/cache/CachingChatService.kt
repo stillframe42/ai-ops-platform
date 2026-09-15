@@ -38,11 +38,13 @@ class CachingChatService(
         taskType: String?,
         cacheControl: String?,
         service: String,
+        experimentVariant: String? = null,
     ): CachedChatResult {
         // 레이턴시는 캐시 판정별 분리 기록 — 판정을 아는 finish 가 멈춘다
         val timer = gatewayMetrics.startTimer()
         // 다운그레이드된 라우트가 캐시 키·모델 필터에도 그대로 쓰인다 — 원 모델 캐시와 격리 (DAY 31 연결 메모)
-        val decision = budgetGuard.enforce(modelRouter.resolve(taskType, request.model), service)
+        // variant 오버라이드도 같은 Route 에 실린다 — variant 가 캐시 키에 들어가 실험군 응답이 대조군 캐시에 적중하지 않는다
+        val decision = budgetGuard.enforce(modelRouter.resolve(taskType, request.model, experimentVariant), service)
         val route = decision.route
         if (!cacheable(request, cacheControl)) {
             return finish(fallbackChatRelayService.relay(request, route), CacheStatus.BYPASS, service, decision, timer)
@@ -114,6 +116,6 @@ class CachingChatService(
         gatewayMetrics.latency(timer, status)
         val cost = costRecorder.record(service, effectiveRoute, response, status)
         budgetGuard.settle(service, cost)
-        return CachedChatResult(response, status, decision.downgraded, fallbackTarget)
+        return CachedChatResult(response, status, decision.downgraded, fallbackTarget, decision.route.variant)
     }
 }

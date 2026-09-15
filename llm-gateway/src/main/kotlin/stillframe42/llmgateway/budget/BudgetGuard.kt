@@ -30,11 +30,13 @@ class BudgetGuard(
         }
 
         gatewayMetrics.budgetDowngrade(service, route.model)
+        // variant 배정은 다운그레이드를 넘어 유지한다 — 실험군 요청이 대조군 비용·캐시로 섞이지 않도록 (다운그레이드 사실은 헤더가 따로 표시)
         val downgraded = Route(
             taskType = route.taskType,
             provider = Provider.valueOf(budgetProperties.downgrade.provider.uppercase()),
             model = budgetProperties.downgrade.model,
             maxTokens = budgetProperties.downgrade.maxTokens,
+            variant = route.variant,
         )
         return BudgetDecision(downgraded, downgraded = true)
     }

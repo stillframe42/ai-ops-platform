@@ -70,6 +70,7 @@ class GatewayAuditFilterTest {
         assertEquals("200", mdc["http.status"])
         assertEquals("exact_hit", mdc["cache"])
         assertEquals("flagged", mdc["guardrail"])
+        assertEquals("none", mdc["variant"])
         // 로그 행이 끝나면 MDC 는 비어 있어야 한다 — 다음 요청·다른 로그로 누수 금지
         assertTrue(MDC.getCopyOfContextMap().isNullOrEmpty())
     }
@@ -103,6 +104,32 @@ class GatewayAuditFilterTest {
         assertNull(attributes.get(AttributeKey.stringKey("gateway.downgrade")))
         assertNull(attributes.get(AttributeKey.stringKey("gateway.fallback")))
         assertNull(attributes.get(AttributeKey.stringKey("gateway.guardrail_stage")))
+    }
+
+    @Test
+    fun `적용된 실험 variant 는 MDC 필드·로그 행·스팬 속성에 함께 남는다`() {
+        val jwt = Jwt.withTokenValue("t").header("alg", "RS256").subject("agent-service").claim("scope", listOf("llm:invoke")).build()
+        SecurityContextHolder.getContext().authentication = JwtAuthenticationToken(jwt, listOf(SimpleGrantedAuthority("SCOPE_llm:invoke")))
+        val exporter = InMemorySpanExporter.create()
+        val tracer = SdkTracerProvider.builder().addSpanProcessor(SimpleSpanProcessor.create(exporter)).build().get("test")
+        val request = MockHttpServletRequest("POST", "/v1/chat/completions").apply { addHeader("X-Task-Type", "root-cause-analysis") }
+        val chain = MockFilterChain(object : HttpServlet() {
+            override fun service(req: HttpServletRequest, res: HttpServletResponse) {
+                res.setHeader("X-Gateway-Cache", "miss")
+                res.setHeader("X-Gateway-Guardrail", "clean")
+                res.setHeader("X-Gateway-Variant", "analysis-model-haiku:B")
+                res.status = 200
+            }
+        })
+
+        val span = tracer.spanBuilder("http post /v1/chat/completions").startSpan()
+        span.makeCurrent().use { filter.doFilter(request, MockHttpServletResponse(), chain) }
+        span.end()
+
+        val event = appender.list.single()
+        assertEquals("analysis-model-haiku:B", event.mdcPropertyMap["variant"])
+        assertTrue(event.formattedMessage.contains("variant=analysis-model-haiku:B"))
+        assertEquals("analysis-model-haiku:B", exporter.finishedSpanItems.single().attributes.get(AttributeKey.stringKey("gateway.variant")))
     }
 
     @Test

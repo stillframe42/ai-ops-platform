@@ -55,7 +55,7 @@ class ChatRelayService(
         val generation = checkNotNull(response.result) { "프로바이더 응답에 생성 결과가 없습니다" }
         val usage = response.metadata.usage
         val actualModel = response.metadata.model.takeIf { it.isNotBlank() } ?: route.model
-        gatewayMetrics.record(route.taskType, route.provider, actualModel)
+        gatewayMetrics.record(route.taskType, route.provider, actualModel, route.variant)
 
         val toolCalls = generation.output.toolCalls.orEmpty().map {
             ToolCallDto(id = it.id, function = FunctionCallDto(name = it.name, arguments = it.arguments))

@@ -52,6 +52,16 @@ class BudgetGuardTest {
     }
 
     @Test
+    fun `다운그레이드돼도 실험 variant 배정은 유지된다`() {
+        guard.settle("control-plane", 10.0)
+
+        val decision = guard.enforce(sonnetRoute.copy(variant = "analysis-model-haiku:B"), "agent-service")
+
+        assertTrue(decision.downgraded)
+        assertEquals("analysis-model-haiku:B", decision.route.variant)
+    }
+
+    @Test
     fun `서비스별 한도 도달이면 해당 서비스만 다운그레이드한다`() {
         guard.settle("agent-service", 4.0)
 

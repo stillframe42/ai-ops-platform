@@ -119,8 +119,9 @@ class CachingChatServiceTest {
         budgetLimitUsd: Double? = null,
         budgetCounter: BudgetCounter = InMemoryBudgetCounter(),
         prices: List<CostProperties.ModelPrice> = emptyList(),
+        routingProperties: RoutingProperties = RoutingProperties(),
     ) = CachingChatService(
-        modelRouter = ModelRouter(RoutingProperties()),
+        modelRouter = ModelRouter(routingProperties),
         fallbackChatRelayService = FallbackChatRelayService(relay, FallbackProperties(), CircuitBreakerRegistry.ofDefaults(), metrics),
         exactResponseCache = ExactResponseCache(exactCache, Duration.ofHours(1), mapper),
         semanticResponseCache = SemanticResponseCache(vectorStore, 0.95, mapper),
@@ -380,6 +381,61 @@ class CachingChatServiceTest {
         // 입력 100 × $2/MTok + 출력 50 × $12/MTok — 원 라우트(sonnet)가 아닌 폴백 모델 단가
         val expected = 100 * 2.0 / 1_000_000 + 50 * 12.0 / 1_000_000
         assertEquals(expected, counter.current("total:${LocalDate.now(Clock.systemUTC())}"), 1e-12)
+    }
+
+    private val haikuExperiment = RoutingProperties(
+        experiments = listOf(
+            RoutingProperties.Experiment(
+                name = "analysis-model-haiku",
+                task = "root-cause-analysis",
+                variants = mapOf("B" to RoutingProperties.Variant(provider = "anthropic", model = "claude-haiku-4-5")),
+            ),
+        ),
+    )
+
+    @Test
+    fun `정의된 실험 variant 는 variant 모델로 중계하고 결과에 표시한다`() {
+        val relay = StubRelay(response(model = "claude-haiku-4-5"), registry)
+        val svc = service(relay, routingProperties = haikuExperiment)
+
+        val result = svc.complete(
+            request(), taskType = "root-cause-analysis", cacheControl = null, service = "agent-service",
+            experimentVariant = "analysis-model-haiku:B",
+        )
+
+        assertEquals("analysis-model-haiku:B", result.variant)
+        assertEquals("claude-haiku-4-5", relay.lastRoute!!.model)
+        assertEquals("analysis-model-haiku:B", relay.lastRoute!!.variant)
+    }
+
+    @Test
+    fun `미정의 variant 는 무시된다 - 결과 variant 없음`() {
+        val relay = StubRelay(response(), registry)
+        val svc = service(relay, routingProperties = haikuExperiment)
+
+        val result = svc.complete(
+            request(), taskType = "root-cause-analysis", cacheControl = null, service = "agent-service",
+            experimentVariant = "analysis-model-haiku:Z",
+        )
+
+        assertNull(result.variant)
+        assertEquals("claude-sonnet-5", relay.lastRoute!!.model)
+    }
+
+    @Test
+    fun `variant 응답은 대조군 캐시와 격리된다 - 같은 요청도 별도 항목`() {
+        val relay = StubRelay(response(), registry)
+        val exactCache = InMemoryExactCache()
+        val svc = service(relay, exactCache = exactCache, routingProperties = haikuExperiment)
+
+        svc.complete(request(), taskType = "root-cause-analysis", cacheControl = null, service = "agent-service")
+        svc.complete(
+            request(), taskType = "root-cause-analysis", cacheControl = null, service = "agent-service",
+            experimentVariant = "analysis-model-haiku:B",
+        )
+
+        assertEquals(2, relay.calls, "실험군 요청이 대조군 캐시에 적중하면 실험이 무효가 된다")
+        assertEquals(2, exactCache.map.size)
     }
 
     @Test

@@ -3,6 +3,7 @@ package stillframe42.llmgateway.cost
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import stillframe42.llmgateway.api.ChatChoice
 import stillframe42.llmgateway.api.ChatCompletionResponse
@@ -39,6 +40,20 @@ class CostRecorderTest {
         assertEquals(6.0, entry.costUsd, 1e-9)
         assertEquals(0.0, entry.savedUsd, 1e-9)
         assertEquals(6.0, registry.get("gateway.cost.usd").tags("service", "agent-service").counter().count(), 1e-9)
+        assertNull(entry.variant)
+        assertEquals(6.0, registry.get("gateway.cost.usd").tags("variant", "none").counter().count(), 1e-9)
+    }
+
+    @Test
+    fun `실험 variant 라우트의 비용은 variant 라벨·원장 필드로 구분된다`() {
+        val variantRoute = route.copy(variant = "analysis-model-haiku:B")
+
+        recorder.record("agent-service", variantRoute, response(), CacheStatus.MISS)
+        recorder.record("agent-service", variantRoute, response(), CacheStatus.EXACT_HIT)
+
+        assertEquals("analysis-model-haiku:B", ledger.entries.first().variant)
+        assertEquals(6.0, registry.get("gateway.cost.usd").tags("variant", "analysis-model-haiku:B").counter().count(), 1e-9)
+        assertEquals(6.0, registry.get("gateway.cost.saved.usd").tags("variant", "analysis-model-haiku:B").counter().count(), 1e-9)
     }
 
     @Test

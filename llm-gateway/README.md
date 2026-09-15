@@ -14,6 +14,7 @@
 | 6 | OAuth2 리소스 서버 — `/v1` 전부 `llm:invoke` 토큰 필수, 서비스 식별 = JWT client_id, 요청 감사 로그 | 2026-08-28 (ADR-0016) |
 | 7 | 입력 가드레일 — 패턴 1차(정규화: NFKC·제로폭·base64·자모 분리) + LLM 분류기 2차(SUSPECT 만, haiku 자기 호출), 플래깅 후 통과(차단은 `gateway.guardrail.mode=block`) | 2026-08-30 (DAY 38) |
 | 8 | 입력 마스킹 — user·tool 메시지 + 임베딩의 시크릿 패턴 마스킹(RAG·캐시 키 영속 대비), 마스킹→가드레일→캐시 순, `gateway_masking_total{pattern}` — 게이트웨이는 LLM **입력** 담당(출력 발송·저장 스캔은 control-plane, [ADR-0017](../docs/adr/0017-prompt-injection-defense.md)) | 2026-09-01 |
+| 9 | 실험 variant 모델 오버라이드 — `X-Experiment-Variant` 로 지목된, `gateway.routing.experiments` 에 정의된 variant 만 규칙을 대체. 배정은 agent-service 몫 ([ADR-0019](../docs/adr/0019-llm-quality-continuous-evaluation.md) 결정 ③) | 2026-09-15 |
 
 ## API — OpenAI 호환
 
@@ -57,6 +58,15 @@
 | `X-Gateway-Fallback` | 응답 | 주 프로바이더 장애로 폴백 발생 (`openai` = 교차 프로바이더 재중계, `local` = 로컬 폴백 응답) | 2026-08-20 |
 | `X-Gateway-Guardrail` | 응답 | 입력 가드레일 판정 — 항상 존재 (`clean` / `suspect` = 휴리스틱만 걸리고 2차 미확정 / `flagged` = 주입 판정, 통과 / `blocked` = 400 거부). 비클린 요청의 응답은 캐시에 저장하지 않는다 | 2026-08-30 |
 | `X-Gateway-Guardrail-Stage` | 응답 | 판정 계층 (`pattern` / `classifier` / `policy`) — 비클린일 때만 | 2026-08-30 |
+| `X-Experiment-Variant` | 요청 | 실험 variant `<name>:<variant>` (예: `analysis-model-haiku:B`) — `gateway.routing.experiments` 에 정의되고 `task` 가 `X-Task-Type` 과 일치할 때만 적용. 그 외(미정의·태스크 불일치·형식 오류)는 무시하고 규칙대로 해석 (WARN 기록) | 2026-09-15 (ADR-0019) |
+| `X-Gateway-Variant` | 응답 | 실제 적용된 variant (요청 값 그대로) — 적용 시에만 존재. 부재 = 헤더가 무시됐다는 뜻 | 2026-09-15 (ADR-0019) |
+
+## 모델 라우팅 + 실험 variant
+
+- `gateway.routing.rules` — `X-Task-Type` 별 프로바이더·모델·max_tokens, 미등록 태스크는 `default-rule` (모델 결정권은 게이트웨이, 클라이언트는 실모델명을 모른다)
+- `gateway.routing.experiments` — A/B 실험 정의 (`name`·`task`·`variants.<key>.{provider,model,max-tokens}`). `X-Experiment-Variant: <name>:<key>` 가 정의된 variant 를 지목하고 `task` 가 요청 태스크와 같을 때만 그 모델로 오버라이드한다. **헤더로 임의 모델을 지정하는 경로는 없다** — 예산·라우팅 정책 우회 방지. 미정의 variant 는 무시 + WARN, 적용 여부는 응답 `X-Gateway-Variant` 로 확인
+- variant 는 `Route` 의 일부라 정확 캐시 키에 들어간다 — 실험군 요청이 대조군 캐시에 적중하지 않는다. 예산 다운그레이드가 일어나도 variant 배정은 유지된다 (다운그레이드는 `X-Gateway-Downgrade` 가 따로 표시)
+- 메트릭 `gateway_requests_total{task,provider,model,variant}`·`gateway_cost_usd_total{service,task,model,variant}`·`gateway_cost_saved_usd_total{…,variant}` — 미적용은 `variant="none"`. 비용 원장 `llm_cost_ledger.variant` 열 동일
 
 ## 응답 캐싱 — 2단계
 
@@ -85,7 +95,7 @@
 ## 비용 추적 + 예산 통제
 
 - **단가 테이블 yml 외부화** (`gateway.cost.prices` — 접두 매칭으로 프로바이더의 날짜 접미 모델명 흡수): Sonnet 5 인트로 가격 종료(2026-08-31) 시 설정만 갱신. 미등록 모델은 0 기록
-- **요청별 원장**: PostgreSQL `llm_cost_ledger` (`llmgateway` DB — 의미 캐시와 공용) — 서비스/태스크/모델/일별 차원, 캐시 히트는 지출 0 + 절감액(`saved_usd`) 기록. Micrometer `gateway.cost.usd`·`gateway.cost.saved.usd` 병행 (Grafana 패널 원천)
+- **요청별 원장**: PostgreSQL `llm_cost_ledger` (`llmgateway` DB — 의미 캐시와 공용, 스키마는 Flyway `db/migration` V1·V2 소유 — `vector_store` 는 Spring AI pgvector `initialize-schema` 소유, baseline 0 + IF NOT EXISTS 로 기존 DB 도 같은 경로) — 서비스/태스크/모델/일별 + 실험 `variant` 차원, 캐시 히트는 지출 0 + 절감액(`saved_usd`) 기록. Micrometer `gateway.cost.usd`·`gateway.cost.saved.usd` (라벨 `service,task,model,variant`) 병행 (Grafana 패널 원천)
 - **일별 예산** (`gateway.budget`, UTC 기준): 80% 도달 → Slack 경고 1회, **100% 도달 → 저비용 모델 강제 다운그레이드 (차단 없음)** — 장애 대응 파이프라인은 멈추지 않는다. 카운터는 Redis (`gw:budget:` — replica 2 전제 외부 저장), 카운터 장애 = 통제 없이 통과
 - 발생 순서: 라우팅 해석 → 예산 판정(다운그레이드) → 캐시 → 중계 → 비용 기록·정산 — 다운그레이드된 라우트가 캐시 키·모델 필터에도 쓰여 원 모델 캐시와 격리
 
@@ -110,7 +120,7 @@
 - 서비스 식별 (`ClientIdentity`) — 예산·rate limit·비용 원장의 service 차원 = 토큰 `sub`(client_id). 등록명이 서비스명과 같아
   (`agent-service`·`control-plane`) `gateway.yml` 의 한도 키는 무수정
 - 감사 로그 (`GatewayAuditFilter`) — 로거명 `audit`, 요청당 1행, MDC 필드 `audit.type=gateway_request`·`client_id`·`scope`·
-  `http.path`·`task_type`·`http.status`·`cache` (docker 프로파일 ECS JSON 최상위 필드, `traceId` 동반).
+  `http.path`·`task_type`·`http.status`·`cache`·`variant` (docker 프로파일 ECS JSON 최상위 필드, `traceId` 동반).
   Loki: `{service="llm-gateway"} | json | log_logger="audit" | client_id="agent-service"` (ECS 중첩 키는 `json` 파서가 `audit_type`·`http_status` 로 평탄화)
 
 ## 모듈 구조

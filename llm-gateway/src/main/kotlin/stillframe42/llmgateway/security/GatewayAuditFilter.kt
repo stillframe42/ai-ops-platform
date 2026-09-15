@@ -49,11 +49,13 @@ class GatewayAuditFilter : OncePerRequestFilter() {
             "http.status" to response.status.toString(),
             "cache" to (response.getHeader(GatewayHeaders.CACHE) ?: "none"),
             "guardrail" to (response.getHeader(GatewayHeaders.GUARDRAIL) ?: "none"),
+            "variant" to (response.getHeader(GatewayHeaders.VARIANT) ?: "none"),
         )
         withMdc(fields) {
             auditLogger.info(
-                "gateway_request client_id={} path={} task={} status={} cache={} guardrail={}",
+                "gateway_request client_id={} path={} task={} status={} cache={} guardrail={} variant={}",
                 fields["client_id"], fields["http.path"], fields["task_type"], fields["http.status"], fields["cache"], fields["guardrail"],
+                fields["variant"],
             )
         }
         promoteToSpan(clientId, scopes, taskType, response)
@@ -92,6 +94,7 @@ class GatewayAuditFilter : OncePerRequestFilter() {
             GatewayHeaders.GUARDRAIL_STAGE to "gateway.guardrail_stage",
             GatewayHeaders.DOWNGRADE to "gateway.downgrade",
             GatewayHeaders.FALLBACK to "gateway.fallback",
+            GatewayHeaders.VARIANT to "gateway.variant",
         )
     }
 }
