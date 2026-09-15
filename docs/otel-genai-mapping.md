@@ -122,11 +122,12 @@ http post /api/incidents/{incidentId}/approve      control-plane · SERVER (승�
 |---|---|---|
 | `incident.id` | 인시던트 id (스팬 속성 — `gen_ai.conversation.id` 와 같은 값, Tempo 검색 축) | agent-service |
 | `aiops.node` | LangGraph 노드 이름 (supervisor·monitor·analysis·action·approval·recovery) | agent-service |
-| `gateway.task_type`·`gateway.cache`·`gateway.guardrail`·`gateway.guardrail_stage`·`gateway.downgrade`·`gateway.fallback` | 게이트웨이 판정 (요청 헤더 `X-Task-Type`, 응답 헤더 `X-Gateway-*`) — 클라이언트 스팬(`chat default`)과 서버 스팬(`http post /v1/chat/completions`)에 **같은 키**. 헤더가 없으면 속성도 없다 | agent-service (httpx 응답 훅) · llm-gateway (감사 필터) |
+| `gateway.task_type`·`gateway.cache`·`gateway.guardrail`·`gateway.guardrail_stage`·`gateway.downgrade`·`gateway.fallback`·`gateway.variant` | 게이트웨이 판정 (요청 헤더 `X-Task-Type`·`X-Experiment-Variant`, 응답 헤더 `X-Gateway-*` — `gateway.variant` 는 실험 모델 variant 가 적용된 요청만, ADR-0019) — 클라이언트 스팬(`chat default`)과 서버 스팬(`http post /v1/chat/completions`)에 **같은 키**. 헤더가 없으면 속성도 없다 | agent-service (httpx 응답 훅) · llm-gateway (감사 필터) |
 | `gateway.*` 메트릭 11종 · `mcp.tool.calls` | 기존 Micrometer 유지 (캐시·비용·예산·가드레일·마스킹 — 표준에 대응물 없음) | llm-gateway · control-plane |
 | `aiops.client_id`·`aiops.scope` | 감사 로그 MDC 필드(`client_id`·`scope`)를 HTTP 서버 스팬 속성으로도 부여 — Loki 축과 Tempo 축에서 같은 질의 (감사 필터 `GatewayAuditFilter`·`McpAuditFilter`) | llm-gateway · control-plane |
 | `aiops.node`·`aiops.resumed`·`aiops.link.reason`·`aiops.outcome` | 노드 이름 / 재개 실행 여부 / span link 사유(`resume-after-approval`·`evaluation-of`) / MCP 도구 결과 3분류(success·degraded·failure) | agent-service · control-plane · evaluation-service |
 | `aiops.prompt.version` | 노드가 쓴 시스템 프롬프트 버전 (`invoke_agent` 스팬) — 평가 메트릭에서는 평가 대상 분석 프롬프트 버전 | agent-service · evaluation-service |
+| `aiops.experiment.name`·`aiops.experiment.variant` | A/B 실험 배정 (ADR-0019) — `invoke_workflow`·`invoke_agent analysis` 스팬(배정 없으면 속성 없음), 평가 스팬(있을 때만), 평가 메트릭 `aiops.evaluation.score`·`aiops.evaluation.verdicts`(항상, 실험 밖 `none`) | agent-service · evaluation-service |
 | `aiops.operation`·`aiops.evaluation.*` | 평가 스팬 연산(`evaluate`) / 샘플링 판정(`sampled`·`sampled_reason`·`sample_rate`·`sample_profile`·`evidence`) / 판정(`judge_model`·`judge_prompt_version`·`failure_mode`·`low_quality`·`normalized`) / 메트릭 축(`dimension`·`severity`·`judge_outcome`) — 표준 `gen_ai.evaluation.*` 는 이벤트 속성에만 쓴다 (docs/quality-evaluation.md §6) | evaluation-service |
 
 Collector `transform` 규칙:
