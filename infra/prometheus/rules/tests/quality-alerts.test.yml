@@ -1,0 +1,80 @@
+# promtool 룰 단위 테스트 — variant 룰(AiopsVariantFaithfulnessLow)의 조인·임계·표본 조건. 실 데이터로는 양쪽 10건이 모여야 발화해
+# 실험 하루 안에 확인하기 어렵다. 실행: docker compose exec prometheus promtool test rules /etc/prometheus/rules/tests/quality-alerts.test.yml
+# 시리즈는 1분 간격 누적 카운터 — 창 증가분(24h) = 1440 건, 평균 = sum 증가분 / count 증가분
+rule_files:
+  - ../quality-alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # 처리군 B 평균 0.8 vs control A 1.0 → 차이 -0.2 ≤ -0.1, 양쪽 표본 1440 ≥ 10 → for 15m 뒤 발화. C 는 0.95 로 임계 안
+  - interval: 1m
+    input_series:
+      - series: 'aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness",aiops_experiment_name="analysis-prompt-v2",aiops_experiment_variant="A"}'
+        values: '0+1x1800'
+      - series: 'aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness",aiops_experiment_name="analysis-prompt-v2",aiops_experiment_variant="A"}'
+        values: '0+1x1800'
+      - series: 'aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness",aiops_experiment_name="analysis-prompt-v2",aiops_experiment_variant="B"}'
+        values: '0+0.8x1800'
+      - series: 'aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness",aiops_experiment_name="analysis-prompt-v2",aiops_experiment_variant="B"}'
+        values: '0+1x1800'
+      - series: 'aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness",aiops_experiment_name="analysis-prompt-v2",aiops_experiment_variant="C"}'
+        values: '0+0.95x1800'
+      - series: 'aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness",aiops_experiment_name="analysis-prompt-v2",aiops_experiment_variant="C"}'
+        values: '0+1x1800'
+      # 실험 밖(none) 시리즈는 룰이 보지 않는다
+      - series: 'aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness",aiops_experiment_name="none",aiops_experiment_variant="none"}'
+        values: '0+0.1x1800'
+      - series: 'aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness",aiops_experiment_name="none",aiops_experiment_variant="none"}'
+        values: '0+1x1800'
+    promql_expr_test:
+      # variant 별 시리즈 3개 — 실험 밖(none) 은 제외된다 (평균값 자체는 increase() 외삽으로 부동소수 오차가 있어 개수만 고정)
+      - expr: count(aiops:evaluation_faithfulness_variant:avg24h)
+        eval_time: 25h
+        exp_samples:
+          - labels: '{}'
+            value: 3
+    alert_rule_test:
+      # 창 안에서 생긴 시리즈는 현재값으로 센다 — 10분(10건)부터 조건 참, for 15m → 25분에 발화
+      - eval_time: 20m
+        alertname: AiopsVariantFaithfulnessLow
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: AiopsVariantFaithfulnessLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              kind: quality
+              aiops_experiment_name: analysis-prompt-v2
+              aiops_experiment_variant: B
+            exp_annotations:
+              summary: "실험 analysis-prompt-v2 variant B Faithfulness 24h 평균이 control(A) 보다 0.1 이상 낮다"
+              description: "24h 평균 차이 -0.20 (처리군 − control). 표본 양쪽 10건 이상. 중단은 사람 — experiments.yml status: concluded 후 재기동. 리포트: experiment_report.py"
+      # 24h 를 넘긴 뒤(창 시작에 시리즈가 있음)에는 increase() 경로 — 같은 결과, 설명 문구의 차이값 고정
+      - eval_time: 25h20m
+        alertname: AiopsVariantFaithfulnessLow
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              kind: quality
+              aiops_experiment_name: analysis-prompt-v2
+              aiops_experiment_variant: B
+            exp_annotations:
+              summary: "실험 analysis-prompt-v2 variant B Faithfulness 24h 평균이 control(A) 보다 0.1 이상 낮다"
+              description: "24h 평균 차이 -0.20 (처리군 − control). 표본 양쪽 10건 이상. 중단은 사람 — experiments.yml status: concluded 후 재기동. 리포트: experiment_report.py"
+
+  # 처리군 표본이 10건 미만(24h 에 7.2건)이면 평균이 낮아도 발화하지 않는다
+  - interval: 1m
+    input_series:
+      - series: 'aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness",aiops_experiment_name="analysis-prompt-v2",aiops_experiment_variant="A"}'
+        values: '0+1x1800'
+      - series: 'aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness",aiops_experiment_name="analysis-prompt-v2",aiops_experiment_variant="A"}'
+        values: '0+1x1800'
+      - series: 'aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness",aiops_experiment_name="analysis-prompt-v2",aiops_experiment_variant="B"}'
+        values: '0+0.002x1800'
+      - series: 'aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness",aiops_experiment_name="analysis-prompt-v2",aiops_experiment_variant="B"}'
+        values: '0+0.005x1800'
+    alert_rule_test:
+      - eval_time: 26h
+        alertname: AiopsVariantFaithfulnessLow
+        exp_alerts: []

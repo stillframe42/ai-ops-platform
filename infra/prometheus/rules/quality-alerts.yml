@@ -59,3 +59,38 @@ groups:
         annotations:
           summary: "Judge 호출 실패율 20% 초과"
           description: "1h 실패율 {{ $value | humanizePercentage }} — error.type 라벨(http.4xx 는 게이트웨이 가드레일·예산, timeout, VerdictError) 확인"
+
+      # A/B 실험 variant 단위 문제 감지 (ADR-0019 결정 ③, 2026-09-15 사용자 결정) — "어느 쪽이 나은가" 는 리포트(사람)가 판정하지만
+      # "처리군이 조용히 망가지는가" 는 실험 중 자동 신호가 필요하다. 실험 밖(none) 시리즈는 제외.
+      # 레코딩 룰인 이유: 파생 벡터에는 라벨 매처를 쓸 수 없어 처리군(variant≠A)·control(variant=A) 을 나눌 수 없다 — 시리즈로 먼저 만든다.
+      # control = experiments.yml 첫 variant 규약을 라벨값 A 로 고정 (현 실험 정의 2건 모두 A 가 control).
+      - record: aiops:evaluation_faithfulness_sum:increase24h
+        expr: |
+          (sum by (aiops_experiment_name, aiops_experiment_variant) (increase(aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"}[24h]) and (aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"} offset 24h)) + sum by (aiops_experiment_name, aiops_experiment_variant) (aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"} unless (aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"} offset 24h))) or sum by (aiops_experiment_name, aiops_experiment_variant) (increase(aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"}[24h]) and (aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"} offset 24h)) or sum by (aiops_experiment_name, aiops_experiment_variant) (aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"} unless (aiops_evaluation_score_sum{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"} offset 24h))
+      - record: aiops:evaluation_faithfulness_count:increase24h
+        expr: |
+          (sum by (aiops_experiment_name, aiops_experiment_variant) (increase(aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"}[24h]) and (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"} offset 24h)) + sum by (aiops_experiment_name, aiops_experiment_variant) (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"} offset 24h))) or sum by (aiops_experiment_name, aiops_experiment_variant) (increase(aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"}[24h]) and (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"} offset 24h)) or sum by (aiops_experiment_name, aiops_experiment_variant) (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"} unless (aiops_evaluation_score_count{aiops_evaluation_dimension="faithfulness", aiops_experiment_name!="none"} offset 24h))
+      - record: aiops:evaluation_faithfulness_variant:avg24h
+        expr: |
+          aiops:evaluation_faithfulness_sum:increase24h / aiops:evaluation_faithfulness_count:increase24h
+
+      # 처리군 24h 평균이 control 보다 0.1 이상 낮고 양쪽 표본이 10건 이상일 때 — 어느 한쪽이 몇 건이면 차이는 잡음이다 (실험 1 설계 표본 variant 당 ~15건).
+      # 알림 라벨에 aiops_experiment_name·aiops_experiment_variant 가 실려 control-plane SlackQualitySloNotifier 가 메시지 머리에 표기한다.
+      - alert: AiopsVariantFaithfulnessLow
+        expr: |
+          (
+            aiops:evaluation_faithfulness_variant:avg24h{aiops_experiment_variant!="A"}
+            - on (aiops_experiment_name) group_left ()
+            aiops:evaluation_faithfulness_variant:avg24h{aiops_experiment_variant="A"}
+          ) <= -0.1
+          and on (aiops_experiment_name, aiops_experiment_variant)
+          aiops:evaluation_faithfulness_count:increase24h >= 10
+          and on (aiops_experiment_name)
+          aiops:evaluation_faithfulness_count:increase24h{aiops_experiment_variant="A"} >= 10
+        for: 15m
+        labels:
+          severity: warning
+          kind: quality
+        annotations:
+          summary: "실험 {{ $labels.aiops_experiment_name }} variant {{ $labels.aiops_experiment_variant }} Faithfulness 24h 평균이 control(A) 보다 0.1 이상 낮다"
+          description: "24h 평균 차이 {{ $value | printf \"%.2f\" }} (처리군 − control). 표본 양쪽 10건 이상. 중단은 사람 — experiments.yml status: concluded 후 재기동. 리포트: experiment_report.py"
