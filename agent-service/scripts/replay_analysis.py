@@ -8,6 +8,8 @@
 
 사용: uv run python -m scripts.replay_analysis <incident_id> --experiment analysis-model-haiku --variant B
   환경: CONTROL_PLANE_URL(기본 http://localhost:8081) + agent-service 설정(.env — AUTH_CLIENT_SECRET·KAFKA·LLM 게이트웨이)
+        호스트에서 돌리면 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 을 함께 준다 — 비우면 스팬이 전송되지 않아
+        experiment_report.py 가 처리 시간·토큰을 읽을 수 없다 (2026-09-16 실험 2 재생 11건이 그렇게 비었다)
   --dry-run: 발행 없이 결과만 출력
 """
 
@@ -26,7 +28,7 @@ import httpx
 from app.agents.analysis_agent import analysis_node
 from app.config import get_settings
 from app.config.agent_spans import agent_node, record_experiment, workflow_span
-from app.config.otel import setup_telemetry
+from app.config.otel import setup_telemetry, shutdown_telemetry
 from app.experiments.definition import load_experiments
 from app.supervisor.state import ExperimentAssignment, IncidentInfo, MonitoringResult
 from app.tools.oauth_client import shared_auth
@@ -136,16 +138,20 @@ async def main() -> None:
     incident_id = state["incident"].id
 
     # 재생도 워크플로 스팬 하나 + invoke_agent analysis — 원본과 같은 트리 모양이라 Tempo 에서 variant 로 가를 수 있다
-    with workflow_span(incident_id):
-        record_experiment(assignment)
-        update = await agent_node("analysis", analysis_node)(state)
-    payload = build_replay_payload(stored, assignment, update)
-    print(json.dumps({k: payload[k] for k in ("incident_id", "experiment", "replay", "analysis")}, ensure_ascii=False, indent=2))
-    if args.dry_run:
-        logger.info("dry-run — 발행 생략")
-        return
-    await publish(payload)
-    logger.info("발행 완료 — %s → %s", incident_id, TOPIC_ANALYSIS_RESULTS)
+    try:
+        with workflow_span(incident_id):
+            record_experiment(assignment)
+            update = await agent_node("analysis", analysis_node)(state)
+        payload = build_replay_payload(stored, assignment, update)
+        print(json.dumps({k: payload[k] for k in ("incident_id", "experiment", "replay", "analysis")}, ensure_ascii=False, indent=2))
+        if args.dry_run:
+            logger.info("dry-run — 발행 생략")
+            return
+        await publish(payload)
+        logger.info("발행 완료 — %s → %s", incident_id, TOPIC_ANALYSIS_RESULTS)
+    finally:
+        # 스크립트는 곧 끝난다 — 루트 스팬(invoke_workflow·invoke_agent analysis)이 Tempo 에 닿도록 비우고 종료 (experiment_report.py 가 이 스팬을 읽는다)
+        shutdown_telemetry()
 
 
 if __name__ == "__main__":

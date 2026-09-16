@@ -107,3 +107,13 @@ def setup_telemetry(otlp_endpoint: str | None = None) -> None:
             otlp_endpoint,
             os.environ.get("OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT") or "NO_CONTENT",
         )
+
+
+def shutdown_telemetry(timeout_millis: int = 10_000) -> None:
+    """종료 전 flush — 서비스 프로세스는 필요 없지만(계속 산다) 스크립트(replay_analysis.py)는 BatchSpanProcessor 가 비우기 전에
+    끝나 루트 스팬이 유실된다 (Tempo '<root span not yet received>', 2026-09-16 실측). SDK provider 가 아니면(비활성 경로) 아무 것도 안 한다."""
+    provider = trace.get_tracer_provider()
+    if not isinstance(provider, TracerProvider):
+        return
+    provider.force_flush(timeout_millis)
+    provider.shutdown()

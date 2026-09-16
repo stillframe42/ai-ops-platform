@@ -514,3 +514,29 @@ def test_resume_span_carries_experiment_from_checkpoint(monkeypatch):
     resumed = next(s for s in spans if s.attributes["aiops.resumed"] is True)
     assert resumed.attributes["aiops.experiment.name"] == "analysis-prompt-v2"
     assert resumed.attributes["aiops.experiment.variant"] == graph.inputs[0]["experiment"].variant
+
+
+def test_shutdown_telemetry_flushes_and_shuts_down_sdk_provider(monkeypatch):
+    """짧게 살다 끝나는 프로세스(replay_analysis.py)는 BatchSpanProcessor 가 비우기 전에 종료돼 루트 스팬이 유실된다 (2026-09-16 실측:
+    Tempo '<root span not yet received>') — 종료 전에 provider 를 flush·shutdown 한다."""
+    from opentelemetry.sdk.trace import TracerProvider
+
+    from app.config.otel import shutdown_telemetry
+
+    calls = []
+    provider = TracerProvider()
+    monkeypatch.setattr(provider, "force_flush", lambda timeout_millis=30000: calls.append(("flush", timeout_millis)) or True)
+    monkeypatch.setattr(provider, "shutdown", lambda: calls.append(("shutdown", None)))
+    monkeypatch.setattr("app.config.otel.trace.get_tracer_provider", lambda: provider)
+
+    shutdown_telemetry()
+
+    assert [c[0] for c in calls] == ["flush", "shutdown"]
+
+
+def test_shutdown_telemetry_ignores_non_sdk_provider(monkeypatch):
+    from app.config.otel import shutdown_telemetry
+
+    monkeypatch.setattr("app.config.otel.trace.get_tracer_provider", lambda: object())
+
+    shutdown_telemetry()  # 예외 없이 무시
