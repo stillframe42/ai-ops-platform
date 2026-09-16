@@ -42,15 +42,16 @@ flowchart TB
     subgraph platform["ai-ops-platform (docker-compose)"]
         cp["control-plane<br/>Kotlin / Spring Boot 4.x<br/>Alert 수신 · 인시던트 발행 · MCP 도구 서버<br/>보고서 저장·조회 API · Slack 알림<br/>승인 API·타임아웃 스캔·조치 실행 대행 (ADR-0005·0006)"]
         agents["agent-service<br/>Python / LangGraph<br/>모니터링 · 분석 · 실행 에이전트"]
+        evalsvc["evaluation-service<br/>Python<br/>보고서 품질 평가 — 샘플링 소비 · 시간창 재조회<br/>LLM-as-a-Judge 3차원 · 표준 평가 이벤트 (ADR-0019)"]
         gw["llm-gateway<br/>Kotlin / Spring Boot 4.x + Spring AI<br/>모든 LLM 호출 단일 경유 (OpenAI 호환, ADR-0015)<br/>태스크 라우팅 · 2단계 시맨틱 캐싱 · 비용/예산<br/>Rate Limiting · 프로바이더 폴백 + 서킷"]
         redis["Redis<br/>L1 정확 캐시 · rate limit 버킷<br/>예산 카운터 (replica 2 전제 외부화)"]
-        kafka["Kafka (KRaft 단일 브로커)<br/>ops.alerts.raw · ops.incidents · ops.analysis.results<br/>ops.actions.pending · ops.actions.decisions"]
+        kafka["Kafka (KRaft 단일 브로커)<br/>ops.alerts.raw · ops.incidents · ops.analysis.results<br/>ops.actions.pending · ops.actions.decisions · ops.evaluation.results"]
         prom["Prometheus<br/>메트릭 수집·저장"]
         graf["Grafana<br/>대시보드"]
         am["Alertmanager<br/>알림 라우팅·webhook 발송"]
         loki["Loki<br/>로그 저장·조회"]
         alloy["Alloy<br/>로그 수송 (컨테이너 stdout 수집)"]
-        pg["PostgreSQL (pgvector)<br/>LangGraph 체크포인트 (ADR-0009)<br/>vector_store · incident_reports (Flyway)"]
+        pg["PostgreSQL (pgvector)<br/>LangGraph 체크포인트 (ADR-0009)<br/>vector_store · llm_cost_ledger · incident_reports · incident_evaluations (Flyway)"]
         col["OTel Collector (contrib)<br/>OTLP 수신 · 정규화/콘텐츠 삭제/필터<br/>백엔드 라우팅은 여기서만 (ADR-0018)"]
         tempo["Tempo<br/>트레이스 저장·조회<br/>TraceQL 메트릭 (도구·노드 지연)"]
         lf["Langfuse v3 — compose 전용<br/>LLM 세션·비용 UI (OTLP 수신)<br/>(웹+worker · ClickHouse · MinIO · Redis)"]
@@ -73,8 +74,14 @@ flowchart TB
     agents -->|"분석 결과 발행 ops.analysis.results<br/>승인 요청 발행 ops.actions.pending"| kafka
     kafka -->|"결과·승인 요청 소비 (@KafkaListener)<br/>upsert 멱등 · pending 저장·카드 발송"| cp
     cp -->|"결정 발행 ops.actions.decisions<br/>approved 는 실행 결과 포함 (ADR-0005)"| kafka
+    kafka -->|"분석 결과 소비 (별도 그룹 · 층화·결정론 샘플링)<br/>ADR-0019 온라인 Judge"| evalsvc
+    evalsvc -->|"인시던트 시간창 재조회 (PromQL · LogQL)<br/>Judge 근거"| prom
+    evalsvc -->|"시간창 로그 재조회"| loki
+    evalsvc -->|"Judge 채팅 (X-Task-Type evaluation-judge · 캐시 우회)<br/>교차 프로바이더 모델"| gw
+    evalsvc -->|"평가 결과 발행 ops.evaluation.results<br/>3차원 점수 · 실패 유형 · 실험 태그"| kafka
+    kafka -->|"평가 소비 → incident_evaluations<br/>저품질은 리뷰 큐 + Slack 검토 요청"| cp
 
-    agents & cp & gw -->|"OAuth2 토큰 발급 요청<br/>(Client Credentials · ADR-0016)"| auth
+    agents & cp & gw & evalsvc -->|"OAuth2 토큰 발급 요청<br/>(Client Credentials · ADR-0016)"| auth
     agents -->|"MCP 도구 호출 (Streamable HTTP · OAuth2 bearer ops:read)<br/>배포 이력 · 유사 인시던트 · 앱 설정 (ADR-0010·0016)"| cp
     agents -->|"채팅 (OpenAI 호환 · X-Task-Type 라우팅)<br/>ADR-0015 단일 통과점"| gw
     cp -->|"임베딩 (OpenAI 호환)<br/>유사 인시던트 검색·L2 캐시"| gw
@@ -94,7 +101,7 @@ flowchart TB
     graf -->|"LogQL (HTTP)"| loki
     agents -->|"LogQL 조회 (HTTP)<br/>분석 에이전트 도구 (ADR-0004 2단계 확정)"| loki
     agents -->|"체크포인트 저장/조회 (SQL)<br/>Durable Execution (ADR-0009)"| pg
-    agents & cp & gw -->|"OTLP (스팬·gen_ai 메트릭)<br/>표준 어휘로만 계측 (ADR-0018)"| col
+    agents & cp & gw & evalsvc -->|"OTLP (스팬·gen_ai 메트릭·평가 이벤트)<br/>표준 어휘로만 계측 (ADR-0018)"| col
     col -->|"트레이스 (콘텐츠 삭제 후)"| tempo
     col -.->|"agent-service 스팬만 (compose 전용 exporter)<br/>세션 = gen_ai.conversation.id"| lf
     prom -->|"scrape — gen_ai 표준 메트릭 (8889)"| col
@@ -105,7 +112,7 @@ flowchart TB
     classDef container fill:#1168bd,color:#fff,stroke:#0b4884
     classDef external fill:#999,color:#fff,stroke:#6b6b6b
     class operator person
-    class cp,agents,gw,redis,kafka,prom,graf,am,loki,alloy,pg,col,tempo,lf,auth container
+    class cp,agents,evalsvc,gw,redis,kafka,prom,graf,am,loki,alloy,pg,col,tempo,lf,auth container
     class target,slack,llm external
 ```
 
@@ -143,6 +150,10 @@ flowchart LR
 - 에이전트 노드는 async — 노드별 타임아웃(협조적 취소)·재시도·error_handler 로 실패가 상태(`errors`)에 기록되고 부분 보고서로 종료한다 (DAY 13 복원력)
 - 개별 에이전트는 create_agent ReAct 루프 — monitor 는 Prometheus 도구, analysis 는 Loki·기준선 로컬 도구 + MCP 도구 3종(배포 이력·유사 인시던트·앱 설정 — [ADR-0010](adr/0010-mcp-tool-exposure.md), 카탈로그는 [tools-catalog.md](tools-catalog.md))을 사용
 - action 뒤는 정적 경유지 2단 — approval 은 interrupt 로 사람 결정을 영속 대기 (P3 는 supervisor 조기 종료로 도달하지 않음), recovery 는 실행 성공 시에만 Alert 해소를 재평가 (없으면 skipped 통과 — DAY 24)
+
+### 품질 평가 흐름 (Level 3 개요, ADR-0019)
+
+보고서 품질은 응답 경로 밖에서 잰다. `evaluation-service` 가 `ops.analysis.results` 를 agent-service·control-plane 과 다른 컨슈머 그룹으로 읽어 (① 층화·결정론 샘플링 — 프로파일 `experiment`/`production`, critical Alert·승인 요청은 보조 100%) 표본만 남기고, (② 재조회) 인시던트 시간창(발화 5분 전 ~ 종결)의 Prometheus·Loki 를 다시 조회해 근거 요약을 만들고, (③ Judge) 게이트웨이를 통해 분석 모델과 다른 프로바이더의 LLM 에 보고서 + 근거를 주어 Faithfulness·Actionability·Severity 정확도를 앵커 4단계로 채점시킨다 — 보고서 본문은 `<untrusted_content>` 로 감싼다(ADR-0017). 결과는 (④) `ops.evaluation.results` 로 발행돼 control-plane 이 `incident_evaluations` 에 저장하고, 0.7 미만은 리뷰 큐 + Slack 검토 요청 → 사람 라벨 → 골든셋 승격으로 이어진다. 텔레메트리는 `gen_ai.evaluation.result` 표준 이벤트(원 실행 trace 로 link)와 `aiops.evaluation.*` 메트릭 — 품질 SLO 룰(`AiopsFaithfulnessLow`·`…7d`·`AiopsJudgeErrorRate`·variant 별 `AiopsVariantFaithfulnessLow`)은 `kind=quality` 라벨로 control-plane 웹훅에 닿아 인시던트가 아니라 Slack 알림이 된다. A/B 실험은 agent-service 가 인시던트 단위로 variant 를 배정하고(프롬프트 버전) 게이트웨이가 모델 오버라이드만 맡는 2단 구조 — 배정은 스팬·보고서·평가·비용 원장까지 같은 `experiment{name, variant}` 로 흐르고, 판정은 `experiment_report.py` 가 사전 기준(부트스트랩 CI)으로 한다. 골든셋(사람 라벨 20건, `evaluation-service/golden/`)은 Judge 자체의 회귀 기준선이다. 세부는 [`quality-evaluation.md`](quality-evaluation.md), 실험 기록은 [`experiments/`](experiments/README.md).
 
 ### 컨테이너 간 통신 프로토콜
 

@@ -64,3 +64,8 @@
 - 폴백 전환: Anthropic 무효 키 상태에서 기본(sonnet) 요청이 OpenAI(gpt-5.6-terra) 재중계로 정상 응답, 서킷 오픈(표본 4건) 후 fast-fail 1.2s (8/20)
 - 가용성: 게이트웨이 pod 강제 삭제 중 S1 파이프라인 62초 완주 — replica 2 + 클라이언트 SDK 재시도의 합 (8/20)
 - 게이트웨이 오버헤드: 단독 수치 미측정 (실 사용자 트래픽 없음 비목표) — 2026-08-22 장착한 캐시 분리 레이턴시 히스토그램(`gateway_latency`)이 상시 관찰 수단
+
+## 추가 사항 (2026-09-16): 실험 variant 오버라이드와 비용 라벨 — [ADR-0019](0019-llm-quality-continuous-evaluation.md) 실험 층
+
+게이트웨이는 incident_id·프롬프트를 모르므로 실험 배정은 agent-service 가 하고, 게이트웨이는 **모델 variant 만** 맡는다: 요청 헤더 `X-Experiment-Variant: <실험명>:<variant>` 가 `gateway.routing.experiments` 에 (실험명·태스크 일치·variant) 로 정의돼 있을 때만 `ModelRouter` 가 모델을 바꾸고 응답 `X-Gateway-Variant` 로 알린다 — 미정의는 무시 + WARN. 헤더로 임의 모델을 지정하게 두면 예산·라우팅 정책이 우회되므로 정의된 variant 만 허용한다. 적용된 variant 는 `Route.variant` → `gateway_requests_total`·`gateway_cost_usd_total`·`gateway_cost_saved_usd_total` 라벨 `variant`(없으면 `none`) → 비용 원장 `variant` 컬럼 → 스팬 `gateway.variant` 로 흐른다. 실험 2(2026-09-16)에서 Tempo 스팬이 비었을 때 원장 `variant=analysis-model-haiku:B` 로 건당 비용(0.0417 USD)을 바로 뽑았다 — 비용 축이 배정 지점과 독립적으로 성립함을 확인. 원장 스키마는 첫 변경(variant 열) 시점에 기동 DDL 에서 Flyway(V1 원장·V2 variant, `baseline-on-migrate` + `baseline-version 0` — vector_store 가 먼저 있어 DB 가 비어 있지 않음)로 옮겼다(2026-09-15). 예산 측면: 실험 하루(15회차 + 재생 11건)가 agent-service 일 한도 4.0 USD 의 71%(2.85) 를 썼다 — 100% 도달 시 다운그레이드가 실험을 오염시키므로 실험일에는 회차 수를 예산으로 먼저 계산한다.
+

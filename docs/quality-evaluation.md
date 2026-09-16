@@ -1,6 +1,6 @@
 # LLM 품질 평가 체계 — 골든셋 · 온라인 Judge · 실험
 
-> 초안 (2026-09-09, DAY 45 선행 결정 · 2026-09-10 DAY 46 컨슈머·샘플링·재조회 구현 반영). 파이프라인 구현과 함께 확정한다. 결정 배경은 [ADR-0019](adr/0019-llm-quality-continuous-evaluation.md), 코드는 [`evaluation-service/`](../evaluation-service/README.md).
+> 확정 (2026-09-16, DAY 50 — 3층 구현·골든셋 baseline·실험 리포트 1건 뒤. 초안 2026-09-09 DAY 45, 구현 반영 2026-09-10~16). 이후 변경은 §5 구현 상태 문단에 날짜와 함께 덧붙인다. 결정 배경은 [ADR-0019](adr/0019-llm-quality-continuous-evaluation.md), 코드는 [`evaluation-service/`](../evaluation-service/README.md).
 
 ## 1. 목적과 3층 구조
 
@@ -84,7 +84,7 @@ Judge 프롬프트 v2 (2026-09-11, `evaluation-service/evaluation/prompts/judge/
 
 2026-09-09 실측: 2026-09-02 에러율 인시던트는 창 안 5xx 비율 최대 0.497(주입 50%) + ERROR 로그 50건으로 보고서 근거와 대조 가능, 2026-09-08 합성 발화 인시던트는 5xx 0·로그 0 으로 "근거 없음" 판정의 정답이 된다.
 
-## 5. 파이프라인 (초안)
+## 5. 파이프라인
 
 ```mermaid
 flowchart LR

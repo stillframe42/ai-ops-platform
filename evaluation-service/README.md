@@ -32,6 +32,15 @@ uv run pytest -m golden tests/test_golden_regression.py -rs   # 골든셋 회귀
 uv run python scripts/judge_baseline.py --repeat 3 --out golden/judge-baseline.json
 ```
 
+A/B 실험 리포트(ADR-0019 실험 층 — `docs/experiments/`):
+
+```bash
+uv run python scripts/experiment_report.py --experiment analysis-prompt-v2 --since 2026-09-16T02:32:00Z --token-file <ops:read 토큰 파일> --out report.md
+uv run python scripts/experiment_report.py --experiment analysis-model-haiku --control-from analysis-prompt-v2:A --since ...   # 재생 실험 — control 은 다른 실험의 원본 행과 짝
+```
+
+control-plane `GET /api/experiments/{name}/evaluations` 로 표본을 읽고 Tempo(`invoke_agent analysis` 스팬)에서 처리 시간·토큰을 더해 variant 별 표·부트스트랩 95% CI·사전 기준 판정(F +0.05 && 비용 +30% 이내, CI 가 0 포함이면 보류)을 마크다운으로 낸다. 호스트에서 재생(`agent-service/scripts/replay_analysis.py`)을 돌렸다면 `OTEL_EXPORTER_OTLP_ENDPOINT` 를 줘야 그 스팬이 Tempo 에 있다.
+
 ## 구조
 
 | 경로 | 역할 |
