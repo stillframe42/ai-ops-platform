@@ -67,6 +67,9 @@ class IncidentEvaluationService(
     fun findByReviewStatus(status: ReviewStatus, limit: Int): List<IncidentEvaluationDetail> =
         incidentEvaluationRepository.findByReviewStatus(status, limit)
 
+    fun findByExperimentName(name: String): List<IncidentEvaluationDetail> =
+        incidentEvaluationRepository.findByExperimentName(name)
+
     fun summarizeExperiment(name: String): ExperimentSummary {
         val variants = incidentEvaluationRepository.findByExperimentName(name)
             .map { it.summary }

@@ -31,6 +31,8 @@ class SlackReviewRequestNotifier(
         lines += "• Judge 점수: F ${evaluation.faithfulness} · A ${evaluation.actionability} · S ${evaluation.severityAccuracy}" +
             " (${evaluation.judgeModel}, Judge 프롬프트 ${evaluation.promptVersion}" +
             (evaluation.analysisPromptVersion?.let { ", 분석 프롬프트 $it" } ?: "") + ")"
+        // 실험 중 저품질이 한 variant 에 몰리는지는 사람이 이 알림을 모아 보며 안다 — 승자 판정은 리포트 몫 (ADR-0019)
+        evaluation.experimentName?.let { lines += "• 실험: $it · variant ${evaluation.experimentVariant}" }
         LOW_DIMENSIONS.filter { (dimension, _) -> scores.path(dimension).path("score").asDouble(1.0) < LOW_QUALITY_THRESHOLD }
             .forEach { (dimension, label) ->
                 val reason = scores.path(dimension).path("reason").asString("").ifBlank { "-" }

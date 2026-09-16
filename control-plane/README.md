@@ -53,6 +53,10 @@
   `incident_evaluations` 전건을 읽어 variant 별 `n`·차원 평균(`faithfulness_avg`·`actionability_avg`·
   `severity_accuracy_avg`)·`low_quality_rate` 를 이름순으로 집계 (Kotlin 집계 — 실험 1건은 수십 행).
   `experiment_variant` 가 null 인 행은 제외, 평가가 없는 실험은 빈 `variants` 로 200
+  `GET /api/experiments/{name}/evaluations` 는 같은 행을 평가 응답 형식으로 그대로 준다 — 부트스트랩 CI 처럼 표본이
+  필요한 계산(`evaluation-service/scripts/experiment_report.py`)의 원천. 실험 중 variant 단위 문제 감지(2026-09-16):
+  Slack 검토 요청에 `실험 <name> · variant <v>` 한 줄, 품질 SLO 알림은 라벨 `aiops_experiment_name/variant`
+  (`AiopsVariantFaithfulnessLow` 룰)를 읽어 머리에 `실험 <name> · <v>` 를 붙인다. 승자 판정·중단은 사람 몫
 - **조치 승인 도메인** (DAY 22, ADR-0005) — `ops.actions.pending` 소비 → `action_approvals`
   저장 (활성 pending 1건 멱등) → `POST /api/incidents/{id}/approve|reject` → 전이·감사 기록 +
   `ops.actions.decisions` 발행 (접수 실패 시 롤백 = 503). 404/409 규약은 `ApprovalController`

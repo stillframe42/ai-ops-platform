@@ -27,6 +27,7 @@ import stillframe42.controlplane.security.AuditingAccessDeniedHandler
  * | `GET /api/evaluations/review-queue` | `ops:read` |
  * | `POST /api/evaluations/{id}/review` | `ops:approve` — 사람의 라벨 결정이라 승인과 같은 등급 |
  * | `GET /api/experiments/{name}/summary` | `ops:read` |
+ * | `GET /api/experiments/{name}/evaluations` | `ops:read` |
  * | `POST /webhook/alertmanager` | 공유 시크릿 (별도 체인) |
  * | actuator probe·스크레이프 | permitAll |
  *
