@@ -9,7 +9,7 @@
 
 DAY 42~44 (2026-09-03~09-08) 에 관측 축이 완성됐다 ([ADR-0018](0018-observability-vendor-neutral.md)): 인시던트 1건이 하나의 traceId 로 조회되고, 비용은 `gateway_cost_usd_total{service}` 와 `gen_ai.usage.*` 로, 성공률·스텝 수는 Agent Spans 에서 파생된다. 남은 축은 품질이다 (README 로드맵 "AI 전용 메트릭" 행).
 
-제약: 실 사용자 트래픽이 없어(비목표) "운영 트래픽"은 chaos 재주입과 합성 발화다. 하루 인시던트가 한 자리라 샘플링 비율은 데모와 상시 운영을 분리해야 한다. OTel GenAI 컨벤션의 평가 어휘(`gen_ai.evaluation.result` 이벤트)는 Development 상태이고 공식 평가기 패키지는 없다. Langfuse 는 OTLP 로 점수를 받지 않는다. 게이트웨이는 incident_id 를 모르고 요청 헤더 `X-Task-Type`·`X-Cache-Control` 과 JWT client_id 만 안다.
+제약: 개발 단계라 실 사용자 트래픽이 아직 없어 "운영 트래픽"은 chaos 재주입과 합성 발화다 (실제 사용 환경 적용은 이후 단계 — 재평가 조건). 하루 인시던트가 한 자리라 샘플링 비율은 데모와 상시 운영을 분리해야 한다. OTel GenAI 컨벤션의 평가 어휘(`gen_ai.evaluation.result` 이벤트)는 Development 상태이고 공식 평가기 패키지는 없다. Langfuse 는 OTLP 로 점수를 받지 않는다. 게이트웨이는 incident_id 를 모르고 요청 헤더 `X-Task-Type`·`X-Cache-Control` 과 JWT client_id 만 안다.
 
 ## 결정
 

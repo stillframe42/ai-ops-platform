@@ -59,7 +59,7 @@ Judge 프롬프트 v2 (2026-09-11, `evaluation-service/evaluation/prompts/judge/
 | 프로파일 | P1 | P2 | P3 | 기본 | 용도 |
 |----------|----|----|----|------|------|
 | `experiment` | 100% | 100% | 100% | 100% | 실험·데모·골든셋 구축 |
-| `production` | 100% | 30% | 10% | 15% | 상시 운영 (실 트래픽 없음 — 비목표 정합) |
+| `production` | 100% | 30% | 10% | 15% | 상시 운영 — 실제 사용 환경 적용 시 기준 (개발 단계의 데모 트래픽에서는 0~1건이라 `experiment` 를 쓴다) |
 
 미샘플도 `sampled_reason=skipped` 로 1행 기록해 커버리지를 계산한다. `sampled_reason` 값: `p1` · `critical` · `approval` · `random` · `skipped`. `status=partial` 보고서는 분석 블록이 없을 수 있어 평가하지 않고 `skipped` 로 남긴다.
 
